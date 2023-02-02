@@ -38,7 +38,9 @@ lazy_static! {
 lazy_static! {
 	pub static ref K_PUBLIC: String = env::var("K_PUBLIC").unwrap_or_else(|_| "keys/public.k".into());
 	pub static ref K_SECRET: String = env::var("K_SECRET").unwrap_or_else(|_| "keys/secret.k".into());
-	pub static ref DB_PATH: Option<String> = env::var("DB_PATH").ok();
+	/// Use this file as your db storage
+	pub static ref DB_PATH: Option<String> = Some(env::var("DB_PATH").unwrap_or_else(|_| "db.json".into()));
+	/// Fetches magic bean if set
 	pub static ref DB_INIT: Option<String> = env::var("DB_INIT").ok();
 	pub static ref DB_BACKUP_FOLDER: String = env::var("DB_BACKUP_FOLDER").unwrap_or_else(|_| "backups".into());
 	pub static ref MEDIA_FOLDER: String = env::var("MEDIA_FOLDER").unwrap_or_else(|_| "media".into());
@@ -128,5 +130,7 @@ pub fn diff_calc(left: &str, right: &str) -> Vec<String> {
 
 pub fn log_env() {
 	let j = env::vars().filter(|(k, _)| k.contains("REGEX_") || k.contains("DB_") || k == "HOST" || k == "WEB_DIST");
+	println!("Relevant environment variables:");
 	j.for_each(|(k, v)| println!("{k}: {v}"));
+	println!();
 }

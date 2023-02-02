@@ -5,7 +5,7 @@ run pacman -Sy --noconfirm openssl
 workdir /server
 
 copy ./dist ./
-copy ../keys ./keys
+copy ./keys ./keys
 
 expose 4000
 

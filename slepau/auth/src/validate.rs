@@ -1,7 +1,6 @@
 use axum::{http::header, response::IntoResponse};
 use common::utils::{get_secs, DbError, K_PUBLIC, K_SECRET};
 use core::convert::TryFrom;
-use std::str::FromStr;
 use hyper::{Method, StatusCode};
 use lazy_static::lazy_static;
 use log::{info, warn};
@@ -9,6 +8,7 @@ use pasetors::claims::ClaimsValidationRules;
 use pasetors::keys::{AsymmetricKeyPair, AsymmetricPublicKey, AsymmetricSecretKey, Generate};
 use pasetors::token::{TrustedToken, UntrustedToken};
 use pasetors::{public, version4::V4, Public};
+use std::str::FromStr;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub fn public_key() -> AsymmetricKeyPair<V4> {
@@ -29,7 +29,10 @@ pub fn public_key() -> AsymmetricKeyPair<V4> {
 		)
 	} else {
 		panic!(
-			"Keys not found at K_PUBLIC:'{}', and K_SECRET:'{}. Check they exist",
+			"\
+			Keys not found at K_PUBLIC:'{}', and K_SECRET:'{}.\n\
+			Check they exist or generate them with 'gen_key' otherwise.\n\
+			",
 			K_PUBLIC.as_str(),
 			K_SECRET.as_str()
 		)
@@ -63,7 +66,10 @@ pub async fn public_only_get<B>(req: Request<B>, next: Next<B>) -> Result<Respon
 
 /// Function used to authenticate.
 pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
-	let mut user_claims = UserClaims { user: "public".into(), ..Default::default()};
+	let mut user_claims = UserClaims {
+		user: "public".into(),
+		..Default::default()
+	};
 
 	if let Some(auth_header) = req
 		.headers()
@@ -97,7 +103,6 @@ pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Respo
 				// 	iat_good = user.verify_not_before(iat_unix);
 				// }
 				iat_good = nbf_seconds <= now && now <= exp_seconds; // Simple check
-				
 
 				if iat_good {
 					req.extensions_mut().insert(token);

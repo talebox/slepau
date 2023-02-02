@@ -1,4 +1,7 @@
-use auth::UserClaims;
+use auth::{
+	validate::{public_key, KP},
+	UserClaims,
+};
 use axum::{
 	error_handling::{HandleError, HandleErrorLayer},
 	response::IntoResponse,
@@ -11,6 +14,7 @@ use common::{
 	utils::{log_env, HOST, HOSTNAME, WEB_DIST},
 	Cache,
 };
+use env_logger::Env;
 use hyper::{header, StatusCode};
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -47,6 +51,13 @@ mod user;
 #[tokio::main]
 async fn main() {
 	// Enable env_logger implemenation of log.
+	let env = Env::default()
+		.filter_or("LOG_LEVEL", "info")
+		.write_style_or("LOG_STYLE", "auto");
+
+	env_logger::init_from_env(env);
+	log_env();
+
 	print!(
 		"\
 	Hi I'm Auth 🔐!\n\
@@ -55,27 +66,21 @@ async fn main() {
 	\n\
 	I'm a rusty HTTP slepau\n\
 	that aims to be self contained.\n\
+	\n\
 	"
 	);
-	env_logger::init();
-	// log_env();
-
+	
+	{
+		// Check that keys exist
+		lazy_static::initialize(&KP);
+	}
+	
 	// Read cache
 	let cache = Arc::new(RwLock::new(Cache::init()));
 	let db = Arc::new(RwLock::new(common::init::init::<db::DBAuth>().await));
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
-	// let (resource_tx, _resource_rx) = broadcast::channel::<ResourceMessage>(16);
 
-	// Bit of code taken from SPA Router so I could enable brotli/gzip compression search
-	// let spa = |, path: &str, | {
-	// 	let assets_path = path;
-	// 	Router::new()
-	// 		.nest_service(assets_path, assets_service)
-	// 		.fallback_service(
-	// 			,
-	// 		)
-	// };
 	let index_service = |dir: &str, index: Option<&str>| {
 		let assets_dir = PathBuf::from(dir);
 		let index_file = assets_dir.join(index.unwrap_or("index.html"));

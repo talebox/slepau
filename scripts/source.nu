@@ -1,5 +1,5 @@
 
-use build.nu build
+use build.nu *
 use deploy.nu deploy
 use start.nu *
 use status.nu status

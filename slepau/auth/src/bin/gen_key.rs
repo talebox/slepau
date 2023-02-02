@@ -7,10 +7,11 @@ use pasetors::{
 fn main() {
 	println!(
 		"\
-	This program will generate a public/secret key if nonexistent.
-	At paths K_PUBLIC:'{}', and K_SECRET:'{}'
-	
-	--force  will generate and write always",
+	Generates a public/secret key if nonexistent.\n\
+	On K_PUBLIC:'{}', and K_SECRET:'{}'\n\
+	\n\
+	--force  will generate and write always\n\
+	",
 		K_PUBLIC.as_str(),
 		K_SECRET.as_str()
 	);

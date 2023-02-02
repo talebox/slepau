@@ -3,12 +3,12 @@ use common::utils::{get_secs, DbError, K_PUBLIC, K_SECRET};
 use core::convert::TryFrom;
 use hyper::{Method, StatusCode};
 use lazy_static::lazy_static;
-use log::{info, warn};
+use log::warn;
 use pasetors::claims::ClaimsValidationRules;
-use pasetors::keys::{AsymmetricKeyPair, AsymmetricPublicKey, AsymmetricSecretKey, Generate};
+use pasetors::keys::{AsymmetricKeyPair, AsymmetricPublicKey, AsymmetricSecretKey};
 use pasetors::token::{TrustedToken, UntrustedToken};
 use pasetors::{public, version4::V4, Public};
-use std::str::FromStr;
+
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub fn public_key() -> AsymmetricKeyPair<V4> {
@@ -74,10 +74,7 @@ pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Respo
 	if let Some(auth_header) = req
 		.headers()
 		.get(header::COOKIE)
-		.and_then(|header| {
-			// info!("Header tostr {:?}", header.to_str().ok());
-			header.to_str().ok()
-		})
+		.and_then(|header| header.to_str().ok())
 		.map(|v| {
 			v.split(';').fold(vec![], |mut acc, v| {
 				let kv = v.split('=').collect::<Vec<_>>();
@@ -96,15 +93,8 @@ pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Respo
 				let exp_claim = claims.get_claim("exp").unwrap().as_str().unwrap();
 				let exp_seconds = OffsetDateTime::parse(exp_claim, &Rfc3339).unwrap().unix_timestamp() as u64;
 				let now = get_secs();
-				let mut iat_good = false;
 
-				// let db = req.extensions().get::<LockedAtomic<DBAuth>>().unwrap();
-				// if let Ok(user) = db.read().unwrap().get_user(user_claim) {
-				// 	iat_good = user.verify_not_before(iat_unix);
-				// }
-				iat_good = nbf_seconds <= now && now <= exp_seconds; // Simple check
-
-				if iat_good {
+				if nbf_seconds <= now && now <= exp_seconds {
 					req.extensions_mut().insert(token);
 					user_claims = _user_claims;
 				} else {
@@ -124,9 +114,6 @@ fn get_valid_token(token: &str) -> Option<(TrustedToken, UserClaims)> {
 	validation_rules.validate_issuer_with("slepau:auth");
 
 	if let Ok(untrusted_token) = UntrustedToken::<Public, V4>::try_from(token) {
-		// if cfg!(debug_assertions) {
-		// 	println!("{}", String::from_utf8_lossy(untrusted_token.untrusted_message()));
-		// }
 		if let Ok(trusted_token) = public::verify(&KP.public, &untrusted_token, &validation_rules, None, None) {
 			let claims = trusted_token.payload_claims().unwrap().clone();
 			return Some((trusted_token, UserClaims::from(&claims)));

@@ -3,7 +3,7 @@ use argon2::{
 	Argon2,
 };
 
-use common::utils::{get_secs, DbError, REGEX_PASSWORD, REGEX_USERNAME};
+use common::utils::{DbError, REGEX_PASSWORD, REGEX_USERNAME};
 
 use super::{blacklist::BLACKLIST, User};
 

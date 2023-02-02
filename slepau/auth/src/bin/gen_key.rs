@@ -29,24 +29,21 @@ fn main() {
 		kp
 	}
 
-	let kp;
+	// let kp;
 	if force {
-		kp = generate();
+		generate();
+	} else if std::fs::read(K_PUBLIC.as_str())
+		.ok()
+		.and_then(|b| AsymmetricPublicKey::<V4>::from(b.as_slice()).ok())
+		.is_some()
+		&& std::fs::read(K_SECRET.as_str())
+			.ok()
+			.and_then(|b| AsymmetricSecretKey::<V4>::from(b.as_slice()).ok())
+			.is_some()
+	{
+		println!("Keys found!");
 	} else {
-		if let (Some(public), Some(secret)) = (
-			std::fs::read(K_PUBLIC.as_str())
-				.ok()
-				.and_then(|b| AsymmetricPublicKey::from(b.as_slice()).ok()),
-			std::fs::read(K_SECRET.as_str())
-				.ok()
-				.and_then(|b| AsymmetricSecretKey::from(b.as_slice()).ok()),
-		) {
-			kp = AsymmetricKeyPair::<V4> { public, secret };
-			println!("Keys found!");
-		} else {
-			eprint!("Keys not found! ");
-			kp = generate();
-		}
+		eprint!("Keys not found! ");
+		generate();
 	}
-	println!("Done!");
 }

@@ -1,28 +1,19 @@
-use auth::{
-	validate::{public_key, KP},
-	UserClaims,
-};
+use auth::{validate::KP, UserClaims};
 use axum::{
-	error_handling::{HandleError, HandleErrorLayer},
+	error_handling::HandleErrorLayer,
 	response::IntoResponse,
-	routing::{any, get, get_service, post, post_service},
+	routing::{get, get_service, post},
 	Extension, Router,
 };
-// use futures::future::join;
+
 use common::{
-	init::{backup::backup_service, magic_bean::mirror_bean},
+	init::backup::backup_service,
 	utils::{log_env, HOST, HOSTNAME, WEB_DIST},
 	Cache,
 };
 use env_logger::Env;
 use hyper::{header, StatusCode};
-use lazy_static::lazy_static;
 use log::{error, info};
-use tower::{
-	buffer::{Buffer, BufferLayer},
-	limit::{ConcurrencyLimitLayer, GlobalConcurrencyLimitLayer, RateLimit, RateLimitLayer},
-	service_fn, Layer, ServiceBuilder,
-};
 
 use std::{
 	fs::read_to_string,
@@ -41,7 +32,6 @@ use tokio::{
 use tower_http::{
 	services::{ServeDir, ServeFile},
 	timeout::TimeoutLayer,
-	trace::TraceLayer,
 };
 
 mod db;
@@ -69,12 +59,12 @@ async fn main() {
 	\n\
 	"
 	);
-	
+
 	{
 		// Check that keys exist
 		lazy_static::initialize(&KP);
 	}
-	
+
 	// Read cache
 	let cache = Arc::new(RwLock::new(Cache::init()));
 	let db = Arc::new(RwLock::new(common::init::init::<db::DBAuth>().await));
@@ -88,21 +78,21 @@ async fn main() {
 	};
 	let assets_service = |dir: &str| {
 		let assets_dir = PathBuf::from(dir);
-		get_service(ServeDir::new(&assets_dir).precompressed_br().precompressed_gzip())
+		get_service(ServeDir::new(assets_dir).precompressed_br().precompressed_gzip())
 			.handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR))
 	};
 	async fn home_service(Extension(claims): Extension<UserClaims>) -> Result<impl IntoResponse, impl IntoResponse> {
 		// lazy_static! {
 		// 	static ref HOME: std::io::Result<String> = ;
 		// };
-		let HOME = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
-		HOME
+		let home = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
+		home
 			.as_ref()
-			.and_then(|home| {
-				Ok((
+			.map(|home| {
+				(
 					[(header::CONTENT_TYPE, "text/html")],
 					home.replace("_HOST_", &HOSTNAME).replace("_USER_", &claims.user),
-				))
+				)
 			})
 			.or(Err(StatusCode::INTERNAL_SERVER_ERROR))
 	}
@@ -216,11 +206,11 @@ async fn main() {
 	match Arc::try_unwrap(db) {
 		Ok(db) => {
 			let db = db.into_inner().unwrap();
-			common::init::save(&db).await;
+			common::init::save(&db);
 		}
 		Err(db) => {
 			error!("Couldn't unwrap DB, will save anyways, but beware of this");
-			common::init::save(&*db.read().unwrap()).await;
+			common::init::save(&*db.read().unwrap());
 		}
 	}
 

@@ -45,7 +45,7 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 		},
 	}
 }
-pub async fn save<T: Serialize>(db: &T) {
+pub fn save<T: Serialize>(db: &T) {
 	if let Some(db_path) = DB_PATH.clone() {
 		let data = serde_json::to_string(db).unwrap();
 		match fs::write(&db_path, &data) {

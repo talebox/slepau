@@ -50,7 +50,7 @@ lazy_static! {
 		"0.0.0.0:{}",
 		env::var("PORT").unwrap_or_else(|_| "4000".into())
 	));
-	pub static ref HOSTNAME: String = env::var("HOSTNAME").unwrap_or(format!("localhost"));
+	pub static ref HOSTNAME: String = env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string());
 }
 
 pub const KEYWORD_BLACKLIST: [&str; 12] = [

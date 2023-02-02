@@ -1,6 +1,6 @@
 use std::{
-	collections::{BTreeMap, HashMap},
-	sync::{Arc, RwLock, Weak},
+	collections::{BTreeMap},
+	sync::{Arc, RwLock},
 };
 
 use common::utils::{DbError, LockedAtomic, KEYWORD_BLACKLIST};
@@ -11,37 +11,15 @@ use crate::user::User;
 #[derive(Default)]
 pub struct DBAuth {
 	pub users: BTreeMap<String, LockedAtomic<User>>,
-
-	// /// Groups/roles
-	// pub groups: BTreeMap<String, Vec<Weak<RwLock<User>>>>,
 }
 #[derive(Default, Serialize, Deserialize)]
 pub struct DBAuthData {
-	/// [User, User, ...]
 	pub users: Vec<User>,
-	// /// group_name -> [user_id, user_id]
-	// pub groups: BTreeMap<String, Vec<String>>,
 }
 impl From<&DBAuth> for DBAuthData {
 	fn from(value: &DBAuth) -> Self {
 		Self {
-			users: value.users.iter().map(|(id, u)| u.read().unwrap().to_owned()).collect(),
-			// groups: value
-			// 	.groups
-			// 	.iter()
-			// 	.map(|v| {
-			// 		(
-			// 			v.0.to_owned(),
-			// 			v.1
-			// 				.iter()
-			// 				.filter_map(|u| {
-			// 					u.upgrade()
-			// 						.and_then(|u| u.read().ok().and_then(|u| Some(u.user.to_owned())))
-			// 				})
-			// 				.collect(),
-			// 		)
-			// 	})
-			// 	.collect(),
+			users: value.users.values().map(|u| u.read().unwrap().to_owned()).collect(),
 		}
 	}
 }
@@ -52,19 +30,6 @@ impl From<DBAuthData> for DBAuth {
 			.into_iter()
 			.map(|u| (u.user.to_owned(), Arc::new(RwLock::new(u))))
 			.collect();
-		// let groups = value
-		// 	.groups
-		// 	.into_iter()
-		// 	.map(|(group, user_ids)| {
-		// 		(
-		// 			group,
-		// 			user_ids
-		// 				.into_iter()
-		// 				.filter_map(|id| users.get(&id).and_then(|u| Some(Arc::downgrade(u))))
-		// 				.collect(),
-		// 		)
-		// 	})
-		// 	.collect();
 
 		Self { users }
 	}
@@ -82,7 +47,7 @@ impl<'de> Deserialize<'de> for DBAuth {
 	where
 		D: serde::Deserializer<'de>,
 	{
-		DBAuthData::deserialize(deserializer).and_then(|v| Ok(Self::from(v)))
+		DBAuthData::deserialize(deserializer).map(Self::from)
 	}
 }
 
@@ -101,13 +66,13 @@ impl DBAuth {
 
 		Ok(())
 	}
-	pub fn get_user(&self, user: &str) -> Result<User, DbError> {
-		self
-			.users
-			.get(user)
-			.map(|u| u.read().unwrap().to_owned())
-			.ok_or(DbError::NotFound)
-	}
+	// pub fn get_user(&self, user: &str) -> Result<User, DbError> {
+	// 	self
+	// 		.users
+	// 		.get(user)
+	// 		.map(|u| u.read().unwrap().to_owned())
+	// 		.ok_or(DbError::NotFound)
+	// }
 	pub fn login(&self, user: &str, pass: &str) -> Result<User, DbError> {
 		let user = self.users.get(user).ok_or(DbError::AuthError)?.read().unwrap();
 		if !user.verify_pass(pass) {

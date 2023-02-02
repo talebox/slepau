@@ -1,0 +1,4 @@
+hard_tabs = true
+# blank_lines_upper_bound = 2
+tab_spaces = 2
+max_width = 120

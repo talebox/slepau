@@ -1,0 +1,5 @@
+# For compile/debug run usage
+#DB_INIT = "https://chunk.anty.dev"
+WEB_DIST = "web/dist/web"
+DB_PATH = "db.json"
+RUST_LOG = "info"

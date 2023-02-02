@@ -1,0 +1,15 @@
+/target
+
+
+/container/dist
+*.log
+
+cache*
+/backups
+/testing
+/media
+
+**/keys/**
+**/dist/**
+
+/*.json

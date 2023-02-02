@@ -1,0 +1,21 @@
+[package]
+name = "media"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+
+[dependencies]
+auth = { path = "../auth" }
+common.workspace = true
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+env_logger.workspace = true
+hyper.workspace = true
+proquint.workspace = true
+infer = "0.12.0"
+tokio-util = {version = "0.7.4", features = ["io"]}
+image = {version= "0.24.5", features = ["avif"]}

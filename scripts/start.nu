@@ -25,6 +25,12 @@ export def run_auth [] {
 	
 	cargo run --bin auth
 }
+export def run_chunk [] {
+	setup_dev
+	open "config/chunk/dev.toml" | load-env
+	
+	cargo run --bin chunk
+}
 
 export def test [] {
 	setup_dev

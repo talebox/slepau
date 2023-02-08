@@ -1,15 +1,17 @@
-use axum::{http::header, response::IntoResponse};
-use common::utils::{get_secs, DbError, K_PUBLIC, K_SECRET};
+use axum::{
+	extract::TypedHeader,
+	headers::{Cookie, Host},
+	response::IntoResponse,
+	RequestPartsExt,
+};
+use common::utils::{DbError, K_PUBLIC, K_SECRET};
 use core::convert::TryFrom;
 use hyper::{Method, StatusCode};
 use lazy_static::lazy_static;
-use log::warn;
 use pasetors::claims::ClaimsValidationRules;
 use pasetors::keys::{AsymmetricKeyPair, AsymmetricPublicKey, AsymmetricSecretKey};
 use pasetors::token::{TrustedToken, UntrustedToken};
 use pasetors::{public, version4::V4, Public};
-
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub fn public_key() -> AsymmetricKeyPair<V4> {
 	let kp;
@@ -23,14 +25,14 @@ pub fn public_key() -> AsymmetricKeyPair<V4> {
 	) {
 		kp = AsymmetricKeyPair::<V4> { public, secret };
 		println!(
-			"Using keys at K_PUBLIC:'{}', and K_SECRET:'{}",
+			"Using keys at K_PUBLIC:'{}', and K_SECRET:'{}'.",
 			K_PUBLIC.as_str(),
 			K_SECRET.as_str()
 		)
 	} else {
 		panic!(
 			"\
-			Keys not found at K_PUBLIC:'{}', and K_SECRET:'{}.\n\
+			Keys not found at K_PUBLIC:'{}', and K_SECRET:'{}'.\n\
 			Check they exist or generate them with 'gen_key' otherwise.\n\
 			",
 			K_PUBLIC.as_str(),
@@ -65,42 +67,29 @@ pub async fn public_only_get<B>(req: Request<B>, next: Next<B>) -> Result<Respon
 }
 
 /// Function used to authenticate.
-pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
+pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
 	let mut user_claims = UserClaims {
 		user: "public".into(),
 		..Default::default()
 	};
 
-	if let Some(auth_header) = req
-		.headers()
-		.get(header::COOKIE)
-		.and_then(|header| header.to_str().ok())
-		.map(|v| {
-			v.split(';').fold(vec![], |mut acc, v| {
-				let kv = v.split('=').collect::<Vec<_>>();
-				if kv.len() == 2 {
-					acc.push((kv[0].trim(), kv[1]))
-				}
-				acc
-			})
-		}) {
-		if let Some(auth_value) = auth_header.iter().find(|(k, _v)| *k == "auth").map(|v| v.1) {
-			if let Some((token, _user_claims)) = get_valid_token(auth_value) {
-				let claims = token.payload_claims().unwrap();
-				let _user_claim = claims.get_claim("user").unwrap().as_str().unwrap();
-				let nbf_claim = claims.get_claim("iat").unwrap().as_str().unwrap();
-				let nbf_seconds = OffsetDateTime::parse(nbf_claim, &Rfc3339).unwrap().unix_timestamp() as u64;
-				let exp_claim = claims.get_claim("exp").unwrap().as_str().unwrap();
-				let exp_seconds = OffsetDateTime::parse(exp_claim, &Rfc3339).unwrap().unix_timestamp() as u64;
-				let now = get_secs();
+	let (mut parts, body) = req.into_parts();
+	let TypedHeader(host): TypedHeader<Host> = parts.extract().await.expect("A Host header");
+	let TypedHeader(cookie): TypedHeader<Cookie> = parts.extract().await.expect("Cookies");
+	// reconstruct the request
+	let mut req = Request::from_parts(parts, body);
+	
+	let host = psl::domain_str(host.hostname()).ok_or(StatusCode::NOT_ACCEPTABLE)?;
+	let auth_cookie = cookie.get("auth").ok_or(StatusCode::NOT_ACCEPTABLE)?;
 
-				if nbf_seconds <= now && now <= exp_seconds {
-					req.extensions_mut().insert(token);
-					user_claims = _user_claims;
-				} else {
-					warn!("Token iat/nbf isn't within an acceptable range for user {_user_claim}");
-				}
-			}
+	let mut validation_rules = ClaimsValidationRules::new();
+	validation_rules.validate_issuer_with("slepau:auth");
+	// validation_rules.validate_audience_with(host);
+
+	if let Ok(token) = UntrustedToken::<Public, V4>::try_from(auth_cookie) {
+		if let Ok(token) = public::verify(&KP.public, &token, &validation_rules, None, None) {
+			user_claims = UserClaims::from(&token.payload_claims().unwrap().clone());
+			req.extensions_mut().insert(token);
 		}
 	}
 
@@ -110,15 +99,5 @@ pub async fn authenticate<B>(mut req: Request<B>, next: Next<B>) -> Result<Respo
 }
 
 fn get_valid_token(token: &str) -> Option<(TrustedToken, UserClaims)> {
-	let mut validation_rules = ClaimsValidationRules::new();
-	validation_rules.validate_issuer_with("slepau:auth");
-
-	if let Ok(untrusted_token) = UntrustedToken::<Public, V4>::try_from(token) {
-		if let Ok(trusted_token) = public::verify(&KP.public, &untrusted_token, &validation_rules, None, None) {
-			let claims = trusted_token.payload_claims().unwrap().clone();
-			return Some((trusted_token, UserClaims::from(&claims)));
-		}
-	}
-
 	None
 }

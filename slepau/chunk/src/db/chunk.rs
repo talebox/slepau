@@ -1,4 +1,4 @@
-use common::utils::{gen_proquint, get_secs};
+use common::utils::{gen_proquint32, get_secs};
 use serde::{Deserialize, Serialize};
 
 /**
@@ -16,7 +16,7 @@ impl Default for Chunk {
 	fn default() -> Self {
 		let secs = get_secs();
 		Self {
-			id: gen_proquint(),
+			id: gen_proquint32(),
 			value: Default::default(),
 			owner: Default::default(),
 			created: secs,
@@ -66,7 +66,7 @@ impl From<(&str, &str, &str)> for Chunk {
 impl From<(Option<&str>, &str, &str)> for Chunk {
 	fn from((id, value, owner): (Option<&str>, &str, &str)) -> Self {
 		Self {
-			id: id.map(|v| v.into()).unwrap_or_else(gen_proquint),
+			id: id.map(|v| v.into()).unwrap_or_else(gen_proquint32),
 			value: value.to_owned(),
 			owner: owner.to_owned(),
 			..Default::default()

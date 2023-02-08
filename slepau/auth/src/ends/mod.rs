@@ -1,28 +1,38 @@
 use auth::{validate::KP, UserClaims};
-use axum::{extract::Extension, http::header, response::IntoResponse, Json};
-use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY};
+use axum::{extract::Extension, headers, http::header, response::IntoResponse, Json, TypedHeader};
+use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY, SECURE, URL};
+use hyper::StatusCode;
 use log::{error, info};
 use pasetors::{claims::Claims, public};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+// mod admin;
+
 use crate::db::DBAuth;
 
 pub async fn login(
+	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
-	db.login(&user, &pass)
+	
+	let host = psl::domain_str(host.hostname()).ok_or(DbError::InvalidHost)?;
+	let site = db.host_to_site_id(host)?;
+	
+	db.login(&user, &pass, Some(site))
 		.map(|user_object| {
 			// Create token
 
 			let mut claims = Claims::new().unwrap();
 
 			claims.issuer("slepau:auth").unwrap();
+
+			claims.audience(serde_json::to_string(&host).unwrap().as_str()).unwrap();
+			user_object.claims.iter().for_each(|(k, v)| {
+				claims.add_additional(k, v.clone());
+			});
 			claims.add_additional("user", user.clone()).unwrap();
-			claims
-				.add_additional("groups", user_object.groups.into_iter().collect::<Vec<_>>())
-				.unwrap();
 
 			let iat = OffsetDateTime::from_unix_timestamp(get_secs().try_into().unwrap())
 				.unwrap()
@@ -46,7 +56,7 @@ pub async fn login(
 				format!(
 					"auth={pub_token}; SameSite=Strict; Max-Age={}; Path=/; HttpOnly;{}",
 					60/*sec*/*60/*min*/*24/*hr*/*7, /*days = a week in seconds*/
-					if cfg!(debug_assertions) { "" } else { " Secure;" }
+					if *SECURE { " Secure;" } else { "" }
 				),
 			)]
 		})
@@ -56,12 +66,16 @@ pub async fn login(
 		})
 }
 pub async fn register(
+	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
-
-	db.new_user(&user, &pass)
+	
+	let host = psl::domain_str(host.hostname()).ok_or(DbError::InvalidHost)?;
+	let site = db.host_to_site_id(host)?;
+	
+	db.new_user(&user, &pass, site)
 		.map(|_| {
 			info!("User created '{}'.", &user);
 			"User created."
@@ -71,13 +85,16 @@ pub async fn register(
 			err
 		})
 }
+
 pub async fn reset(
+	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Json((user, old_pass, pass)): Json<(String, String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
+	let site = db.host_to_site_id(host.hostname())?;
 
-	db.reset(&user, &pass, &old_pass)
+	db.reset(&user, &pass, &old_pass, Some(site))
 		.map(|_| {
 			info!("User password reset '{user}'.");
 			"User pass reset."
@@ -101,7 +118,7 @@ pub async fn logout() -> impl IntoResponse {
 			"auth=; SameSite=Strict; Max-Age={}; Path=/;{}",
 			60/*sec*/*60/*min*/*24/*hr*/*7, /*days*/
 			/*= a week in seconds*/
-			if cfg!(debug_assertions) { "" } else { " Secure;" }
+			if *SECURE { " Secure;" } else { "" }
 		),
 	)]
 }

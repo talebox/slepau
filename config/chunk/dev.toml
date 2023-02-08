@@ -1,0 +1,6 @@
+WEB_DIST="web/dist/chunk"
+
+DB_BACKUP_FOLDER="cache/chunk_back"
+
+CACHE_PATH="cache/chunk.cache.json"
+DB_PATH="cache/chunk.db.json"

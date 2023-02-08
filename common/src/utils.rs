@@ -4,13 +4,18 @@ use lazy_static::lazy_static;
 use proquint::Quintable;
 use rand::prelude::*;
 use regex::Regex;
-use serde::Serialize;
+use reqwest::Url;
+use serde::{ Serialize, Deserialize};
+use serde_json::Value;
 
 pub type LockedAtomic<T> = Arc<RwLock<T>>;
+pub type LockedWeak<T> = Weak<RwLock<T>>;
 
 use std::{
 	env,
-	sync::{Arc, RwLock},
+	net::SocketAddr,
+	str::FromStr,
+	sync::{Arc, RwLock, Weak},
 	time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -23,8 +28,14 @@ pub fn get_secs() -> u64 {
 pub const SECS_IN_HOUR: u64 = 60 * 60;
 pub const SECS_IN_DAY: u64 = SECS_IN_HOUR * 24;
 
-pub fn gen_proquint() -> String {
+pub fn gen_proquint32() -> String {
 	random::<u32>().to_quint()
+}
+pub fn gen_proquint64() -> String {
+	random::<u64>().to_quint()
+}
+pub fn gen_64() -> u64 {
+	random::<u64>()
 }
 
 lazy_static! {
@@ -46,11 +57,11 @@ lazy_static! {
 	pub static ref MEDIA_FOLDER: String = env::var("MEDIA_FOLDER").unwrap_or_else(|_| "media".into());
 	pub static ref CACHE_PATH: String = env::var("CACHE_PATH").unwrap_or_else(|_| "cache.json".into());
 	pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
-	pub static ref HOST: String = env::var("HOST").unwrap_or(format!(
-		"0.0.0.0:{}",
-		env::var("PORT").unwrap_or_else(|_| "4000".into())
-	));
-	pub static ref HOSTNAME: String = env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string());
+	/// The socket is we listen to requests from.
+	pub static ref SOCKET: SocketAddr = SocketAddr::from_str(env::var("SOCKET").unwrap_or_else(|_| "0.0.0.0:4000".into()).as_str()).expect("Socket address to be valid");
+	/// The URL is where users go to access this slepau.
+	pub static ref URL: Url = Url::parse(env::var("URL").unwrap_or_else(|_| "http://localhost:4000".into()).as_str()).expect("URL to be valid");
+	pub static ref SECURE: bool = URL.scheme() != "http";
 }
 
 pub const KEYWORD_BLACKLIST: [&str; 12] = [
@@ -83,6 +94,8 @@ pub fn standardize(v: &str) -> String {
 pub enum DbError {
 	UserTaken,
 	AuthError,
+	InvalidHost,
+	InvalidSite,
 	InvalidUsername,
 	InvalidPassword,
 	InvalidChunk,
@@ -129,8 +142,14 @@ pub fn diff_calc(left: &str, right: &str) -> Vec<String> {
 }
 
 pub fn log_env() {
-	let j = env::vars().filter(|(k, _)| k.contains("REGEX_") || k.contains("DB_") || k == "HOST" || k == "WEB_DIST");
-	println!("Relevant environment variables:");
-	j.for_each(|(k, v)| println!("{k}: {v}"));
-	println!();
+	// let j = env::vars().filter(|(k, _)| k.contains("REGEX_") || k.contains("DB_") || k == "HOST" || k == "WEB_DIST");
+	// println!("Relevant environment variables:");
+	// j.for_each(|(k, v)| println!("{k}: {v}"));
+	// println!();
 }
+#[derive(Serialize)]
+pub struct DataSlice<T> {
+	pub items: Vec<T>,
+	pub total: usize,
+}
+

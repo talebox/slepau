@@ -1,81 +1,110 @@
+use auth::{validate::KP, UserClaims};
 use axum::{
-	extract::DefaultBodyLimit,
-	routing::{get, get_service, post},
+	body::Body,
+	error_handling::HandleErrorLayer,
+	middleware::from_fn,
+	response::IntoResponse,
+	routing::{get},
 	Extension, Router,
 };
-// use futures::future::join;
+
 use common::{
+	http::{assets_service, index_service},
 	init::backup::backup_service,
-	utils::{log_env, HOST, WEB_DIST},
+	utils::{log_env, SOCKET, URL, WEB_DIST},
 	Cache,
 };
-use hyper::StatusCode;
+use env_logger::Env;
+use hyper::{header, StatusCode};
 use log::{error, info};
 
 use std::{
-	future::ready,
+	fs::read_to_string,
 	net::SocketAddr,
 	path::PathBuf,
-	str::FromStr,
 	sync::{Arc, RwLock},
 	time::Duration,
 };
 use tokio::{
+	join,
 	signal::unix::{signal, SignalKind},
 	sync::{broadcast, watch},
 };
 use tower_http::{
-	services::{ServeDir, ServeFile},
 	timeout::TimeoutLayer,
-	trace::TraceLayer,
 };
 
-use chunk::{ends,db, socket};
+use chunk::{
+	db, ends,
+	socket::{self, ResourceMessage},
+};
 
 #[tokio::main]
 async fn main() {
 	// Enable env_logger implemenation of log.
+	let env = Env::default()
+		.filter_or("LOG_LEVEL", "info")
+		.write_style_or("LOG_STYLE", "auto");
+
+	env_logger::init_from_env(env);
+	log_env();
+
 	print!(
 		"\
-	Hi I'm Chunk ⚙🔭!\n\
+	Hi, I'm Chunk ⚙🔭!\n\
 	I'll help you organize yourself.\n\
 	\n\
 	I'm a rusty HTTP slepau\n\
 	that aims to be self contained.\n\
 	\n\
-	Cookie `auth` tells me who you are 😉
+	Cookie `auth` tells me who you are 😉\n\
 	\n\
 	"
 	);
 
-	env_logger::init();
-	log_env();
+	{
+		// Check that keys exist
+		lazy_static::initialize(&KP);
+	}
 
 	// Read cache
 	let cache = Arc::new(RwLock::new(Cache::init()));
 	let db = Arc::new(RwLock::new(common::init::init::<db::DB>().await));
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
-	// let (resource_tx, _resource_rx) = broadcast::channel::<ResourceMessage>(16);
+	let (resource_tx, _resource_rx) = broadcast::channel::<ResourceMessage>(16);
 
-	// Bit of code taken from SPA Router so I could enable brotli/gzip compression search
-	let spa = |dir: &str, path: &str, index: Option<&str>| {
-		let assets_dir = PathBuf::from(dir);
-		let assets_path = path;
-		let index_file = assets_dir.join(index.unwrap_or("index.html"));
-		let assets_service = get_service(ServeDir::new(&assets_dir).precompressed_br().precompressed_gzip())
-			.handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR));
+	async fn home_service(
+		Extension(claims): Extension<UserClaims>,
+		req: axum::http::Request<Body>,
+	) -> Result<impl IntoResponse, impl IntoResponse> {
+		let host: String = req
+			.headers()
+			.get("Host")
+			.and_then(|v| Some(v.to_str().unwrap().split('.').last().unwrap().into()))
+			.unwrap_or(URL.host().unwrap().to_string());
+		let home = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
+		home
+			.as_ref()
+			.map(|home| {
+				(
+					[(header::CONTENT_TYPE, "text/html")],
+					home.replace("_HOST_", &host).replace("_USER_", &claims.user),
+				)
+			})
+			.or(Err(StatusCode::INTERNAL_SERVER_ERROR))
+	}
 
-		Router::new()
-			.nest_service(assets_path, assets_service)
-			.fallback_service(
-				get_service(ServeFile::new(index_file)).handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR)),
-			)
+	let security_limit = |n, secs| {
+		tower::ServiceBuilder::new()
+			.layer(HandleErrorLayer::new(|_| async { StatusCode::TOO_MANY_REQUESTS }))
+			.buffer((n * secs + 5) as usize)
+			.load_shed()
+			.rate_limit(n, Duration::from_secs(secs))
 	};
 
 	// Build router
 	let app = Router::new()
-		.route("/page/:id", get(ends::page_get_id))
 		.nest(
 			"/api",
 			Router::new()
@@ -83,22 +112,27 @@ async fn main() {
 					"/chunks",
 					get(ends::chunks_get).put(ends::chunks_put).delete(ends::chunks_del),
 				)
+				.layer(security_limit(1, 1))
 				// ONLY if NOT public ^
-				.route_layer(axum::middleware::from_fn(auth::validate::auth_required))
+				.route_layer(from_fn(auth::validate::auth_required))
 				.route("/chunks/:id", get(ends::chunks_get_id))
 				.route("/stream", get(socket::websocket_handler))
 				// ONLY GET if public ^
-				.route_layer(axum::middleware::from_fn(auth::validate::public_only_get))
+				.route_layer(from_fn(auth::validate::public_only_get))
 				.route("/mirror/:bean", get(common::init::magic_bean::mirror_bean::<db::DB>)),
 		)
-		// User authentication, provider of UserClaims
-		.route_layer(axum::middleware::from_fn(auth::authenticate))
-		.merge(spa(WEB_DIST.as_str(), "/web", Some("index.html")))
+		.fallback(home_service)
+		.layer(from_fn(auth::validate::authenticate))
+		.route("/page/:id", get(ends::page_get_id))
+		.nest_service(
+			"/web",
+			assets_service(WEB_DIST.as_str()).fallback_service(index_service(WEB_DIST.as_str(), None)),
+		)
+		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()
-				.layer(TraceLayer::new_for_http())
-				.layer(DefaultBodyLimit::disable())
-				.layer(TimeoutLayer::new(Duration::from_secs(30)))
+				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
+				.concurrency_limit(100)
 				.layer(Extension(db.clone()))
 				.layer(Extension(cache.clone()))
 				.layer(Extension(shutdown_rx.clone()))
@@ -108,12 +142,11 @@ async fn main() {
 	// Backup service
 	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));
 
-	// Create Socket to listen on
-	let addr = SocketAddr::from_str(&HOST).unwrap();
-	info!("Listening on '{}'.", addr);
+	info!("Listening on '{}'.", SOCKET.to_string());
+	info!("Public url is on '{}'.", URL.as_str());
 
 	// Create server
-	let server = axum::Server::bind(&addr)
+	let server = axum::Server::bind(&SOCKET)
 		.serve(app.into_make_service_with_connect_info::<SocketAddr>())
 		.with_graceful_shutdown(async move {
 			if let Err(err) = shutdown_rx.changed().await {
@@ -141,9 +174,9 @@ async fn main() {
 	shutdown_tx.send(()).unwrap();
 
 	info!("Waiting for everyone to shutdown.");
-	let (_server_r, _backup_r) = join(server, backup).await;
+	let (_server_r, _backup_r) = join!(server, backup);
 
-	info!("Joined workers, apparently they've shutdown");
+	info!("Everyone's shut down!");
 
 	if db.is_poisoned() {
 		error!(
@@ -157,11 +190,11 @@ async fn main() {
 	match Arc::try_unwrap(db) {
 		Ok(db) => {
 			let db = db.into_inner().unwrap();
-			v1::save(&db).await;
+			common::init::save(&db);
 		}
 		Err(db) => {
 			error!("Couldn't unwrap DB, will save anyways, but beware of this");
-			v1::save(&db.read().unwrap()).await;
+			common::init::save(&*db.read().unwrap());
 		}
 	}
 

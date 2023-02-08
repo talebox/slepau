@@ -1,1 +1,6 @@
 WEB_DIST="web/dist/auth"
+
+DB_BACKUP_FOLDER="cache/auth_back"
+
+CACHE_PATH="cache/auth.cache.json"
+DB_PATH="cache/auth.db.json"

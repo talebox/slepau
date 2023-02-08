@@ -1,0 +1,104 @@
+use std::sync::Arc;
+
+use super::{
+	site::{AdminSet, SiteId, SiteSet},
+	DBAuth,
+};
+use crate::user::UserSet;
+use common::utils::DbError;
+
+impl DBAuth {
+	pub fn mod_site(&mut self, admin: &str, site_id: SiteId, v: SiteSet) -> Result<(), DbError> {
+		// Figure out if site belongs to user in question, or we're super admins
+		if !self
+			.admins
+			.get(admin)
+			.and_then(|v| {
+				let v = v.read().unwrap();
+				Some(
+					v._super
+						|| v
+							.sites
+							.iter()
+							.filter_map(|v| v.upgrade())
+							.find(|v| v.read().unwrap().id == site_id)
+							.is_some(),
+				)
+			})
+			.unwrap_or(false)
+		{
+			return Err(DbError::AuthError);
+		}
+		let site = self.sites.get(&site_id).unwrap();
+		let site_weak = Arc::downgrade(site);
+		// Remove all hosts that point to the site
+		self.hosts.retain(|_, s| !s.ptr_eq(&site_weak));
+		// Add new hosts
+		self
+			.hosts
+			.extend(v.hosts.into_iter().map(|h| (h.to_owned(), site_weak.to_owned())));
+		// Modify site
+		{
+			let mut site = site.write().unwrap();
+			site.max_age = v.max_age;
+			site.name = v.name;
+		}
+		Ok(())
+	}
+	pub fn mod_admin(&mut self, super_admin: &str, admin: &str, v: AdminSet) -> Result<(), DbError> {
+		// Figure out if it's a super admin
+		self
+			.admins
+			.get(super_admin)
+			.and_then(|v| if v.read().unwrap()._super { Some(()) } else { None })
+			.ok_or(DbError::AuthError)?;
+
+		// Find admin
+		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;
+
+		let sites = v
+			.sites
+			.into_iter()
+			.map(|site_id| self.sites.get(&site_id).and_then(|s| Some(Arc::downgrade(s))))
+			.collect::<Vec<_>>();
+		// If you couldn't find a site, return an error
+		if sites.iter().any(|v| v.is_some()) {
+			return Err(DbError::NotFound);
+		}
+		// Modify admin
+		{
+			let mut admin = admin.write().unwrap();
+			admin.user.active = v.active;
+			admin.user.claims = v.claims.clone();
+			admin.sites = sites
+				.into_iter()
+				.map(|v| v.expect("Site should be good, we checked ^"))
+				.collect();
+			admin._super = v._super;
+		}
+
+		Ok(())
+	}
+	pub fn mod_user(&mut self, admin: &str, site_id: SiteId, user: &str, v: UserSet) -> Result<(), DbError> {
+		// Find admin
+		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;
+		let admin = admin.read().unwrap();
+		// Find site
+		let site = admin
+			.sites
+			.iter()
+			.filter_map(|v| v.upgrade())
+			.find(|v| v.read().unwrap().id == site_id)
+			.ok_or(DbError::NotFound)?;
+
+		// Modify user
+		{
+			let mut site = site.write().unwrap();
+			let mut user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
+			user.active = v.active;
+			user.claims = v.claims.clone();
+		}
+
+		Ok(())
+	}
+}

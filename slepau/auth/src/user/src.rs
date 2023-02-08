@@ -39,29 +39,20 @@ impl User {
 			return Err(DbError::InvalidUsername);
 		}
 
-		Ok(User {
+		Ok(Self {
 			user: user.into(),
-			pass: User::hash(pass)?,
-			..Default::default()
+			pass: Self::hash(pass)?,
+			active: true,
+			claims: Default::default()
 		})
 	}
-
-	// pub fn verify(&self, pass: &str) -> bool {
-	// 	self.verify_not_before(get_secs()) && self.verify_pass(pass)
-	// }
-	// pub fn verify_not_before(&self, issued_at: u64) -> bool {
-	// 	issued_at >= self.not_before
-	// }
-	// pub fn reset_not_before(&mut self) {
-	// 	self.not_before = get_secs();
-	// }
+	
 	pub fn reset_pass(&mut self, old_pass: &str, pass: &str) -> Result<(), DbError> {
 		if !self.verify_pass(old_pass) {
 			return Err(DbError::AuthError);
 		}
-		self.pass = User::hash(pass)?;
-		// self.reset_not_before();
-
+		self.pass = Self::hash(pass)?;
+		
 		Ok(())
 	}
 }

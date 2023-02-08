@@ -9,9 +9,10 @@ edition.workspace = true
 [dependencies]
 common.workspace = true
 hyper.workspace = true
-tower = {workspace = true, features = ['timeout', 'load-shed']}
-tower-http.workspace =true
+tower = { workspace = true, features = [] }
+tower-http.workspace = true
 lazy_static.workspace = true
+tower_governor.workspace = true
 time = "0.3.17"
 axum.workspace = true
 tokio.workspace = true
@@ -21,4 +22,7 @@ log.workspace = true
 env_logger.workspace = true
 argon2 = "0.4.1"
 pasetors = "0.6.3"
-rand.workspace =true
+rand.workspace = true
+reql = {version = "*"}
+futures-util = "0.3.26"
+psl = "2.1.3"

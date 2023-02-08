@@ -1,26 +1,27 @@
 use auth::{validate::KP, UserClaims};
 use axum::{
+	body::Body,
 	error_handling::HandleErrorLayer,
 	response::IntoResponse,
-	routing::{get, get_service, post},
+	routing::{get, post},
 	Extension, Router,
 };
 
 use common::{
+	http::{assets_service, index_service},
 	init::backup::backup_service,
-	utils::{log_env, HOST, HOSTNAME, WEB_DIST},
+	utils::{log_env, SOCKET, URL, WEB_DIST},
 	Cache,
 };
 use env_logger::Env;
 use hyper::{header, StatusCode};
 use log::{error, info};
+use tower::ServiceBuilder;
 
 use std::{
 	fs::read_to_string,
-	future::ready,
 	net::SocketAddr,
 	path::PathBuf,
-	str::FromStr,
 	sync::{Arc, RwLock},
 	time::Duration,
 };
@@ -29,10 +30,7 @@ use tokio::{
 	signal::unix::{signal, SignalKind},
 	sync::watch,
 };
-use tower_http::{
-	services::{ServeDir, ServeFile},
-	timeout::TimeoutLayer,
-};
+use tower_http::timeout::TimeoutLayer;
 
 mod db;
 mod ends;
@@ -50,7 +48,7 @@ async fn main() {
 
 	print!(
 		"\
-	Hi I'm Auth 🔐!\n\
+	Hi, I'm Auth 🔐!\n\
 	Other slepau depend on me to tell them who you are.\n\
 	I'll give you cookie `auth` if your credentials are good.\n\
 	\n\
@@ -71,37 +69,29 @@ async fn main() {
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
 
-	let index_service = |dir: &str, index: Option<&str>| {
-		let assets_dir = PathBuf::from(dir);
-		let index_file = assets_dir.join(index.unwrap_or("index.html"));
-		get_service(ServeFile::new(index_file)).handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR))
-	};
-	let assets_service = |dir: &str| {
-		let assets_dir = PathBuf::from(dir);
-		get_service(ServeDir::new(assets_dir).precompressed_br().precompressed_gzip())
-			.handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR))
-	};
-	async fn home_service(Extension(claims): Extension<UserClaims>) -> Result<impl IntoResponse, impl IntoResponse> {
-		// lazy_static! {
-		// 	static ref HOME: std::io::Result<String> = ;
-		// };
+	async fn home_service(
+		Extension(claims): Extension<UserClaims>,
+		req: axum::http::Request<Body>,
+	) -> Result<impl IntoResponse, impl IntoResponse> {
+		let host: String = req
+			.headers()
+			.get("Host")
+			.and_then(|v| Some(v.to_str().unwrap().split('.').last().unwrap().into()))
+			.unwrap_or(URL.host().unwrap().to_string());
 		let home = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
 		home
 			.as_ref()
 			.map(|home| {
 				(
 					[(header::CONTENT_TYPE, "text/html")],
-					home.replace("_HOST_", &HOSTNAME).replace("_USER_", &claims.user),
+					home.replace("_HOST_", &host).replace("_USER_", &claims.user),
 				)
 			})
 			.or(Err(StatusCode::INTERNAL_SERVER_ERROR))
 	}
 
-	// let buffer = BufferLayer::new(1100);
-	// RateLimitLayer::new(5, Duration::from_secs(1));
-	// let rate = RateLimit::new(Rate::);
 	let security_limit = |n, secs| {
-		tower::ServiceBuilder::new()
+		ServiceBuilder::new()
 			.layer(HandleErrorLayer::new(|_| async { StatusCode::TOO_MANY_REQUESTS }))
 			.buffer((n * secs + 5) as usize)
 			.load_shed()
@@ -110,6 +100,17 @@ async fn main() {
 
 	// Build router
 	let app = Router::new()
+		// Admin Actions V
+		.merge(
+			Router::new()
+				// // Get/Modify Site
+				// .route("/sites", )
+				// // Get/Modify User
+				// .route("/sites/:id/users", )
+				// // Get/Modify Admin (only super)
+				// .route("/admins", )
+		)
+		// User Actions V
 		.merge(
 			Router::new()
 				.route("/reset", post(crate::ends::reset))
@@ -152,17 +153,11 @@ async fn main() {
 	// Backup service
 	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));
 
-	// Create Socket to listen on
-	let addr = SocketAddr::from_str(&HOST).unwrap();
-
-	if cfg!(debug_assertions) {
-		info!("Listening on 'http://{}'.", addr)
-	} else {
-		info!("Listening on 'https://{}'.", addr)
-	};
+	info!("Listening on '{}'.", SOCKET.to_string());
+	info!("Public url is on '{}'.", URL.as_str());
 
 	// Create server
-	let server = axum::Server::bind(&addr)
+	let server = axum::Server::bind(&SOCKET)
 		.serve(app.into_make_service_with_connect_info::<SocketAddr>())
 		.with_graceful_shutdown(async move {
 			if let Err(err) = shutdown_rx.changed().await {

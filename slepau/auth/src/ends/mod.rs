@@ -1,14 +1,54 @@
-use auth::{validate::KP, UserClaims};
+use auth::{
+	validate::{KP, KPR},
+	UserClaims,
+};
 use axum::{extract::Extension, headers, http::header, response::IntoResponse, Json, TypedHeader};
-use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY, SECURE, URL};
+use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY, SECURE, WEB_DIST};
 use hyper::StatusCode;
+use lazy_static::lazy_static;
 use log::{error, info};
-use pasetors::{claims::Claims, public};
+use pasetors::{claims::Claims, local, public};
+use std::path::PathBuf;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
-// mod admin;
+pub mod admin;
 
 use crate::db::DBAuth;
+
+pub async fn home_service(
+	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(db): Extension<LockedAtomic<DBAuth>>,
+	Extension(claims): Extension<UserClaims>,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+	let (host, site_id) = db.read().unwrap().host_to_site_id(host.hostname());
+
+	fn get_home() -> Option<String> {
+		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
+	}
+
+	let home;
+	// If we're debugging, get home every time
+	if cfg!(debug_assertions) {
+		home = get_home();
+	} else {
+		lazy_static! {
+			static ref HOME: Option<String> = get_home();
+		}
+		home = HOME.to_owned();
+	}
+
+	home
+		.as_ref()
+		.map(|home| {
+			(
+				[(header::CONTENT_TYPE, "text/html")],
+				home
+					.replace("_HOST_", &host)
+					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+			)
+		})
+		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
 
 pub async fn login(
 	TypedHeader(host): TypedHeader<headers::Host>,
@@ -16,23 +56,35 @@ pub async fn login(
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
-	
-	let host = psl::domain_str(host.hostname()).ok_or(DbError::InvalidHost)?;
-	let site = db.host_to_site_id(host)?;
-	
-	db.login(&user, &pass, Some(site))
-		.map(|user_object| {
+
+	let (host, site_id) = db.host_to_site_id(host.hostname());
+
+	db.login(&user, &pass, site_id)
+		.map(|(user, is_admin, is_super)| {
 			// Create token
 
 			let mut claims = Claims::new().unwrap();
-
+			// Set Issuer
 			claims.issuer("slepau:auth").unwrap();
+			// Set Audience
+			claims.audience(&host).unwrap();
+			//
+			user
+				.claims
+				.into_iter()
+				.filter(|(k, _)| k != "admin" && k != "super")
+				.for_each(|(k, v)| {
+					claims.add_additional(&k, v).ok();
+				});
 
-			claims.audience(serde_json::to_string(&host).unwrap().as_str()).unwrap();
-			user_object.claims.iter().for_each(|(k, v)| {
-				claims.add_additional(k, v.clone());
-			});
-			claims.add_additional("user", user.clone()).unwrap();
+			claims.add_additional("user", user.user).unwrap();
+
+			if is_admin {
+				claims.add_additional("admin", is_admin).unwrap();
+			}
+			if is_super {
+				claims.add_additional("super", is_super).unwrap();
+			}
 
 			let iat = OffsetDateTime::from_unix_timestamp(get_secs().try_into().unwrap())
 				.unwrap()
@@ -49,7 +101,8 @@ pub async fn login(
 			claims.expiration(&exp).unwrap();
 
 			// Generate the keys and sign the claims.
-			let pub_token = public::sign(&KP.secret, &claims, None, None).unwrap();
+			// let pub_token = private::sign(&KP.secret, &claims, None, None).unwrap();
+			let pub_token = local::encrypt(&KPR, &claims, None, None).unwrap();
 
 			[(
 				header::SET_COOKIE,
@@ -71,14 +124,20 @@ pub async fn register(
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
-	
-	let host = psl::domain_str(host.hostname()).ok_or(DbError::InvalidHost)?;
-	let site = db.host_to_site_id(host)?;
-	
-	db.new_user(&user, &pass, site)
+
+	if db.admins.is_empty() {
+		db.new_admin(&user, &pass)?;
+		info!("Super admin created '{}'.", &user);
+		return Ok("Super admin created");
+	}
+
+	let (_, site_id) = db.host_to_site_id(host.hostname());
+	let site_id = site_id.ok_or(DbError::InvalidSite("A site hasn't been setup yet."))?;
+
+	db.new_user(&user, &pass, site_id)
 		.map(|_| {
 			info!("User created '{}'.", &user);
-			"User created."
+			"User created"
 		})
 		.map_err(|err| {
 			error!("Failed register for '{}' with pass '{}': {:?}.", &user, &pass, &err);
@@ -92,9 +151,11 @@ pub async fn reset(
 	Json((user, old_pass, pass)): Json<(String, String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
-	let site = db.host_to_site_id(host.hostname())?;
 
-	db.reset(&user, &pass, &old_pass, Some(site))
+	let (_, site_id) = db.host_to_site_id(host.hostname());
+	let site_id = site_id.ok_or(DbError::NotFound)?;
+
+	db.reset(&user, &pass, &old_pass, Some(site_id))
 		.map(|_| {
 			info!("User password reset '{user}'.");
 			"User pass reset."

@@ -1,13 +1,11 @@
-# Early version of [Talebox](https://github.com/talebox)
+# Standalone [Talebox](https://github.com/talebox)
 
-Talebox is an idea for standalone slepau that are efficient, simple, extendable and modular.
+Standalone slepau (lojban for "an indivisible unit") build.
 
-Slepau included:
+Included:
 - Auth
 
 Instructions:
-1. Cd into slepau directory
-1. Execute binary
+1. Change directory to slepau directory (ex: `cd auth`)
+1. Execute binary (ex: `./auth`, or `start auth.exe`)
 
-Note: Slepau is lojban for "atom" (an indivisible unit)
-Note: Asymetric keys have been included in this standalone build.

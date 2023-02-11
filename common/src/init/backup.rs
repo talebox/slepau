@@ -1,5 +1,5 @@
 use crate::{
-	utils::{get_secs, LockedAtomic, DB_BACKUP_FOLDER, SECS_IN_DAY, SECS_IN_HOUR},
+	utils::{get_secs, LockedAtomic, DB_BACKUP_FOLDER, SECS_IN_DAY, SECS_IN_HOUR, SECS_START_OF_TALEBOX},
 	Cache,
 };
 use log::{error, info};
@@ -33,7 +33,7 @@ pub async fn backup_service<T: Serialize>(
 
 			let backup_file = backup_folder.join(format!(
 				"{}.json",
-				(secs / SECS_IN_DAY) - (365 * 51) /*Closest number to days since EPOCH to lower that to something more readable */
+				(secs - SECS_START_OF_TALEBOX) / SECS_IN_DAY /*Closest number to days since EPOCH to lower that to something more readable */
 			));
 
 			let dbdata = serde_json::to_string(&*db.read().unwrap()).unwrap();

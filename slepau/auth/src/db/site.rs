@@ -1,9 +1,6 @@
 use common::{proquint::Proquint, utils::LockedWeak};
 use serde_json::Value;
-use std::{
-	collections::{HashMap, HashSet},
-	sync::Weak,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::user::User;
 use serde::{Deserialize, Serialize};
@@ -26,7 +23,7 @@ pub struct AdminData {
 #[derive(Deserialize)]
 pub struct AdminSet {
 	pub active: bool,
-	pub claims: HashMap<String, Value>,
+	pub claims: BTreeMap<String, Value>,
 	pub sites: Vec<SiteId>,
 	#[serde(rename = "super")]
 	pub _super: bool,
@@ -37,13 +34,11 @@ pub struct AdminSet {
 pub struct AdminView {
 	user: String,
 	pub active: bool,
-	pub claims: HashMap<String, Value>,
+	pub claims: BTreeMap<String, Value>,
 	sites: Vec<SiteId>,
 	#[serde(rename = "super")]
 	_super: bool,
 }
-
-
 
 impl From<&Admin> for AdminView {
 	fn from(value: &Admin) -> Self {
@@ -54,7 +49,7 @@ impl From<&Admin> for AdminView {
 			sites: value
 				.sites
 				.iter()
-				.filter_map(|s| s.upgrade().and_then(|s| Some(s.read().unwrap().id)))
+				.filter_map(|s| s.upgrade().map(|s| s.read().unwrap().id))
 				.collect(),
 			_super: value._super,
 		}
@@ -66,9 +61,13 @@ pub type SiteId = Proquint<u32>;
 pub struct Site {
 	pub id: SiteId,
 	pub name: String,
-	pub users: HashMap<String, User>,
+	pub users: BTreeMap<String, User>,
 	/// Max age for the token (in secs, default is 1d)
 	pub max_age: usize,
+	/// Can an admin login from this site?
+	///
+	/// Only `super` users can change this.
+	pub allow_admin: bool,
 }
 impl Default for Site {
 	fn default() -> Self {
@@ -76,12 +75,13 @@ impl Default for Site {
 			id: Default::default(),
 			users: Default::default(),
 			max_age: 60 * 60 * 24,
-			name: "New Site".into(),
+			name: Default::default(),
+			allow_admin: false,
 		}
 	}
 }
 #[derive(Deserialize)]
-pub struct  SiteSet {
+pub struct SiteSet {
 	pub name: String,
 	pub hosts: Vec<String>,
 	pub max_age: usize,
@@ -102,7 +102,7 @@ impl From<&Site> for SiteView {
 			name: value.name.to_owned(),
 			users: value.users.len(),
 			max_age: value.max_age,
-			hosts: Default::default()
+			hosts: Default::default(),
 		}
 	}
 }

@@ -13,7 +13,7 @@ export def build [] {
 	
 	enter container
 		# Create output dirs
-		rm -rf bin keys web
+		rm -rf bin web # Not the keys, we need that 
 		mkdir bin keys web
 	exit
 
@@ -34,13 +34,18 @@ export def build [] {
 	# Copy webapp to output
 	cp -r web/dist/* container/web/
 	cp -r web/public/* container/web/
+	
+	# Gen key if nonexistent
+	enter container
+		./bin/gen_key
+	exit
 }
 
 # Makes standalone
 export def standalone [] {
 	build
 	
-	let out = "talebox_linux_x86_64"
+	let out = "talebox_x86_64"
 	
 	# Create out dir
 	rm -rf $out
@@ -68,4 +73,20 @@ export def standalone [] {
 	tar -cavf $"($out).tar.xz" $out
 	
 	# ls container | get name | where {|n| $n !~ gitignore and $n !~ Dockerfile} | each {|v| cp $v standalone/}
+}
+
+# Makes standalone
+export def standalone_windows [] {
+	let out = "talebox_x86_64"
+	
+	# Load all configs into build scope
+	load_env
+	open "config/prod.toml" | load-env
+	
+	cargo build --release --target x86_64-pc-windows-gnu
+	
+	cp target/x86_64-pc-windows-gnu/release/gen_key.exe $"($out)/"
+	cp target/x86_64-pc-windows-gnu/release/auth.exe $"($out)/auth/"
+	
+	tar -cavf $"($out).zip" $out
 }

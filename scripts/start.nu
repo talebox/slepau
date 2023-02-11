@@ -7,6 +7,7 @@ export def-env setup_dev [] {
 	open "config/dev.toml" | load-env
 }
 
+
 export def start [] {
 	stop_force
 	setup_dev
@@ -30,6 +31,11 @@ export def run_chunk [] {
 	open "config/chunk/dev.toml" | load-env
 	
 	cargo run --bin chunk
+}
+export def run_gen_key [] {
+	setup_dev
+	
+	cargo run --bin gen_key
 }
 
 export def test [] {

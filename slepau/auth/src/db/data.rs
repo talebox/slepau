@@ -30,7 +30,7 @@ impl From<&DBAuth> for DBAuthData {
 						sites: r
 							.sites
 							.into_iter()
-							.filter_map(|s| s.upgrade().and_then(|s| Some(s.read().unwrap().id)))
+							.filter_map(|s| s.upgrade().map(|s| s.read().unwrap().id))
 							.collect(),
 						_super: r._super,
 					}
@@ -39,7 +39,7 @@ impl From<&DBAuth> for DBAuthData {
 			hosts: value
 				.hosts
 				.iter()
-				.filter_map(|(h, s)| s.upgrade().and_then(|s| Some((h.to_owned(), s.read().unwrap().id))))
+				.filter_map(|(h, s)| s.upgrade().map(|s| (h.to_owned(), s.read().unwrap().id)))
 				.collect(),
 		}
 	}
@@ -62,7 +62,7 @@ impl From<DBAuthData> for DBAuth {
 						sites: u
 							.sites
 							.into_iter()
-							.map(|id| Arc::downgrade(sites.get(&id).unwrap()))
+							.filter_map(|id| sites.get(&id).map(|site| Arc::downgrade(site)))
 							.collect(),
 						_super: u._super,
 					})),

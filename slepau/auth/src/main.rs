@@ -1,9 +1,12 @@
-use auth::{validate::KP, UserClaims};
+use auth::{
+	validate::{KP, KPR},
+	UserClaims,
+};
 use axum::{
 	body::Body,
 	error_handling::HandleErrorLayer,
 	response::IntoResponse,
-	routing::{get, post},
+	routing::{get, post, put},
 	Extension, Router,
 };
 
@@ -25,16 +28,18 @@ use std::{
 	sync::{Arc, RwLock},
 	time::Duration,
 };
-use tokio::{
-	join,
-	signal::unix::{signal, SignalKind},
-	sync::watch,
-};
+
+#[cfg(not(target_family = "windows"))]
+use tokio::signal::unix::{signal, SignalKind};
+
+use tokio::{join, sync::watch};
 use tower_http::timeout::TimeoutLayer;
 
 mod db;
 mod ends;
 mod user;
+
+use ends::home_service;
 
 #[tokio::main]
 async fn main() {
@@ -60,7 +65,8 @@ async fn main() {
 
 	{
 		// Check that keys exist
-		lazy_static::initialize(&KP);
+		// lazy_static::initialize(&KP);
+		lazy_static::initialize(&KPR);
 	}
 
 	// Read cache
@@ -68,27 +74,6 @@ async fn main() {
 	let db = Arc::new(RwLock::new(common::init::init::<db::DBAuth>().await));
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
-
-	async fn home_service(
-		Extension(claims): Extension<UserClaims>,
-		req: axum::http::Request<Body>,
-	) -> Result<impl IntoResponse, impl IntoResponse> {
-		let host: String = req
-			.headers()
-			.get("Host")
-			.and_then(|v| Some(v.to_str().unwrap().split('.').last().unwrap().into()))
-			.unwrap_or(URL.host().unwrap().to_string());
-		let home = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
-		home
-			.as_ref()
-			.map(|home| {
-				(
-					[(header::CONTENT_TYPE, "text/html")],
-					home.replace("_HOST_", &host).replace("_USER_", &claims.user),
-				)
-			})
-			.or(Err(StatusCode::INTERNAL_SERVER_ERROR))
-	}
 
 	let security_limit = |n, secs| {
 		ServiceBuilder::new()
@@ -103,12 +88,31 @@ async fn main() {
 		// Admin Actions V
 		.merge(
 			Router::new()
-				// // Get/Modify Site
-				// .route("/sites", )
-				// // Get/Modify User
-				// .route("/sites/:id/users", )
-				// // Get/Modify Admin (only super)
-				// .route("/admins", )
+				// Get/Modify Admin
+				.route("/admins", get(ends::admin::get_admins).post(ends::admin::post_admin))
+				.route(
+					"/admins/:id",
+					put(ends::admin::put_admin).delete(ends::admin::del_admin),
+				)
+				// Only Super ^
+				.layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
+				// Get/Modify Site
+				.route("/sites", get(ends::admin::get_sites).post(ends::admin::post_site))
+				.route(
+					"/sites/:site_id",
+					put(ends::admin::put_site).delete(ends::admin::del_site),
+				)
+				// Get/Modify User
+				.route(
+					"/sites/:site_id/users",
+					get(ends::admin::get_users).post(ends::admin::post_user),
+				)
+				.route(
+					"/sites/:site_id/users/:id",
+					put(ends::admin::put_user).delete(ends::admin::del_user),
+				)
+				// Only Admins ^
+				.layer(axum::middleware::from_fn(auth::validate::flow::only_admins)),
 		)
 		// User Actions V
 		.merge(
@@ -136,10 +140,8 @@ async fn main() {
 				)
 				.fallback_service(index_service(WEB_DIST.as_str(), Some("login.html"))),
 		)
-		.nest_service(
-			"/web",
-			assets_service(WEB_DIST.as_str()).fallback_service(index_service(WEB_DIST.as_str(), None)),
-		)
+		.nest_service("/app", index_service(WEB_DIST.as_str(), None))
+		.nest_service("/web", assets_service(WEB_DIST.as_str()))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()
@@ -170,16 +172,26 @@ async fn main() {
 	let server = tokio::spawn(server);
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
-	let mut s0 = signal(SignalKind::interrupt()).unwrap();
-	let mut s1 = signal(SignalKind::terminate()).unwrap();
-	tokio::select! {
-		_ = s0.recv() => {
-			info!("Received Interrupt, exiting.");
-		}
-		_ = s1.recv() => {
-			info!("Received Terminate, exiting.");
+
+	#[cfg(target_family = "windows")]
+	async fn wait_terminate() {
+		tokio::signal::ctrl_c().await.ok();
+	}
+	#[cfg(not(target_family = "windows"))]
+	async fn wait_terminate() {
+		let mut s0 = signal(SignalKind::interrupt()).unwrap();
+		let mut s1 = signal(SignalKind::terminate()).unwrap();
+		tokio::select! {
+			_ = s0.recv() => {
+				info!("Received Interrupt, exiting.");
+			}
+			_ = s1.recv() => {
+				info!("Received Terminate, exiting.");
+			}
 		}
 	}
+
+	wait_terminate().await;
 
 	info!("Telling everyone to shutdown.");
 	shutdown_tx.send(()).unwrap();

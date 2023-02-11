@@ -1,17 +1,18 @@
 use std::collections::HashSet;
 
-use common::proquint::Proquint;
+
 use pasetors::claims::Claims;
 use serde::{Deserialize, Serialize};
-use serde_json::{json};
-use user::User;
+
+
 // use serde_json::json;
 
 fn is_false(v: &bool) -> bool {
-	*v == false
+	!(*v)
 }
 
 #[derive(Clone, Deserialize, Serialize, Default)]
+#[serde(default)]
 pub struct UserClaims {
 	pub user: String,
 	
@@ -29,13 +30,13 @@ impl From<&Claims> for UserClaims {
 		serde_json::from_str(claims.to_string().unwrap().as_str()).unwrap()
 	}
 }
-impl From<&User> for UserClaims {
-	fn from(user: &User) -> Self {
-		let mut user_claims:UserClaims = serde_json::from_value(json!(user.claims)).unwrap();
-		user_claims.user = user.user.to_owned();
-		user_claims
-	}
-}
+// impl From<&User> for UserClaims {
+// 	fn from(user: &User) -> Self {
+// 		let mut user_claims:UserClaims = serde_json::from_value(json!(user.claims)).unwrap();
+// 		user_claims.user = user.user.to_owned();
+// 		user_claims
+// 	}
+// }
 
 mod user;
 pub mod validate;

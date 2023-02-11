@@ -42,8 +42,7 @@ impl<'de, T: Quintable> Visitor<'de> for ProquintVistor<T> {
 	where
 		E: serde::de::Error,
 	{
-		T::from_quint(value)
-			.and_then(|v| Ok(v.into()))
+		T::from_quint(value).map(|v| v.into())
 			.map_err(|_| E::custom("parsing proquint failed."))
 	}
 }

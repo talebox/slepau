@@ -35,11 +35,11 @@ impl DBAuth {
 		Ok(())
 	}
 	pub fn new_user(&mut self, user: &str, pass: &str, site: SiteId) -> Result<(), DbError> {
-		let site = self.sites.get(&site).ok_or(DbError::InvalidSite)?;
+		let site = self.sites.get(&site).ok_or(DbError::NotFound)?;
 		if site.read().unwrap().users.get(user).is_some() {
 			return Err(DbError::UserTaken);
 		}
-		let user_instance = User::new(user, pass)?.into();
+		let user_instance = User::new(user, pass)?;
 		site.write().unwrap().users.insert(user.into(), user_instance);
 		Ok(())
 	}

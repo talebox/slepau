@@ -297,8 +297,8 @@ impl DB {
 		if let Some(child) = child {
 			// If child was Some, means this is a recursive iteration
 			if Arc::ptr_eq(chunk, child) {
-				println!("Circular reference detected!");
-				return Err(DbError::InvalidChunk);
+				// println!("Circular reference detected!");
+				return Err(DbError::InvalidChunk("Circular reference not allowed!"));
 			}
 		}
 
@@ -309,8 +309,8 @@ impl DB {
 				// Link parents by matching ids to existing chunks
 				if let Some(parent_ids) = chunk_lock.get_prop::<Vec<String>>("parents") {
 					if parent_ids.contains(&chunk_lock.chunk().id) {
-						error!("Circular reference detected!; Links to itself");
-						return Err(DbError::InvalidChunk);
+						// error!("Circular reference detected!; Links to itself");
+						return Err(DbError::InvalidChunk("Links to itself not allowed!"));
 					}
 
 					let parent_weaks = parent_ids
@@ -391,6 +391,6 @@ impl<'de> Deserialize<'de> for DB {
 	where
 		D: serde::Deserializer<'de>,
 	{
-		DBData::deserialize(deserializer).and_then(|v| Ok(Self::from(v)))
+		DBData::deserialize(deserializer).map(Self::from)
 	}
 }

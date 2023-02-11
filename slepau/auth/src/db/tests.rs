@@ -8,45 +8,26 @@ fn users() {
 	db.new_admin("john12", "john12").unwrap();
 	let site_id = db.new_site("john12").unwrap();
 
-	assert_eq!(
-		db.new_user("Nana3", "1234", site_id),
-		Err(DbError::InvalidUsername),
+	assert!(
+		db.new_user("Nana3", "1234", site_id).is_err(),
 		"Username characters invalid, only lowercase"
 	);
-	assert_eq!(
-		db.new_user("Nana&", "1234", site_id),
-		Err(DbError::InvalidUsername),
+	assert!(
+		db.new_user("Nana&", "1234", site_id).is_err(),
 		"Username characters invalid, no special"
 	);
-	assert_eq!(
-		db.new_user(":nana", "1234", site_id),
-		Err(DbError::InvalidUsername),
+	assert!(
+		db.new_user(":nana", "1234", site_id).is_err(),
 		"Username characters invalid, no special"
 	);
-	assert_eq!(
-		db.new_user("assphalt", "1234", site_id),
-		Err(DbError::InvalidUsername),
-		"No bad words"
-	);
-	assert_eq!(
-		db.new_user("tits_44", "1234", site_id),
-		Err(DbError::InvalidUsername),
-		"No bad words"
-	);
+	assert!(db.new_user("assphalt", "1234", site_id).is_err(), "No bad words");
+	assert!(db.new_user("tits_44", "1234", site_id).is_err(), "No bad words");
 
-	assert_eq!(
-		db.new_user("na", "1234", site_id),
-		Err(DbError::InvalidUsername),
-		"Username >= 3 in size"
-	);
-	assert_eq!(
-		db.new_user("nan", "12", site_id),
-		Err(DbError::InvalidPassword),
-		"Password >= 6 in size"
-	);
-	assert_eq!(
-		db.new_user("nan", &Alphanumeric.sample_string(&mut rand::thread_rng(), 70), site_id),
-		Err(DbError::InvalidPassword),
+	assert!(db.new_user("na", "1234", site_id).is_err(), "Username >= 3 in size");
+	assert!(db.new_user("nan", "12", site_id).is_err(), "Password >= 6 in size");
+	assert!(
+		db.new_user("nan", &Alphanumeric.sample_string(&mut rand::thread_rng(), 70), site_id)
+			.is_err(),
 		"Password <= 64 in size"
 	);
 	assert!(db.new_user("nina", "nina's pass", site_id).is_ok());

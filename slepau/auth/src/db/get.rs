@@ -1,4 +1,8 @@
-use common::utils::{DataSlice, DbError};
+use common::{
+	proquint::Proquint,
+	utils::{DataSlice, DbError},
+};
+use serde::Deserialize;
 
 use crate::user::UserView;
 
@@ -7,13 +11,36 @@ use super::{
 	DBAuth,
 };
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum AnyFilter {
+	Proquint32(Proquint<u32>),
+	String(String),
+}
+#[derive(Deserialize, Default)]
+pub struct Filter {
+	any: Option<AnyFilter>,
+}
+
 impl DBAuth {
-	pub fn get_admins(&self, super_admin: &str, filter: Option<String>) -> Result<DataSlice<AdminView>, DbError> {
+	pub fn get_admins(&self, super_admin: &str, filter: Filter) -> Result<DataSlice<AdminView>, DbError> {
+		// Make sure it's a super admin
+		self
+			.admins
+			.get(super_admin)
+			.and_then(|v| if v.read().unwrap()._super { Some(()) } else { None })
+			.ok_or(DbError::AuthError)?;
+
+		// Make a view of admins
 		let admins = self.admins.values().filter_map(|v| {
 			let v = v.read().unwrap();
 			if filter
+				.any
 				.as_ref()
-				.and_then(|filter| Some(v.user.user.contains(filter.as_str())))
+				.map(|filter| match filter {
+					AnyFilter::Proquint32(id) => true,
+					AnyFilter::String(name) => v.user.user.contains(name.as_str()),
+				})
 				.unwrap_or(true)
 			{
 				Some(AdminView::from(&*v))
@@ -29,14 +56,19 @@ impl DBAuth {
 	}
 
 	/// We'll only do get_sites, no specific endpoint by id needed
-	pub fn get_sites(&self, admin: &str, filter: Option<String>) -> Result<DataSlice<SiteView>, DbError> {
+	pub fn get_sites(&self, admin: &str, filter: Filter) -> Result<DataSlice<SiteView>, DbError> {
 		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;
 		let admin = admin.read().unwrap();
 		let sites = admin.sites.iter().filter_map(|s| s.upgrade()).filter_map(|s| {
 			let s = s.read().unwrap();
+
 			if filter
+				.any
 				.as_ref()
-				.and_then(|filter| Some(s.name.contains(filter.as_str())))
+				.map(|filter| match filter {
+					AnyFilter::Proquint32(id) => s.id == *id,
+					AnyFilter::String(name) => s.name.contains(name.as_str()),
+				})
 				.unwrap_or(true)
 			{
 				let mut sv = SiteView::from(&*s);
@@ -44,11 +76,7 @@ impl DBAuth {
 					.hosts
 					.iter()
 					.filter_map(|(h, site)| {
-						if site
-							.upgrade()
-							.and_then(|_s| Some(_s.read().unwrap().id == s.id))
-							.unwrap_or(false)
-						{
+						if site.upgrade().map(|_s| _s.read().unwrap().id == s.id).unwrap_or(false) {
 							Some(h.to_owned())
 						} else {
 							None
@@ -67,12 +95,7 @@ impl DBAuth {
 		})
 	}
 	/// We'll only do get_sites, no specific endpoint by id needed
-	pub fn get_users(
-		&self,
-		admin: &str,
-		site_id: SiteId,
-		filter: Option<String>,
-	) -> Result<DataSlice<UserView>, DbError> {
+	pub fn get_users(&self, admin: &str, site_id: SiteId, filter: Filter) -> Result<DataSlice<UserView>, DbError> {
 		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;
 		let admin = admin.read().unwrap();
 		let site = admin
@@ -86,11 +109,15 @@ impl DBAuth {
 		let users = site.users.values().filter_map(|v| {
 			// let s = s.read().unwrap();
 			if filter
+				.any
 				.as_ref()
-				.and_then(|filter| Some(v.user.contains(filter.as_str())))
+				.map(|filter| match filter {
+					AnyFilter::Proquint32(id) => true,
+					AnyFilter::String(name) => v.user.contains(name.as_str()),
+				})
 				.unwrap_or(true)
 			{
-				Some(UserView::from(&*v))
+				Some(UserView::from(v))
 			} else {
 				None
 			}

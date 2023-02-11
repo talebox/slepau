@@ -80,9 +80,8 @@ async fn main() {
 	) -> Result<impl IntoResponse, impl IntoResponse> {
 		let host: String = req
 			.headers()
-			.get("Host")
-			.and_then(|v| Some(v.to_str().unwrap().split('.').last().unwrap().into()))
-			.unwrap_or(URL.host().unwrap().to_string());
+			.get("Host").map(|v| v.to_str().unwrap().split('.').last().unwrap().into())
+			.unwrap_or_else(|| URL.host().unwrap().to_string());
 		let home = read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html"));
 		home
 			.as_ref()
@@ -114,11 +113,11 @@ async fn main() {
 				)
 				.layer(security_limit(1, 1))
 				// ONLY if NOT public ^
-				.route_layer(from_fn(auth::validate::auth_required))
+				.route_layer(from_fn(auth::validate::flow::auth_required))
 				.route("/chunks/:id", get(ends::chunks_get_id))
 				.route("/stream", get(socket::websocket_handler))
 				// ONLY GET if public ^
-				.route_layer(from_fn(auth::validate::public_only_get))
+				.route_layer(from_fn(auth::validate::flow::public_only_get))
 				.route("/mirror/:bean", get(common::init::magic_bean::mirror_bean::<db::DB>)),
 		)
 		.fallback(home_service)

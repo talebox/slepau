@@ -25,34 +25,35 @@ pub struct DBAuth {
 }
 
 impl DBAuth {
-	pub fn host_to_site_id(&self, host: &str) -> Result<SiteId, DbError> {
-		self
-			.hosts
-			.get(host)
-			.and_then(|s| s.upgrade().and_then(|s| Some(s.read().unwrap().id)))
-			.ok_or(DbError::InvalidHost)
+	pub fn host_to_site_id(&self, host: &str) -> (String, Option<SiteId>) {
+		let host = psl::domain_str(host).unwrap_or(host);
+		(
+			host.into(),
+			self
+				.hosts
+				.get(host)
+				.and_then(|s| s.upgrade().map(|s| s.read().unwrap().id)),
+		)
 	}
 
-	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<User, DbError> {
+	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<(User, bool, bool), DbError> {
+		let site = site.and_then(|site| self.sites.get(&site));
 		if let Some(site) = site {
-			let site = self.sites.get(&site).ok_or(DbError::InvalidSite)?.write().unwrap();
-			let user = site.users.get(user).ok_or(DbError::AuthError)?;
-			if !user.verify_pass(pass) {
-				return Err(DbError::AuthError);
+			if let Some(user) = site.read().unwrap().users.get(user) {
+				user.verify_pass(pass)?;
+				return Ok((user.clone(), false, false));
 			}
-			Ok(user.clone())
-		} else {
-			let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
-			let user = &admin.read().unwrap().user;
-			if !user.verify_pass(pass) {
-				return Err(DbError::AuthError);
-			}
-			Ok(user.clone())
 		}
+
+		let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
+		let admin = admin.read().unwrap();
+		let user = &admin.user;
+		user.verify_pass(pass)?;
+		Ok((user.clone(), true, admin._super))
 	}
 	pub fn reset(&mut self, user: &str, pass: &str, old_pass: &str, site: Option<SiteId>) -> Result<(), DbError> {
 		if let Some(site) = site {
-			let mut site = self.sites.get(&site).ok_or(DbError::InvalidSite)?.write().unwrap();
+			let mut site = self.sites.get(&site).ok_or(DbError::NotFound)?.write().unwrap();
 			let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
 			user.reset_pass(old_pass, pass)
 		} else {

@@ -5,8 +5,7 @@ use proquint::Quintable;
 use rand::prelude::*;
 use regex::Regex;
 use reqwest::Url;
-use serde::{ Serialize, Deserialize};
-use serde_json::Value;
+use serde::Serialize;
 
 pub type LockedAtomic<T> = Arc<RwLock<T>>;
 pub type LockedWeak<T> = Weak<RwLock<T>>;
@@ -27,6 +26,7 @@ pub fn get_secs() -> u64 {
 }
 pub const SECS_IN_HOUR: u64 = 60 * 60;
 pub const SECS_IN_DAY: u64 = SECS_IN_HOUR * 24;
+pub const SECS_START_OF_TALEBOX: u64 = 1660984278;
 
 pub fn gen_proquint32() -> String {
 	random::<u32>().to_quint()
@@ -43,10 +43,13 @@ lazy_static! {
 	pub static ref REGEX_ACCESS: Regex = Regex::new(format!("(?im){}", env!("REGEX_ACCESS")).as_str()).unwrap();
 	pub static ref REGEX_PROPERTY: Regex = Regex::new(format!("(?m){}", env!("REGEX_PROPERTY")).as_str()).unwrap();
 	pub static ref REGEX_USERNAME: Regex = Regex::new(env!("REGEX_USERNAME")).unwrap();
+	pub static ref REGEX_USERNAME_HUMAN: Regex = Regex::new(env!("REGEX_USERNAME_HUMAN")).unwrap();
 	pub static ref REGEX_PASSWORD: Regex = Regex::new(env!("REGEX_PASSWORD")).unwrap();
+	pub static ref REGEX_PASSWORD_HUMAN: Regex = Regex::new(env!("REGEX_PASSWORD_HUMAN")).unwrap();
 }
 
 lazy_static! {
+	pub static ref K_PRIVATE: String = env::var("K_PRIVATE").unwrap_or_else(|_| "keys/private.k".into());
 	pub static ref K_PUBLIC: String = env::var("K_PUBLIC").unwrap_or_else(|_| "keys/public.k".into());
 	pub static ref K_SECRET: String = env::var("K_SECRET").unwrap_or_else(|_| "keys/secret.k".into());
 	/// Use this file as your db storage
@@ -54,7 +57,6 @@ lazy_static! {
 	/// Fetches magic bean if set
 	pub static ref DB_INIT: Option<String> = env::var("DB_INIT").ok();
 	pub static ref DB_BACKUP_FOLDER: String = env::var("DB_BACKUP_FOLDER").unwrap_or_else(|_| "backups".into());
-	pub static ref MEDIA_FOLDER: String = env::var("MEDIA_FOLDER").unwrap_or_else(|_| "media".into());
 	pub static ref CACHE_PATH: String = env::var("CACHE_PATH").unwrap_or_else(|_| "cache.json".into());
 	pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
 	/// The socket is we listen to requests from.
@@ -63,10 +65,6 @@ lazy_static! {
 	pub static ref URL: Url = Url::parse(env::var("URL").unwrap_or_else(|_| "http://localhost:4000".into()).as_str()).expect("URL to be valid");
 	pub static ref SECURE: bool = URL.scheme() != "http";
 }
-
-pub const KEYWORD_BLACKLIST: [&str; 12] = [
-	"admin", "root", "note", "chunk", "share", "access", "read", "write", "lock", "unlock", "public", "inherit",
-];
 
 /**
  * # Basic string normalizer
@@ -95,10 +93,10 @@ pub enum DbError {
 	UserTaken,
 	AuthError,
 	InvalidHost,
-	InvalidSite,
-	InvalidUsername,
-	InvalidPassword,
-	InvalidChunk,
+	InvalidSite(&'static str),
+	InvalidUsername(&'static str),
+	InvalidPassword(&'static str),
+	InvalidChunk(&'static str),
 	NotFound,
 }
 impl IntoResponse for DbError {
@@ -152,4 +150,3 @@ pub struct DataSlice<T> {
 	pub items: Vec<T>,
 	pub total: usize,
 }
-

@@ -1,5 +1,5 @@
 use futures_util::stream::TryStreamExt;
-use reql::{r, Command, Session, func};
+use reql::{r, Command, Session};
 use serde_json::Value;
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() -> reql::Result<()> {
 
 	// Create the query you want to run
 	// The query returns a `Stream` of responses from RethinkDB
-	let mut query = r.db("movies").table("meta").limit(10);
+	let query = r.db("movies").table("meta").limit(10);
 
 	run(query.clone(), &conn).await?;
 	

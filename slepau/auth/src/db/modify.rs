@@ -6,29 +6,25 @@ use super::{
 };
 use crate::user::UserSet;
 use common::utils::DbError;
+use serde_json::Value;
 
 impl DBAuth {
 	pub fn mod_site(&mut self, admin: &str, site_id: SiteId, v: SiteSet) -> Result<(), DbError> {
 		// Figure out if site belongs to user in question, or we're super admins
-		if !self
-			.admins
-			.get(admin)
-			.and_then(|v| {
-				let v = v.read().unwrap();
-				Some(
-					v._super
-						|| v
-							.sites
-							.iter()
-							.filter_map(|v| v.upgrade())
-							.find(|v| v.read().unwrap().id == site_id)
-							.is_some(),
-				)
-			})
-			.unwrap_or(false)
+		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;
 		{
-			return Err(DbError::AuthError);
+			let admin = admin.read().unwrap();
+			if !admin._super
+				&& !admin
+					.sites
+					.iter()
+					.filter_map(|v| v.upgrade())
+					.any(|v| v.read().unwrap().id == site_id)
+			{
+				return Err(DbError::AuthError);
+			}
 		}
+
 		let site = self.sites.get(&site_id).unwrap();
 		let site_weak = Arc::downgrade(site);
 		// Remove all hosts that point to the site
@@ -36,7 +32,7 @@ impl DBAuth {
 		// Add new hosts
 		self
 			.hosts
-			.extend(v.hosts.into_iter().map(|h| (h.to_owned(), site_weak.to_owned())));
+			.extend(v.hosts.into_iter().map(|h| (h, site_weak.to_owned())));
 		// Modify site
 		{
 			let mut site = site.write().unwrap();
@@ -59,7 +55,7 @@ impl DBAuth {
 		let sites = v
 			.sites
 			.into_iter()
-			.map(|site_id| self.sites.get(&site_id).and_then(|s| Some(Arc::downgrade(s))))
+			.map(|site_id| self.sites.get(&site_id).map(Arc::downgrade))
 			.collect::<Vec<_>>();
 		// If you couldn't find a site, return an error
 		if sites.iter().any(|v| v.is_some()) {
@@ -91,12 +87,28 @@ impl DBAuth {
 			.find(|v| v.read().unwrap().id == site_id)
 			.ok_or(DbError::NotFound)?;
 
+		// Try parsing the claims as strings
+		let claims = v
+			.claims
+			.into_iter()
+			.map(|(k, v)| {
+				(
+					k.to_owned(),
+					if let Value::String(s) = &v {
+						serde_json::from_str(&s).unwrap_or(v)
+					} else {
+						v
+					},
+				)
+			})
+			.collect();
+
 		// Modify user
 		{
 			let mut site = site.write().unwrap();
 			let mut user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
 			user.active = v.active;
-			user.claims = v.claims.clone();
+			user.claims = claims;
 		}
 
 		Ok(())

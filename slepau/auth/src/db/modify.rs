@@ -69,7 +69,6 @@ impl DBAuth {
 			if
 			// Changing themselves
 			super_admin == &admin.user.user &&
-			
 			(
 				// Turning off super
 				(admin._super && !v._super) || 

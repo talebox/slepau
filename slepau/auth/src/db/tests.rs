@@ -1,4 +1,7 @@
 use rand::distributions::{Alphanumeric, DistString};
+use serde_json::json;
+
+use crate::db::site::AdminSet;
 
 use super::{stats::DBAuthStats, *};
 
@@ -46,6 +49,7 @@ fn users() {
 #[test]
 fn visibility() {
 	let mut db = DBAuth::default();
+	// First admin is always super
 	db.new_admin("john_s", "john_s").unwrap();
 	db.new_admin("john123", "john123").unwrap();
 	let site_id = db.new_site("john123").unwrap();
@@ -63,9 +67,92 @@ fn visibility() {
 }
 
 #[test]
-fn admins() {
-	// Admins cannot remove their own super admin status.
+fn modify() {
+	let mut db = DBAuth::default();
+	// First admin is always super
+	db.new_admin("john_s", "john_s").unwrap();
+	db.new_admin("john_123", "john_123").unwrap();
 	
-	// Admins can see all sites.
 	
+	// Can supers do this?
+	{
+		assert!(
+			db.mod_admin(
+				"john_s",
+				"john_s",
+				serde_json::from_value(json! ({
+					"active": true,
+					"claims": {"test":"yes"},
+					"sites": [],
+					"super": true
+				}))
+				.unwrap()
+			)
+			.is_ok(),
+			"Can indeed edit themselves"
+		);
+		
+		assert!(
+			db.mod_admin(
+				"john_s",
+				"john_123",
+				serde_json::from_value(json! ({
+					"active": false,
+					"claims": {},
+					"sites": [],
+					"super": true
+				}))
+				.unwrap()
+			)
+			.is_ok(),
+			"Can modify other's active and super"
+		);
+		assert!(
+			db.mod_admin(
+				"john_s",
+				"john_123",
+				serde_json::from_value(json! ({
+					"active": true,
+					"claims": {},
+					"sites": [],
+					"super": false
+				}))
+				.unwrap()
+			)
+			.is_ok(),
+			"Can modify other's active and super"
+		);
+
+		assert!(
+			db.mod_admin(
+				"john_s",
+				"john_s",
+				serde_json::from_value(json! ({
+					"active": false,
+					"claims": {},
+					"sites": [],
+					"super": true
+				}))
+				.unwrap()
+			)
+			.is_err(),
+			"Cannot remove their own active status"
+		);
+
+		assert!(
+			db.mod_admin(
+				"john_s",
+				"john_s",
+				serde_json::from_value(json! ({
+					"active": true,
+					"claims": {},
+					"sites": [],
+					"super": false
+				}))
+				.unwrap()
+			)
+			.is_err(),
+			"Cannot remove their own super status"
+		);
+	}
 }

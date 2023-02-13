@@ -41,7 +41,7 @@ export def run_gen_key [] {
 export def test [] {
 	setup_dev
 	
-	cargo test
+	cargo test -j 1
 }
 
 export def check [] {

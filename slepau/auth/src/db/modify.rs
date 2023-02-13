@@ -58,12 +58,33 @@ impl DBAuth {
 			.map(|site_id| self.sites.get(&site_id).map(Arc::downgrade))
 			.collect::<Vec<_>>();
 		// If you couldn't find a site, return an error
-		if sites.iter().any(|v| v.is_some()) {
+		if sites.iter().any(|v| v.is_none()) {
 			return Err(DbError::NotFound);
 		}
+		
+		// Last minute checks
+		{
+			let admin = admin.read().unwrap();
+			// Supers can't unsuper themselves
+			if
+			// Changing themselves
+			super_admin == &admin.user.user &&
+			
+			(
+				// Turning off super
+				(admin._super && !v._super) || 
+				// Making inactive
+				(admin.user.active && !v.active)
+			)
+			{
+				return Err(DbError::AuthError);
+			}
+		}
+		
 		// Modify admin
 		{
 			let mut admin = admin.write().unwrap();
+			
 			admin.user.active = v.active;
 			admin.user.claims = v.claims.clone();
 			admin.sites = sites

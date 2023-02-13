@@ -36,20 +36,20 @@ impl DBAuth {
 		)
 	}
 
-	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<(User, bool, bool), DbError> {
-		let site = site.and_then(|site| self.sites.get(&site));
+	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<(User, bool, bool, usize), DbError> {
 		if let Some(site) = site {
-			if let Some(user) = site.read().unwrap().users.get(user) {
-				user.verify_pass(pass)?;
-				return Ok((user.clone(), false, false));
-			}
+			let site = self.sites.get(&site).ok_or(DbError::InvalidSite("No site found"))?;
+			let site = site.read().unwrap();
+			let user = site.users.get(user).ok_or(DbError::AuthError)?;
+			user.verify_login(pass)?;
+			Ok((user.clone(), false, false, site.max_age))
+		} else {
+			let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
+			let admin = admin.read().unwrap();
+			let user = &admin.user;
+			user.verify_login(pass)?;
+			Ok((user.clone(), true, admin._super, 60 * 60))
 		}
-
-		let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
-		let admin = admin.read().unwrap();
-		let user = &admin.user;
-		user.verify_pass(pass)?;
-		Ok((user.clone(), true, admin._super))
 	}
 	pub fn reset(&mut self, user: &str, pass: &str, old_pass: &str, site: Option<SiteId>) -> Result<(), DbError> {
 		if let Some(site) = site {

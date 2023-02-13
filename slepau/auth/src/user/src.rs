@@ -8,7 +8,10 @@ use common::utils::{DbError, REGEX_PASSWORD, REGEX_PASSWORD_HUMAN, REGEX_USERNAM
 use super::{blacklist::BLACKLIST, User};
 
 impl User {
-	pub fn verify_pass(&self, pass: &str) -> Result<(), DbError> {
+	pub fn verify_login(&self, pass: &str) -> Result<(), DbError> {
+		if !self.active {
+			return Err(DbError::AuthError);
+		}
 		// PHC string -> PasswordHash.
 		let parsed_hash = PasswordHash::new(&self.pass).expect("Error parsing existing password field");
 
@@ -44,7 +47,7 @@ impl User {
 	}
 
 	pub fn reset_pass(&mut self, old_pass: &str, pass: &str) -> Result<(), DbError> {
-		self.verify_pass(old_pass)?;
+		self.verify_login(old_pass)?;
 		self.pass = Self::hash(pass)?;
 
 		Ok(())

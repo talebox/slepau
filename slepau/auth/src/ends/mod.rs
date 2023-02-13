@@ -2,12 +2,19 @@ use auth::{
 	validate::{KP, KPR},
 	UserClaims,
 };
-use axum::{extract::Extension, headers, http::header, response::IntoResponse, Json, TypedHeader};
+use axum::{
+	extract::{Extension, Query},
+	headers,
+	http::header,
+	response::IntoResponse,
+	Json, TypedHeader,
+};
 use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY, SECURE, WEB_DIST};
 use hyper::StatusCode;
 use lazy_static::lazy_static;
 use log::{error, info};
 use pasetors::{claims::Claims, local, public};
+use serde::Deserialize;
 use std::path::PathBuf;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
@@ -22,22 +29,22 @@ pub async fn home_service(
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	let (host, site_id) = db.read().unwrap().host_to_site_id(host.hostname());
 
-	fn get_home() -> Option<String> {
+	fn get_src() -> Option<String> {
 		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
 	}
 
-	let home;
+	let src;
 	// If we're debugging, get home every time
 	if cfg!(debug_assertions) {
-		home = get_home();
+		src = get_src();
 	} else {
 		lazy_static! {
-			static ref HOME: Option<String> = get_home();
+			static ref HOME: Option<String> = get_src();
 		}
-		home = HOME.to_owned();
+		src = HOME.to_owned();
 	}
 
-	home
+	src
 		.as_ref()
 		.map(|home| {
 			(
@@ -49,20 +56,61 @@ pub async fn home_service(
 		})
 		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
+pub async fn index_service_auth(
+	Extension(claims): Extension<UserClaims>,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+	fn get_src() -> Option<String> {
+		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("index.html")).ok()
+	}
+
+	let src;
+	// If we're debugging, get home every time
+	if cfg!(debug_assertions) {
+		src = get_src();
+	} else {
+		lazy_static! {
+			static ref HOME: Option<String> = get_src();
+		}
+		src = HOME.to_owned();
+	}
+
+	src
+		.as_ref()
+		.map(|home| {
+			(
+				[(header::CONTENT_TYPE, "text/html")],
+				home.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+			)
+		})
+		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct LoginQuery {
+	admin: bool,
+}
 
 pub async fn login(
 	TypedHeader(host): TypedHeader<headers::Host>,
+	Query(query): Query<LoginQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
 
-	let (host, site_id) = db.host_to_site_id(host.hostname());
+	let (host, mut site_id) = db.host_to_site_id(host.hostname());
+	// Throw error if no site found and user doesn't wanna login as admin.
+	// To prevent an inadvert login as admin.
+	if query.admin {
+		site_id = None;
+	} else if site_id.is_none() {
+		return Err(DbError::InvalidSite("Site not found."));
+	}
 
 	db.login(&user, &pass, site_id)
-		.map(|(user, is_admin, is_super)| {
+		.map(|(user, is_admin, is_super, max_age)| {
 			// Create token
-
 			let mut claims = Claims::new().unwrap();
 			// Set Issuer
 			claims.issuer("slepau:auth").unwrap();
@@ -90,7 +138,7 @@ pub async fn login(
 				.unwrap()
 				.format(&Rfc3339)
 				.unwrap();
-			let exp = get_secs() + SECS_IN_DAY * 7; // 7 days
+			let exp = get_secs() + max_age as u64; // 7 days
 			let exp = OffsetDateTime::from_unix_timestamp(exp.try_into().unwrap())
 				.unwrap()
 				.format(&Rfc3339)
@@ -108,7 +156,7 @@ pub async fn login(
 				header::SET_COOKIE,
 				format!(
 					"auth={pub_token}; SameSite=Strict; Max-Age={}; Path=/; HttpOnly;{}",
-					60/*sec*/*60/*min*/*24/*hr*/*7, /*days = a week in seconds*/
+					max_age,
 					if *SECURE { " Secure;" } else { "" }
 				),
 			)]
@@ -128,7 +176,7 @@ pub async fn register(
 	if db.admins.is_empty() {
 		db.new_admin(&user, &pass)?;
 		info!("Super admin created '{}'.", &user);
-		return Ok("Super admin created");
+		return Ok("Super admin created.");
 	}
 
 	let (_, site_id) = db.host_to_site_id(host.hostname());
@@ -137,7 +185,7 @@ pub async fn register(
 	db.new_user(&user, &pass, site_id)
 		.map(|_| {
 			info!("User created '{}'.", &user);
-			"User created"
+			"User created."
 		})
 		.map_err(|err| {
 			error!("Failed register for '{}' with pass '{}': {:?}.", &user, &pass, &err);
@@ -176,9 +224,7 @@ pub async fn logout() -> impl IntoResponse {
 	[(
 		header::SET_COOKIE,
 		format!(
-			"auth=; SameSite=Strict; Max-Age={}; Path=/;{}",
-			60/*sec*/*60/*min*/*24/*hr*/*7, /*days*/
-			/*= a week in seconds*/
+			"auth=; SameSite=Strict; Path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;{}",
 			if *SECURE { " Secure;" } else { "" }
 		),
 	)]

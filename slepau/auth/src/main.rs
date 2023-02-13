@@ -6,8 +6,8 @@ use axum::{
 	body::Body,
 	error_handling::HandleErrorLayer,
 	response::IntoResponse,
-	routing::{get, post, put},
-	Extension, Router,
+	routing::{get, get_service, post, put},
+	BoxError, Extension, Router,
 };
 
 use common::{
@@ -20,6 +20,7 @@ use env_logger::Env;
 use hyper::{header, StatusCode};
 use log::{error, info};
 use tower::ServiceBuilder;
+use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
 
 use std::{
 	fs::read_to_string,
@@ -40,6 +41,8 @@ mod ends;
 mod user;
 
 use ends::home_service;
+
+use crate::ends::index_service_auth;
 
 #[tokio::main]
 async fn main() {
@@ -75,13 +78,21 @@ async fn main() {
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
 
-	let security_limit = |n, secs| {
-		ServiceBuilder::new()
-			.layer(HandleErrorLayer::new(|_| async { StatusCode::TOO_MANY_REQUESTS }))
-			.buffer((n * secs + 5) as usize)
-			.load_shed()
-			.rate_limit(n, Duration::from_secs(secs))
-	};
+	// let security_limit = |n, secs| {
+	// 	ServiceBuilder::new()
+	// 		.layer(HandleErrorLayer::new(|_| async { StatusCode::TOO_MANY_REQUESTS }))
+	// 		.buffer((n * secs + 5) as usize)
+	// 		.load_shed()
+	// 		.rate_limit(n, Duration::from_secs(secs))
+	// };
+
+	let governor_conf = Box::new(
+		GovernorConfigBuilder::default()
+			.per_second(2)
+			.burst_size(5)
+			.finish()
+			.unwrap(),
+	);
 
 	// Build router
 	let app = Router::new()
@@ -118,16 +129,15 @@ async fn main() {
 		.merge(
 			Router::new()
 				.route("/reset", post(crate::ends::reset))
-				.route("/register", post(crate::ends::register))
-				.layer(security_limit(1, 10)),
+				.route("/register", post(crate::ends::register)), // .layer(security_limit(1, 10)),
 		)
 		.merge(
 			Router::new()
 				.route("/user", get(crate::ends::user))
-				.route("/logout", get(crate::ends::logout))
-				.layer(security_limit(1, 1)),
+				.route("/logout", get(crate::ends::logout)), // .layer(security_limit(1, 1)),
 		)
 		.fallback(home_service)
+		.nest_service("/app", get(index_service_auth))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.nest(
 			"/login",
@@ -135,12 +145,21 @@ async fn main() {
 				.route(
 					"/",
 					post(crate::ends::login)
-						.layer(security_limit(1, 5))
+						// .layer(security_limit(1, 5))
 						.fallback_service(index_service(WEB_DIST.as_str(), Some("login.html"))),
 				)
 				.fallback_service(index_service(WEB_DIST.as_str(), Some("login.html"))),
 		)
-		.nest_service("/app", index_service(WEB_DIST.as_str(), None))
+		.layer(
+			ServiceBuilder::new()
+				// this middleware goes above `GovernorLayer` because it will receive
+				// errors returned by `GovernorLayer`
+				.layer(HandleErrorLayer::new(|e: BoxError| async move { display_error(e) }))
+				.layer(GovernorLayer {
+					// We can leak this because it is created once and then
+					config: Box::leak(governor_conf),
+				}),
+		)
 		.nest_service("/web", assets_service(WEB_DIST.as_str()))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(

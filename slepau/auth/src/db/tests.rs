@@ -61,3 +61,11 @@ fn visibility() {
 		}
 	);
 }
+
+#[test]
+fn admins() {
+	// Admins cannot remove their own super admin status.
+	
+	// Admins can see all sites.
+	
+}

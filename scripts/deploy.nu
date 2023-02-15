@@ -16,7 +16,6 @@ use start.nu test
 # }
 
 export def deploy_auth [] {
-	
 	test
 	build
 	
@@ -30,4 +29,17 @@ export def deploy_auth [] {
 		docker run -dp 4501:4000 -v auth_data:/server/data -v auth_backup:/server/backup --name auth_s auth
 	exit
 	
+}
+export def deploy_talebox [] {
+	
+	# Build webapp
+	enter web
+		# Remove cache/build dirs
+		rm -rf dist
+		# rm -rf .parcel-cache
+		# Build optimized
+		yarn parcel build --no-source-maps --target talebox
+	exit
+	
+	scp web/dist/talebox/* anty.dev:/srv/http/talebox/
 }

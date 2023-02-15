@@ -1,5 +1,5 @@
 [workspace]
-members = ["slepau/auth"]
+members = ["slepau/auth", "slepau/chunk"]
 
 [workspace.package]
 version = "0.6.0"

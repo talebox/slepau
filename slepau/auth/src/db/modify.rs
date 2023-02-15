@@ -59,31 +59,31 @@ impl DBAuth {
 			.collect::<Vec<_>>();
 		// If you couldn't find a site, return an error
 		if sites.iter().any(|v| v.is_none()) {
-			return Err(DbError::NotFound);
+			return Err(DbError::InvalidSite(
+				"Site not found. Make sure the site id's are correct.",
+			));
 		}
-		
+
 		// Last minute checks
 		{
 			let admin = admin.read().unwrap();
-			// Supers can't unsuper themselves
-			if
-			// Changing themselves
-			super_admin == &admin.user.user &&
-			(
-				// Turning off super
-				(admin._super && !v._super) || 
-				// Making inactive
-				(admin.user.active && !v.active)
-			)
-			{
-				return Err(DbError::AuthError);
+			let changing_themselves = super_admin == &admin.user.user;
+			let turning_off_super = admin._super && !v._super;
+			let making_inactive = admin.user.active && !v.active;
+			if changing_themselves {
+				if turning_off_super {
+					return Err(DbError::Custom("You can't get rid of your powers."));
+				}
+				if making_inactive {
+					return Err(DbError::Custom("Your power is too strong to be disabled."));
+				}
 			}
 		}
-		
+
 		// Modify admin
 		{
 			let mut admin = admin.write().unwrap();
-			
+
 			admin.user.active = v.active;
 			admin.user.claims = v.claims.clone();
 			admin.sites = sites

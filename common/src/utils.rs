@@ -97,11 +97,22 @@ pub enum DbError {
 	InvalidUsername(&'static str),
 	InvalidPassword(&'static str),
 	InvalidChunk(&'static str),
+	Custom(&'static str),
 	NotFound,
 }
 impl IntoResponse for DbError {
 	fn into_response(self) -> axum::response::Response {
-		(StatusCode::FORBIDDEN, format!("{self:?}")).into_response()
+		(
+			StatusCode::FORBIDDEN,
+			format!(
+				"{}",
+				match self {
+					DbError::Custom(v) => v.into(),
+					v => serde_json::to_string(&v).unwrap(),
+				}
+			),
+		)
+			.into_response()
 	}
 }
 

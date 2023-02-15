@@ -38,7 +38,7 @@ impl DBAuth {
 
 	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<(User, bool, bool, usize), DbError> {
 		if let Some(site) = site {
-			let site = self.sites.get(&site).ok_or(DbError::InvalidSite("No site found"))?;
+			let site = self.sites.get(&site).ok_or(DbError::InvalidSite("No site found."))?;
 			let site = site.read().unwrap();
 			let user = site.users.get(user).ok_or(DbError::AuthError)?;
 			user.verify_login(pass)?;

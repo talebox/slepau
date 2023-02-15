@@ -105,7 +105,7 @@ pub async fn login(
 	if query.admin {
 		site_id = None;
 	} else if site_id.is_none() {
-		return Err(DbError::InvalidSite("Site not found."));
+		return Err(DbError::InvalidSite("No site setup yet for this host. Contact admin."));
 	}
 
 	db.login(&user, &pass, site_id)
@@ -155,8 +155,8 @@ pub async fn login(
 			[(
 				header::SET_COOKIE,
 				format!(
-					"auth={pub_token}; SameSite=Strict; Max-Age={}; Path=/; HttpOnly;{}",
-					max_age,
+					"auth={pub_token}; Domain={}; SameSite=Strict; Max-Age={max_age}; Path=/; HttpOnly; {}",
+					&host,
 					if *SECURE { " Secure;" } else { "" }
 				),
 			)]
@@ -220,11 +220,18 @@ pub async fn user(
 ) -> impl IntoResponse {
 	Json(user_claims)
 }
-pub async fn logout() -> impl IntoResponse {
+pub async fn logout(
+	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(db): Extension<LockedAtomic<DBAuth>>,
+) -> impl IntoResponse {
+	let db = db.read().unwrap();
+	let (host, _) = db.host_to_site_id(host.hostname());
+
 	[(
 		header::SET_COOKIE,
 		format!(
-			"auth=; SameSite=Strict; Path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;{}",
+			"auth=; Domain={}; SameSite=Strict; Path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT; {}",
+			&host,
 			if *SECURE { " Secure;" } else { "" }
 		),
 	)]

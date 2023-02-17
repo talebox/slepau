@@ -6,10 +6,11 @@ use axum::{
 	extract::{Extension, Query},
 	headers,
 	http::header,
+	http::HeaderMap,
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::utils::{get_secs, DbError, LockedAtomic, SECS_IN_DAY, SECURE, WEB_DIST};
+use common::utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECS_IN_DAY, SECURE, WEB_DIST};
 use hyper::StatusCode;
 use lazy_static::lazy_static;
 use log::{error, info};
@@ -24,62 +25,67 @@ use crate::db::DBAuth;
 
 pub async fn home_service(
 	TypedHeader(host): TypedHeader<headers::Host>,
-	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Extension(claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-	let (host, site_id) = db.read().unwrap().host_to_site_id(host.hostname());
+	let host = hostname_normalize(host.hostname());
 
 	fn get_src() -> Option<String> {
 		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
 	}
 
 	let src;
-	// If we're debugging, get home every time
+	// If we're debugging, get every time
 	if cfg!(debug_assertions) {
 		src = get_src();
 	} else {
 		lazy_static! {
-			static ref HOME: Option<String> = get_src();
+			static ref SRC: Option<String> = get_src();
 		}
-		src = HOME.to_owned();
+		src = SRC.to_owned();
 	}
 
 	src
 		.as_ref()
-		.map(|home| {
+		.map(|src| {
 			(
 				[(header::CONTENT_TYPE, "text/html")],
-				home
-					.replace("_HOST_", &host)
+				src
+					.replace("_HOST_", serde_json::to_string(host).unwrap().as_str())
 					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
 			)
 		})
 		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
-pub async fn index_service_auth(
+/// Populates index.html with the needed request data
+pub async fn login_service(
+	headers: HeaderMap,
+	// Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Extension(claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("index.html")).ok()
+		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("login.html")).ok()
 	}
+	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();
 
 	let src;
-	// If we're debugging, get home every time
+	// If we're debugging, get every time
 	if cfg!(debug_assertions) {
 		src = get_src();
 	} else {
 		lazy_static! {
-			static ref HOME: Option<String> = get_src();
+			static ref SRC: Option<String> = get_src();
 		}
-		src = HOME.to_owned();
+		src = SRC.to_owned();
 	}
 
 	src
 		.as_ref()
-		.map(|home| {
+		.map(|src| {
 			(
 				[(header::CONTENT_TYPE, "text/html")],
-				home.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+				src
+					.replace("_REFERER_", serde_json::to_string(referer).unwrap().as_str())
+					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
 			)
 		})
 		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
@@ -155,7 +161,7 @@ pub async fn login(
 			[(
 				header::SET_COOKIE,
 				format!(
-					"auth={pub_token}; Domain={}; SameSite=Strict; Max-Age={max_age}; Path=/; HttpOnly; {}",
+					"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
 					&host,
 					if *SECURE { " Secure;" } else { "" }
 				),
@@ -222,17 +228,32 @@ pub async fn user(
 }
 pub async fn logout(
 	TypedHeader(host): TypedHeader<headers::Host>,
-	Extension(db): Extension<LockedAtomic<DBAuth>>,
+	headers: HeaderMap,
 ) -> impl IntoResponse {
-	let db = db.read().unwrap();
-	let (host, _) = db.host_to_site_id(host.hostname());
+	let host_full = host.hostname();
+	let host = hostname_normalize(host.hostname());
 
-	[(
-		header::SET_COOKIE,
-		format!(
-			"auth=; Domain={}; SameSite=Strict; Path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT; {}",
-			&host,
-			if *SECURE { " Secure;" } else { "" }
-		),
-	)]
+	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();
+	(
+		StatusCode::FOUND,
+		[
+			(
+				header::SET_COOKIE,
+				format!(
+					"auth=; Domain={}; Path=/; SameSite=Strict; Max-Age=0; HttpOnly; {}",
+					&host,
+					if *SECURE { " Secure;" } else { "" }
+				),
+			),
+			(
+				header::SET_COOKIE,
+				format!(
+					"auth=; Domain={}; Path=/; SameSite=Strict; Max-Age=0; HttpOnly; {}",
+					host_full,
+					if *SECURE { " Secure;" } else { "" }
+				),
+			),
+			(header::LOCATION, format!("{referer}") ),
+		],
+	)
 }

@@ -4,18 +4,51 @@ use axum::{
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::utils::{DbError, LockedAtomic};
+use common::utils::{DbError, LockedAtomic, WEB_DIST};
 use headers::ContentType;
+use hyper::{header, StatusCode};
 use lazy_static::lazy_static;
 use log::{info, trace};
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
 	db::{chunk::Chunk, dbchunk::DBChunk, view::ChunkView, DB},
 	format::value_to_html,
 	socket::{ResourceMessage, ResourceSender},
 };
+
+pub async fn home_service(
+	// Extension(db): Extension<LockedAtomic<DB>>,
+	Extension(claims): Extension<UserClaims>,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+
+	fn get_src() -> Option<String> {
+		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
+	}
+
+	let src;
+	// If we're debugging, get home every time
+	if cfg!(debug_assertions) {
+		src = get_src();
+	} else {
+		lazy_static! {
+			static ref HOME: Option<String> = get_src();
+		}
+		src = HOME.to_owned();
+	}
+
+	src
+		.as_ref()
+		.map(|home| {
+			(
+				[(header::CONTENT_TYPE, "text/html")],
+				home
+					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+			)
+		})
+		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
 
 pub async fn chunks_get(
 	Extension(db): Extension<LockedAtomic<DB>>,

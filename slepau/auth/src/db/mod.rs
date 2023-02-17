@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use common::utils::{DbError, LockedAtomic, LockedWeak};
+use common::utils::{DbError, LockedAtomic, LockedWeak, hostname_normalize};
 
 use crate::user::User;
 
@@ -26,7 +26,7 @@ pub struct DBAuth {
 
 impl DBAuth {
 	pub fn host_to_site_id(&self, host: &str) -> (String, Option<SiteId>) {
-		let host = psl::domain_str(host).unwrap_or(host);
+		let host = hostname_normalize(host);
 		(
 			host.into(),
 			self

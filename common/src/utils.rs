@@ -6,6 +6,7 @@ use rand::prelude::*;
 use regex::Regex;
 use reqwest::Url;
 use serde::Serialize;
+use tower_governor::{governor::GovernorConfig, key_extractor::PeerIpKeyExtractor};
 
 pub type LockedAtomic<T> = Arc<RwLock<T>>;
 pub type LockedWeak<T> = Weak<RwLock<T>>;
@@ -160,4 +161,8 @@ pub fn log_env() {
 pub struct DataSlice<T> {
 	pub items: Vec<T>,
 	pub total: usize,
+}
+
+pub fn hostname_normalize<'a>(host: &'a str) -> &'a str {
+	psl::domain_str(host).unwrap_or(host)
 }

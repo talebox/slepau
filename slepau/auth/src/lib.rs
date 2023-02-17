@@ -30,13 +30,6 @@ impl From<&Claims> for UserClaims {
 		serde_json::from_str(claims.to_string().unwrap().as_str()).unwrap()
 	}
 }
-// impl From<&User> for UserClaims {
-// 	fn from(user: &User) -> Self {
-// 		let mut user_claims:UserClaims = serde_json::from_value(json!(user.claims)).unwrap();
-// 		user_claims.user = user.user.to_owned();
-// 		user_claims
-// 	}
-// }
 
 mod user;
 pub mod validate;

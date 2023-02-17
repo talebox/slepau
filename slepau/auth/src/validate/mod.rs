@@ -1,23 +1,24 @@
 use axum::{
 	extract::TypedHeader,
-	headers::{Cookie, Host},
+	headers::{Cookie, Host, self},
 	http::Request,
 	middleware::Next,
-	response::Response,
-	RequestPartsExt,
+	response::{IntoResponse, Response},
+	Extension, RequestPartsExt,
 };
-use common::utils::{K_PRIVATE, K_PUBLIC, K_SECRET};
+use common::utils::{hostname_normalize, K_PRIVATE, K_PUBLIC, K_SECRET, WEB_DIST};
 use core::convert::TryFrom;
-use hyper::StatusCode;
+use hyper::{header, StatusCode};
 use lazy_static::lazy_static;
 use pasetors::{
 	claims::ClaimsValidationRules,
 	keys::{AsymmetricKeyPair, AsymmetricPublicKey, AsymmetricSecretKey, SymmetricKey},
-	local, public,
-	token::{TrustedToken, UntrustedToken},
+	local,
+	token::UntrustedToken,
 	version4::V4,
-	Local, Public,
+	Local,
 };
+use std::path::PathBuf;
 
 lazy_static! {
 	pub static ref KPR: SymmetricKey::<V4> = private_key();
@@ -90,7 +91,7 @@ pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response,
 	let mut req = Request::from_parts(parts, body);
 
 	let host = host.hostname();
-	let host = psl::domain_str(host).unwrap_or_else(|| host);
+	let host = hostname_normalize(host);
 
 	if let Some(auth_cookie) = cookies
 		.ok()
@@ -119,4 +120,38 @@ pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response,
 	req.extensions_mut().insert(user_claims);
 
 	Ok(next.run(req).await)
+}
+
+pub async fn index_service_user(
+	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(claims): Extension<UserClaims>,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+	let host = hostname_normalize(host.hostname());
+
+	fn get_src() -> Option<String> {
+		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("index.html")).ok()
+	}
+
+	let src;
+	// If we're debugging, get home every time
+	if cfg!(debug_assertions) {
+		src = get_src();
+	} else {
+		lazy_static! {
+			static ref HOME: Option<String> = get_src();
+		}
+		src = HOME.to_owned();
+	}
+
+	src
+		.as_ref()
+		.map(|home| {
+			(
+				[(header::CONTENT_TYPE, "text/html")],
+				home
+					.replace("_HOST_", serde_json::to_string(host).unwrap().as_str())
+					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+			)
+		})
+		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }

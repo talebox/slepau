@@ -1,6 +1,7 @@
 WEB_DIST="web/dist/auth"
+DB_BACKUP_FOLDER=".tmp/auth_back"
+CACHE_PATH=".tmp/auth.cache.json"
+DB_PATH=".tmp/auth.db.json"
 
-DB_BACKUP_FOLDER="cache/auth_back"
-
-CACHE_PATH="cache/auth.cache.json"
-DB_PATH="cache/auth.db.json"
+SOCKET="0.0.0.0:4001"
+URL="http://localhost:4001"

@@ -3,33 +3,30 @@
 use build.nu *
 use start.nu test
 
-# export def deploy [] {
-# 	test
-# 	build
-# 	docker context use anty
-# 	do -i {docker stop chunk_s}
-# 	do -i {docker rm chunk_s}
-# 	docker build -t chunk ./container
-# 	docker volume create -d local chunk_data
-# 	docker volume create -d local chunk_backup
-# 	docker run -dp 4500:4000 -v chunk_data:/server/data -v chunk_backup:/server/backup --name chunk_s chunk
-# }
-
-export def deploy_auth [] {
-	test
-	build
-	
-	enter container
-		docker context use anty
-		do -i {docker stop auth_s}
-		do -i {docker rm auth_s}
-		docker build -t auth -f Auth.dockerfile .
-		docker volume create -d local auth_data
-		docker volume create -d local auth_backup
-		docker run -dp 4501:4000 -v auth_data:/server/data -v auth_backup:/server/backup --name auth_s auth
-	exit
-	
+# Creates a volume for keys at docker
+export def deploy_keys [] {
+	docker context use anty
+	docker volume create -d local talebox_keys
+	docker build -t keys -f keys.dockerfile .
+	docker run -v talebox_keys:/server/keys --name keys_s keys
 }
+
+export def deploy [name] {
+	docker context use anty
+	do -i {docker stop $"($name)_s"}
+	do -i {docker rm $"($name)_s"}
+	docker build -t $name $"./out/slepau/($name)" 
+	docker volume create -d local talebox_keys
+	docker volume create -d local $"($name)_data"
+	docker volume create -d local $"($name)_backup"
+	let ports = {
+		"auth": 4501,
+		"chunk": 4500,
+		"media": 4502,
+	}
+	docker run -dp $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" --name $"($name)_s" $name
+}
+
 export def deploy_talebox [] {
 	
 	# Build webapp
@@ -42,4 +39,19 @@ export def deploy_talebox [] {
 	exit
 	
 	scp web/dist/talebox/* anty.dev:/srv/http/talebox/
+}
+
+export def deploy_all [] {
+	# Deploy slepau first
+	test
+	build
+	
+	deploy_auth
+	deploy_chunk
+	deploy_talebox
+	deploy_media
+	
+	# ['auth', 'chunk', 'talebox', 'media'] | each {|a|
+	# }
+	
 }

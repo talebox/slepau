@@ -4,9 +4,8 @@ run pacman -Sy --noconfirm openssl
 
 workdir /server
 
-copy ./bin/auth ./
-copy ./web/auth ./web
-copy ./keys ./keys
+copy ./auth ./
+copy ./web ./web
 
 env CACHE_PATH=data/cache.json 
 env DB_PATH=data/db.json 

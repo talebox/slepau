@@ -1,6 +1,7 @@
 WEB_DIST="web/dist/chunk"
+DB_BACKUP_FOLDER=".tmp/chunk_back"
+CACHE_PATH=".tmp/chunk.cache.json"
+DB_PATH=".tmp/chunk.db.json"
 
-DB_BACKUP_FOLDER="cache/chunk_back"
-
-CACHE_PATH="cache/chunk.cache.json"
-DB_PATH="cache/chunk.db.json"
+SOCKET="0.0.0.0:4002"
+URL="http://localhost:4002"

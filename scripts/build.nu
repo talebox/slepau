@@ -3,7 +3,49 @@
 use env.nu *
 use stop.nu *
 
+export def clean [] {
+	enter out
+		rm -rf bin web
+		mkdir bin web
+	exit
+	
+	cargo clean
+	
+	enter web
+		rm -rf dist .parcel-cache
+	exit 
+}
+
+def separate_out [] {
+	
+	enter out
+		rm -rf slepau
+		
+		['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
+			echo $"Doing ($a)."
+			# Make slepau dir
+			mkdir $"slepau/($a)"
+			# Don't for ...
+			if $a not-in ["talebox"]  {
+				echo $"Bin/docker for ($a)."
+				# Copy bin
+				cp $"bin/($a)" $"slepau/($a)/"
+				# Copy dockerfile
+				cp $"../container/($a).dockerfile" $"slepau/($a)/dockerfile"
+			}
+			# Don't for ...
+			if $a not-in ["gen_key"]  {
+				echo $"Web for ($a)."
+				mkdir $"slepau/($a)/web"
+				# Copy web
+				cp -r $"web/($a)/*" $"slepau/($a)/web/"
+			}
+		}
+		
+	exit 
+}
 export def build [] {
+	
 	# Just to make sure everything has stopped
 	stop_force
 	
@@ -11,37 +53,36 @@ export def build [] {
 	load_env
 	open "config/prod.toml" | load-env
 	
-	enter container
+	enter out
 		# Create output dirs
-		rm -rf bin web # Not the keys, we need that 
-		mkdir bin keys web
+		rm -rf bin web
+		mkdir bin web
 	exit
 
 	# Build server
-	cargo build --release
-	cp target/release/auth container/bin/
-	cp target/release/gen_key container/bin/
-
+	['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
+	
+		if $a not-in ["talebox"]  {
+			cargo build --release --bin $a
+			cp $"target/release/($a)" out/bin/
+		}
+	}
+	
 	# Build webapp
 	enter web
 		# Remove cache/build dirs
-		rm -rf dist
-		# rm -rf .parcel-cache
+		rm -rf dist .parcel-cache
 		# Build optimized
 		yarn parcel build --public-url /web --no-source-maps
 	exit
 
 	# Copy webapp to output
-	cp -r web/dist/* container/web/
-	cp -r web/public/* container/web/
+	cp -r web/dist/* out/web/
 	
-	# Gen key if nonexistent
-	enter container
-		./bin/gen_key
-	exit
+	separate_out
 }
 
-# Makes standalone
+# Makes standalone (TESTING)
 export def standalone [] {
 	build
 	
@@ -51,7 +92,7 @@ export def standalone [] {
 	rm -rf $out
 	mkdir $out
 	
-	cp container/bin/gen_key $"($out)/"
+	cp out/bin/gen_key $"($out)/"
 	cp readme_standalone.md $"($out)/readme.md"
 	
 	enter $out
@@ -62,8 +103,8 @@ export def standalone [] {
 	# Copy files
 	['auth'] | each {|a|
 		mkdir $"($out)/($a)"
-		cp $"container/bin/($a)" $"($out)/($a)/"
-		cp -r $"container/web/($a)" $"($out)/($a)/web"
+		cp $"out/bin/($a)" $"($out)/($a)/"
+		cp -r $"out/web/($a)" $"($out)/($a)/web"
 		
 		enter $"($out)/($a)"
 			ln -s ../keys keys
@@ -72,10 +113,10 @@ export def standalone [] {
 	
 	tar -cavf $"($out).tar.xz" $out
 	
-	# ls container | get name | where {|n| $n !~ gitignore and $n !~ Dockerfile} | each {|v| cp $v standalone/}
+	# ls out | get name | where {|n| $n !~ gitignore and $n !~ Dockerfile} | each {|v| cp $v standalone/}
 }
 
-# Makes standalone
+# Makes standalone for windows (TESTING)
 export def standalone_windows [] {
 	let out = "talebox_x86_64"
 	

@@ -32,6 +32,12 @@ export def run_chunk [] {
 	
 	cargo run --bin chunk
 }
+export def run_media [] {
+	setup_dev
+	open "config/media/dev.toml" | load-env
+	
+	cargo run --bin media
+}
 export def run_gen_key [] {
 	setup_dev
 	

@@ -1,5 +1,5 @@
 use auth::{
-	validate::{KP, KPR},
+	validate::{index_service_user, KP, KPR},
 	UserClaims,
 };
 use axum::{
@@ -34,15 +34,13 @@ use std::{
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::timeout::TimeoutLayer;
+use tower_http::{timeout::TimeoutLayer, cors::CorsLayer};
 
 mod db;
 mod ends;
 mod user;
 
 use ends::home_service;
-
-use crate::ends::index_service_auth;
 
 #[tokio::main]
 async fn main() {
@@ -95,7 +93,7 @@ async fn main() {
 	);
 
 	// Build router
-	let app = Router::new()
+	let mut app = Router::new()
 		// Admin Actions V
 		.merge(
 			Router::new()
@@ -137,19 +135,14 @@ async fn main() {
 				.route("/logout", get(crate::ends::logout)), // .layer(security_limit(1, 1)),
 		)
 		.fallback(home_service)
-		.nest_service("/app", get(index_service_auth))
-		.layer(axum::middleware::from_fn(auth::validate::authenticate))
+		.nest_service("/app", get(index_service_user))
 		.nest(
 			"/login",
 			Router::new()
-				.route(
-					"/",
-					post(crate::ends::login)
-						// .layer(security_limit(1, 5))
-						.fallback_service(index_service(WEB_DIST.as_str(), Some("login.html"))),
-				)
-				.fallback_service(index_service(WEB_DIST.as_str(), Some("login.html"))),
+				.route("/", post(crate::ends::login).fallback(ends::login_service))
+				.fallback(ends::login_service),
 		)
+		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.layer(
 			ServiceBuilder::new()
 				// this middleware goes above `GovernorLayer` because it will receive
@@ -170,6 +163,10 @@ async fn main() {
 				.layer(Extension(cache.clone()))
 				.layer(Extension(shutdown_rx.clone())), // .layer(Extension(resource_tx.clone())),
 		);
+	// If we're local, then allow cors
+	if URL.domain().and_then(|v| Some(v == "localhost")) == Some(true) {
+		app = app.layer(CorsLayer::permissive());
+	}
 
 	// Backup service
 	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));

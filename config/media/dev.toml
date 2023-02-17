@@ -1,0 +1,7 @@
+WEB_DIST="web/dist/media"
+DB_BACKUP_FOLDER=".tmp/media_back"
+CACHE_PATH=".tmp/media.cache.json"
+DB_PATH=".tmp/media.db.json"
+
+SOCKET="0.0.0.0:4003"
+URL="http://localhost:4003"

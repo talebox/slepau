@@ -19,8 +19,13 @@ Where all environment variables are set for running slepau on development/produc
 
 It also holds project regex. So they can be shared between rust and javascript.
 
-## Scripts
+## Scripts 
 
 Nushell scripts to automate run/stop/deploy actions.
 
-## 
+## Tmp 
+
+Slepau temporary savefiles/cache when running locally for debugging/testing.
+
+## Out
+

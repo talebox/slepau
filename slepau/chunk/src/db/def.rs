@@ -1,10 +1,10 @@
-use common::utils::{diff_calc, DbError, LockedAtomic};
+use common::utils::{diff_calc, DbError, LockedAtomic, LockedWeak};
 /**
  * A DB without a reference (normalized title) implementation and actual dynamic memory pointers instead of repetitive lookups.
  * Should be orders of magnitud simpler and faster.
  */
 use log::error;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
 	collections::HashSet,
@@ -12,10 +12,20 @@ use std::{
 };
 
 use super::{
+	chunk::{Chunk, ChunkId},
 	dbchunk::DBChunk,
 	user_access::{Access, UserAccess},
-	DBData, GraphView, DB,
+	DBMap, GraphView, DB,
 };
+
+/**
+ * DB data that will acutally get stored on disk
+ */
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct DBData {
+	pub chunks: Vec<Chunk>,
+}
 
 // impl From<DBData> for DB {
 // 	fn from(value: DBData) -> Self {
@@ -139,8 +149,8 @@ impl DB {
 	}
 
 	///  Gets a chunk by id
-	pub fn get_chunk(&self, id: &str, user: &str) -> Option<LockedAtomic<DBChunk>> {
-		self.chunks.get(id).and_then(|chunk_ref| {
+	pub fn get_chunk(&self, id: ChunkId, user: &str) -> Option<LockedAtomic<DBChunk>> {
+		self.chunks.get(&id).and_then(|chunk_ref| {
 			let chunk = chunk_ref.write().unwrap();
 			if chunk.has_access(&user.into()) || chunk.is_public() {
 				Some(chunk_ref.clone())
@@ -152,7 +162,7 @@ impl DB {
 
 	/// Deletes a chunk by id, returns list of users for which access changed
 
-	pub fn del_chunk(&mut self, ids: HashSet<String>, user: &str) -> Result<HashSet<String>, DbError> {
+	pub fn del_chunk(&mut self, ids: HashSet<ChunkId>, user: &str) -> Result<HashSet<String>, DbError> {
 		// public assertion
 		if user == "public" {
 			error!("Public tried to delete {:?}", &ids);
@@ -160,7 +170,7 @@ impl DB {
 		}
 
 		let mut changed = HashSet::<String>::default();
-		let mut to_remove = HashSet::<String>::default();
+		let mut to_remove = HashSet::<ChunkId>::default();
 
 		for id in ids {
 			// Temporary variables for update
@@ -173,7 +183,7 @@ impl DB {
 				} else if chunk.has_access(&user.into()) {
 					// Have to think about this a bit more, specially when concerning groups
 					// If a user has read access and he/she is part of a group there has to be a way for them to exit out...
-					let mut chunk = DBChunk::from((id.as_str(), chunk.chunk().value.as_str(), chunk.chunk().owner.as_str()));
+					let mut chunk = DBChunk::from((id, chunk.chunk().value.as_str(), chunk.chunk().owner.as_str()));
 					let mut access = chunk
 						.get_prop::<HashSet<UserAccess>>("access")
 						.expect("If user has read access, access has to be valid here");
@@ -261,14 +271,14 @@ impl DB {
 		user: &str,
 	) -> Result<(HashSet<String>, Vec<String>, LockedAtomic<DBChunk>), DbError> {
 		if let Some(last_value) = self
-			.get_chunk(&chunk.chunk().id, user)
+			.get_chunk(chunk.chunk().id, user)
 			.map(|v| v.read().unwrap().chunk().value.to_owned())
 		{
 			let value = chunk.chunk().value.clone();
 			let id = chunk.chunk().id.clone();
 			let users_to_notify = self.set_chunk(chunk, user)?;
 			let diff = diff_calc(&last_value, &value);
-			let db_chunk = self.get_chunk(&id, user).unwrap();
+			let db_chunk = self.get_chunk(id, user).unwrap();
 			return Ok((users_to_notify, diff, db_chunk));
 		}
 		Err(DbError::NotFound)
@@ -307,7 +317,7 @@ impl DB {
 			let mut chunk_lock = chunk.try_write().unwrap();
 			if !chunk_lock.linked {
 				// Link parents by matching ids to existing chunks
-				if let Some(parent_ids) = chunk_lock.get_prop::<Vec<String>>("parents") {
+				if let Some(parent_ids) = chunk_lock.get_prop::<Vec<ChunkId>>("parents") {
 					if parent_ids.contains(&chunk_lock.chunk().id) {
 						// error!("Circular reference detected!; Links to itself");
 						return Err(DbError::InvalidChunk("Links to itself not allowed!"));
@@ -356,13 +366,32 @@ impl DB {
  */
 impl From<DBData> for DB {
 	fn from(data: DBData) -> Self {
-		let mut db = Self {
-			chunks: data
-				.chunks
-				.into_iter()
-				.map(|c| (c.id.clone(), Arc::new(RwLock::new(DBChunk::from(c)))))
-				.collect(),
-		};
+		let mut by_owner: DBMap<String, Vec<LockedWeak<DBChunk>>> = Default::default();
+		let chunks: DBMap<ChunkId, LockedAtomic<DBChunk>> = data
+			.chunks
+			.into_iter()
+			.map(|c| {
+				let c = DBChunk::from(c);
+				let users = c.access_users();
+				let id = c.chunk().id.clone();
+				let arc = Arc::new(RwLock::new(c));
+				let weak = Arc::downgrade(&arc);
+				users.iter().for_each(|u| {
+					by_owner
+						.entry(u.to_owned())
+						.and_modify(|v| {
+							if !v.iter().any(|v| v.ptr_eq(&weak)) {
+								v.push(weak.clone());
+							};
+						})
+						.or_insert_with(|| vec![weak.clone()]);
+				});
+
+				(id, arc)
+			})
+			.collect();
+
+		let mut db = Self { chunks, by_owner };
 		db.link_all().unwrap();
 		db
 	}

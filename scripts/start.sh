@@ -6,7 +6,8 @@ cd web
 	# rm -rf .parcel-cache dist
 	nohup yarn parcel watch --public-url /web --log-level warn &>start.log &
 cd ..
-nohup cargo watch -w src -qN -x r &>start.log &
+
+nohup cargo watch -w slepau -q -- cargo run --bin auth run &>./.tmp/auth.start.log &
 
 echo "Started cargo & parcel in background"
 

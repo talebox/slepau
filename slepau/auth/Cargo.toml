@@ -1,5 +1,6 @@
 [package]
 name = "auth"
+license = "MIT"
 version.workspace = true
 edition.workspace = true
 

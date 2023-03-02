@@ -8,16 +8,15 @@
 			"type": "lldb",
 			"request": "launch",
 			"name": "Debug executable 'chunk-app'",
-			"cargo": {
-				"args": [
-					"build",
-					"--bin=chunk-app",
-					"--package=chunk-app"
-				],
-				"filter": {
-					"name": "chunk-app",
-					"kind": "bin"
-				}
+			"program": "target/debug/media",
+			"env": {
+				"WEB_DIST": "web/dist/media",
+				"DB_BACKUP_FOLDER": ".tmp/media_back",
+				"CACHE_PATH": ".tmp/media.cache.json",
+				"MEDIA_FOLDER": ".tmp/media",
+				"DB_PATH": ".tmp/media.db.json",
+				"SOCKET": "0.0.0.0:4003",
+				"URL": "http://localhost:4003",
 			},
 			"args": [],
 			"cwd": "${workspaceFolder}"

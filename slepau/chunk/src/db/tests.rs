@@ -31,37 +31,25 @@ fn sharing() {
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 
 	assert_eq!(
-		db.set_chunk(
-			(id_notes.as_str(), "# Notes\nHello :)\nshare: poca w, nina a").into(),
-			"poca"
-		),
+		db.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(), "poca"),
 		Ok(HashSet::default())
 	);
 	assert!(db
-		.set_chunk((id_notes.as_str(), "# Notes\nshare: poca w, nina r").into(), "poca")
+		.set_chunk((id_notes, "# Notes\nshare: poca w, nina r").into(), "poca")
 		.is_err());
 	// let c_notes: DBChunk = "# Notes\nHello :)\nshare: poca w, nina a".into();
 	// println!("{:?}", c_notes.props());
 	assert!(db
-		.set_chunk(
-			(id_notes.as_str(), "# Notes\nHello :)\nshare: poca w, nina a").into(),
-			"nina"
-		)
+		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(), "nina")
 		.is_ok());
 	assert!(db
-		.set_chunk((id_notes.as_str(), "# Notes\nHello :)\nshare: nina a").into(), "nina")
+		.set_chunk((id_notes, "# Notes\nHello :)\nshare: nina a").into(), "nina")
 		.is_ok());
 	assert!(db
-		.set_chunk(
-			(id_notes.as_str(), "# Notes\nHello :)\nshare: poca rnina a").into(),
-			"nina"
-		)
+		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca rnina a").into(), "nina")
 		.is_err()); // Errors out because nina would be deleting her own admin access
 	assert!(db
-		.set_chunk(
-			(id_notes.as_str(), "# Notes\nHello :)\nshare: poca r,nina a").into(),
-			"nina"
-		)
+		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca r,nina a").into(), "nina")
 		.is_ok());
 	assert!(db.del_chunk(HashSet::from([id_notes]), "nina").is_ok()); // Nina can delete as well
 }
@@ -131,6 +119,7 @@ fn visibility() {
 	let c_notes: DBChunk = format!("# Notes 3 -> {id_notes2}\nshare: public a, john a")
 		.as_str()
 		.into();
+
 	let id_notes3 = c_notes.chunk().id.clone();
 	assert!(db.set_chunk(c_notes, "nina").is_ok());
 
@@ -181,13 +170,13 @@ fn created_modified() {
 	let id_notes = c_notes.chunk().id.clone();
 	db.set_chunk(c_notes, "john").unwrap();
 
-	let mut c_notes: Chunk = (id_notes.as_str(), "# Notes\n").into();
+	let mut c_notes: Chunk = (id_notes, "# Notes\n").into();
 	c_notes.created += 10;
 	c_notes.modified += 10;
 	let mod_notes = c_notes.modified;
 	db.set_chunk(c_notes.into(), "john").unwrap();
 
-	let notes = db.get_chunk(&id_notes, "john").unwrap();
+	let notes = db.get_chunk(id_notes, "john").unwrap();
 	{
 		let chunk_notes = notes.read().unwrap();
 		assert_eq!(chunk_notes.chunk().created, cre_notes);
@@ -220,7 +209,7 @@ fn dynamic_modified() {
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
 	assert_eq!(
-		db.get_chunk(&id_notes, "john")
+		db.get_chunk(id_notes, "john")
 			.unwrap()
 			.write()
 			.unwrap()
@@ -241,7 +230,7 @@ fn well() {
 		"users_to_notify should be 1 'john'"
 	);
 
-	let c_note1 = DBChunk::from(format!("# Note 1 -> {}\n", &id_notes).as_str());
+	let c_note1 = DBChunk::from(format!("# Note 1 -> {id_notes}\n").as_str());
 	let _id_note1 = c_note1.chunk().id.clone();
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
@@ -260,7 +249,7 @@ fn well() {
 	);
 
 	let subtree = db.subtree(
-		db.get_chunk(id_notes.as_str(), "john").as_ref(),
+		db.get_chunk(id_notes, "john").as_ref(),
 		&"john".into(),
 		&|v| v,
 		&|v| json!(ChunkId::from(v)),
@@ -282,27 +271,27 @@ fn circular() {
 	// Add '# Notes\n' john
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 
-	let c_note1 = DBChunk::from(format!("# Note 1 -> {}\n", &id_notes).as_str());
+	let c_note1 = DBChunk::from(format!("# Note 1 -> {id_notes}\n").as_str());
 	let id_note1 = c_note1.chunk().id.clone();
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
 	assert!(
-		db.set_chunk((&*id_notes, &*format!("# Notes -> {}\n", &id_notes)).into(), "john")
+		db.set_chunk((id_notes, &*format!("# Notes -> {}\n", &id_notes)).into(), "john")
 			.is_err(),
 		"Chunk links to itself, A -> A, it should fail."
 	);
 	assert!(
-		db.set_chunk((&*id_notes, &*format!("# Notes -> {}\n", &id_note1)).into(), "john")
+		db.set_chunk((id_notes, &*format!("# Notes -> {}\n", &id_note1)).into(), "john")
 			.is_err(),
 		"Chunk links circurlarly, A -> B -> A, it should fail."
 	);
 
-	let c_note2 = DBChunk::from(format!("# Note 2 -> {}\n", &id_note1).as_str());
+	let c_note2 = DBChunk::from(format!("# Note 2 -> {id_note1}\n").as_str());
 	let id_note2 = c_note2.chunk().id.clone();
 	assert!(db.set_chunk(c_note2, "john").is_ok());
 
 	assert!(
-		db.set_chunk((&*id_notes, &*format!("# Notes -> {}\n", &id_note2)).into(), "sara")
+		db.set_chunk((id_notes, format!("# Notes -> {id_note2}\n").as_str()).into(), "sara")
 			.is_err(),
 		"Chunk links circurlarly, A -> C -> B -> A, it should fail."
 	);

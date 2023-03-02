@@ -245,14 +245,14 @@ pub async fn logout(
 					if *SECURE { " Secure;" } else { "" }
 				),
 			),
-			(
-				header::SET_COOKIE,
-				format!(
-					"auth=; Domain={}; Path=/; SameSite=Strict; Max-Age=0; HttpOnly; {}",
-					host_full,
-					if *SECURE { " Secure;" } else { "" }
-				),
-			),
+			// (
+			// 	header::SET_COOKIE,
+			// 	format!(
+			// 		"auth=; Domain={}; Path=/; SameSite=Strict; Max-Age=0; HttpOnly; {}",
+			// 		host_full,
+			// 		if *SECURE { " Secure;" } else { "" }
+			// 	),
+			// ),
 			(header::LOCATION, format!("{referer}") ),
 		],
 	)

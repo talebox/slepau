@@ -27,18 +27,20 @@ export def deploy [name] {
 	docker run -dp $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" --name $"($name)_s" $name
 }
 
-export def deploy_talebox [] {
-	
+export def deploy_static [name] {
+	# Building was disabled cause build command already correctly build static targets
+
 	# Build webapp
-	enter web
+	# enter web
 		# Remove cache/build dirs
-		rm -rf dist
+		# rm -rf dist/talebox
 		# rm -rf .parcel-cache
 		# Build optimized
-		yarn parcel build --no-source-maps --target talebox
-	exit
+		# yarn parcel build --no-source-maps --target $name
+	# exit
+	# scp $"web/dist/($name)/*" $"anty.dev:/srv/http/($name)/" 
 	
-	scp web/dist/talebox/* anty.dev:/srv/http/talebox/
+	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/" 
 }
 
 export def deploy_all [] {
@@ -46,12 +48,9 @@ export def deploy_all [] {
 	test
 	build
 	
-	deploy_auth
-	deploy_chunk
+	deploy auth
+	deploy chunk
+	deploy media
+	
 	deploy_talebox
-	deploy_media
-	
-	# ['auth', 'chunk', 'talebox', 'media'] | each {|a|
-	# }
-	
 }

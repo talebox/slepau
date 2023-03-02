@@ -40,7 +40,7 @@ def separate_out [] {
 				# Copy web
 				cp -r $"web/($a)/*" $"slepau/($a)/web/"
 			}
-		}
+		};
 		
 	exit 
 }
@@ -66,12 +66,12 @@ export def build [] {
 			cargo build --release --bin $a
 			cp $"target/release/($a)" out/bin/
 		}
-	}
+	};
 	
 	# Build webapp
 	enter web
 		# Remove cache/build dirs
-		rm -rf dist .parcel-cache
+		rm -rf dist #.parcel-cache
 		# Build optimized
 		yarn parcel build --public-url /web --no-source-maps
 	exit
@@ -109,7 +109,7 @@ export def standalone [] {
 		enter $"($out)/($a)"
 			ln -s ../keys keys
 		exit
-	}
+	};
 	
 	tar -cavf $"($out).tar.xz" $out
 	

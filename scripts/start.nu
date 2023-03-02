@@ -38,6 +38,12 @@ export def run_media [] {
 	
 	cargo run --bin media
 }
+export def build_media [] {
+	setup_dev
+	open "config/media/dev.toml" | load-env
+	
+	cargo build --bin media
+}
 export def run_gen_key [] {
 	setup_dev
 	

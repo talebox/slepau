@@ -27,6 +27,7 @@ use tokio::{
 use auth::UserClaims;
 
 use crate::db::{
+	chunk::ChunkId,
 	dbchunk::DBChunk,
 	view::{ChunkValue, ChunkVec, ChunkView, SortType, ViewType},
 	DB,
@@ -190,7 +191,7 @@ async fn handle_socket(
 	};
 
 	// [[parent,parent], [child,child]]
-	let get_subtree = |root: Option<&str>, view_type: ViewType| {
+	let get_subtree = |root: Option<ChunkId>, view_type: ViewType| {
 		let root = root.and_then(|id| db.try_read().unwrap().get_chunk(id, user));
 		let subtree = db.try_read().unwrap().subtree(
 			root.as_ref(),
@@ -245,13 +246,13 @@ async fn handle_socket(
 			let mut piece = res.pop_front();
 
 			if piece == Some("chunks") {
-				if let Some(id) = res.pop_front() {
+				if let Some(id) = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId.")) {
 					piece = res.pop_front();
 
 					if piece == Some("value") {
 						if let Some(value) = m.value {
 							// User wants to change a value
-							let db_chunk: DBChunk = (id, value.as_str()).into();
+							let db_chunk: DBChunk = (id.into(), value.as_str()).into();
 							match db.write().unwrap().update_chunk(db_chunk, user) {
 								Ok((users_to_notify, diff, db_chunk)) => {
 									let users = db_chunk.read().unwrap().access_users();
@@ -299,7 +300,7 @@ async fn handle_socket(
 				}
 			} else if piece == Some("views") {
 				piece = res.pop_front();
-				let root_id = res.pop_front();
+				let root_id = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId."));
 				if piece == Some("notes") {
 					return reply((&get_notes()).into());
 				} else if piece == Some("well") {

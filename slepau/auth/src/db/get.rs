@@ -14,7 +14,7 @@ use super::{
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum AnyFilter {
-	Proquint32(Proquint<u32>),
+	Id(Proquint<u32>),
 	String(String),
 }
 #[derive(Deserialize, Default)]
@@ -38,7 +38,7 @@ impl DBAuth {
 				.any
 				.as_ref()
 				.map(|filter| match filter {
-					AnyFilter::Proquint32(id) => true,
+					AnyFilter::Id(id) => true,
 					AnyFilter::String(name) => v.user.user.contains(name.as_str()),
 				})
 				.unwrap_or(true)
@@ -66,7 +66,7 @@ impl DBAuth {
 				.any
 				.as_ref()
 				.map(|filter| match filter {
-					AnyFilter::Proquint32(id) => s.id == *id,
+					AnyFilter::Id(id) => s.id == *id,
 					AnyFilter::String(name) => s.name.contains(name.as_str()),
 				})
 				.unwrap_or(true)
@@ -112,7 +112,7 @@ impl DBAuth {
 				.any
 				.as_ref()
 				.map(|filter| match filter {
-					AnyFilter::Proquint32(id) => true,
+					AnyFilter::Id(id) => true,
 					AnyFilter::String(name) => v.user.contains(name.as_str()),
 				})
 				.unwrap_or(true)

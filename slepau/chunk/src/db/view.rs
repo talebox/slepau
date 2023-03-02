@@ -1,12 +1,12 @@
 use std::sync::RwLockWriteGuard;
 
-use common::utils::LockedAtomic;
+use common::{utils::LockedAtomic};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::{
-	dbchunk::DBChunk,
-	user_access::{Access, UserAccess},
+	dbchunk::{DBChunk, self},
+	user_access::{Access, UserAccess}, chunk,
 };
 
 /**
@@ -16,7 +16,7 @@ use super::{
  */
 #[derive(Serialize, Debug, Default)]
 pub struct ChunkView {
-	pub id: String,
+	pub id: chunk::ChunkId,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub owner: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -156,7 +156,7 @@ impl From<(LockedAtomic<DBChunk>, &str)> for ChunkView {
  * It turns an Rc<DBChunk> to an Id String
  */
 #[derive(Serialize)]
-pub struct ChunkId(String);
+pub struct ChunkId(chunk::ChunkId);
 impl From<LockedAtomic<DBChunk>> for ChunkId {
 	fn from(rc: LockedAtomic<DBChunk>) -> Self {
 		Self::from(&rc)

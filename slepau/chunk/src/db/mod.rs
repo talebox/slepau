@@ -1,14 +1,12 @@
-use common::utils::LockedAtomic;
-use serde::{Deserialize, Serialize};
-use serde_json::{Value};
+use common::utils::{LockedAtomic, LockedWeak};
+use serde::Serialize;
+use serde_json::Value;
 /** Designing a new Data Structure that would allow for all queries/insertions/serializations to efficiently happen */
-use std::{
-	collections::{BTreeMap},
-};
+use std::collections::BTreeMap;
 
 pub type DBMap<K, V> = BTreeMap<K, V>;
 
-use self::chunk::Chunk;
+use self::chunk::ChunkId;
 
 /// Graphview allows for a tree structure to be represented
 /// - If there's a GraphView, there's a value
@@ -29,15 +27,8 @@ pub struct GraphView(
  */
 #[derive(Default)]
 pub struct DB {
-	chunks: DBMap<String, LockedAtomic<dbchunk::DBChunk>>,
-}
-/**
- * DB data that will acutally get stored on disk
- */
-#[derive(Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct DBData {
-	pub chunks: Vec<Chunk>,
+	chunks: DBMap<ChunkId, LockedAtomic<dbchunk::DBChunk>>,
+	by_owner: DBMap<String, Vec<LockedWeak<dbchunk::DBChunk>>>,
 }
 
 pub mod chunk;

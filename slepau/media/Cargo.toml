@@ -1,5 +1,6 @@
 [package]
 name = "media"
+license = "MIT"
 version.workspace = true
 edition.workspace = true
 
@@ -9,6 +10,7 @@ edition.workspace = true
 auth = { path = "../auth" }
 common.workspace = true
 axum.workspace = true
+axum-macros.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -22,4 +24,6 @@ tower_governor.workspace = true
 lazy_static.workspace = true
 infer = "0.12.0"
 tokio-util = {version = "0.7.4", features = ["io"]}
-image = {version= "0.24.5", features = ["avif"]}
+image = {version= "0.24.5", features = ["avif", "webp-encoder"]}
+num_cpus = "1.15.0"
+

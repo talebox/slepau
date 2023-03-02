@@ -4,7 +4,7 @@ use axum::{
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::utils::{DbError, LockedAtomic, WEB_DIST};
+use common::{utils::{DbError, LockedAtomic, WEB_DIST}, proquint::Proquint};
 use headers::ContentType;
 use hyper::{header, StatusCode};
 use lazy_static::lazy_static;
@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-	db::{chunk::Chunk, dbchunk::DBChunk, view::ChunkView, DB},
+	db::{chunk::{Chunk, ChunkId}, dbchunk::DBChunk, view::ChunkView, DB},
 	format::value_to_html,
 	socket::{ResourceMessage, ResourceSender},
 };
@@ -70,18 +70,18 @@ pub async fn chunks_get(
 	Ok(Json(chunks))
 }
 pub async fn chunks_get_id(
-	Path(id): Path<String>,
+	Path(id): Path<ChunkId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
-	if let Some(chunk) = db.read().unwrap().get_chunk(&id, &user_claims.user) {
+	if let Some(chunk) = db.read().unwrap().get_chunk(id, &user_claims.user) {
 		Ok(Json(chunk.read().unwrap().chunk().clone()))
 	} else {
 		Err(DbError::NotFound)
 	}
 }
 pub async fn page_get_id(
-	Path(id): Path<String>,
+	Path(id): Path<ChunkId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
@@ -89,7 +89,7 @@ pub async fn page_get_id(
 		static ref PAGE: String =
 			std::fs::read_to_string(std::env::var("WEB_DIST").unwrap_or_else(|_| "web".into()) + "/page.html").unwrap();
 	};
-	if let Some(chunk) = db.read().unwrap().get_chunk(&id, &user_claims.user) {
+	if let Some(chunk) = db.read().unwrap().get_chunk(id, &user_claims.user) {
 		let mut title: String = "Page".into();
 		let mut html: String = "HTML".into();
 		{
@@ -110,7 +110,7 @@ pub async fn page_get_id(
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ChunkIn {
-	id: Option<String>,
+	id: Option<ChunkId>,
 	value: String,
 }
 
@@ -120,7 +120,7 @@ pub async fn chunks_put(
 	Extension(tx_r): Extension<ResourceSender>,
 	Json(body): Json<ChunkIn>,
 ) -> Result<impl IntoResponse, DbError> {
-	let db_chunk = DBChunk::from((body.id.as_deref(), body.value.as_str(), user_claims.user.as_str()));
+	let db_chunk = DBChunk::from((body.id, body.value.as_str(), user_claims.user.as_str()));
 	let users = db_chunk.access_users();
 	let users_to_notify = db.write().unwrap().set_chunk(db_chunk, &user_claims.user)?;
 
@@ -136,7 +136,7 @@ pub async fn chunks_put(
 	// since we will have told them that they have to update their view up there ^
 	if let Some(id) = body.id {
 		let chunk = ChunkView::from((
-			db.read().unwrap().get_chunk(&id, &user_claims.user).unwrap(),
+			db.read().unwrap().get_chunk(id, &user_claims.user).unwrap(),
 			user_claims.user.as_str(),
 		));
 
@@ -156,7 +156,7 @@ pub async fn chunks_del(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 	Extension(tx_r): Extension<ResourceSender>,
-	Json(input): Json<HashSet<String>>,
+	Json(input): Json<HashSet<ChunkId>>,
 ) -> Result<impl IntoResponse, DbError> {
 	let users_to_notify = db.write().unwrap().del_chunk(input, &user_claims.user)?;
 

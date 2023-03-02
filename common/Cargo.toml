@@ -1,5 +1,7 @@
 [package]
 name = "common"
+description = "Code "
+license = "MIT"
 version.workspace = true
 edition.workspace = true
 

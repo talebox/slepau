@@ -3,7 +3,7 @@ use log::info;
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
 use std::{
-	collections::{hash_map::DefaultHasher, HashMap},
+	collections::{hash_map::DefaultHasher, HashMap, HashSet},
 	hash::{Hash, Hasher},
 	io::{BufWriter, Cursor},
 	sync::{Arc, RwLock},
@@ -36,24 +36,31 @@ use crate::db::CONVERSION_VERSION;
 use super::{Media, MediaId, DB};
 
 impl DB {
-	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
+	pub fn get(&self, id: MediaId) -> Option<Media> {
 		self.media.get(&id).map(|v| v.to_owned())
 	}
-	pub fn add(&mut self, value: Media, owner: String) -> LockedAtomic<Media> {
+	pub fn add(&mut self, value: Media, owner: String) -> Media {
 		let id = value.id;
 		let v = LockedAtomic::new(RwLock::new(value));
 
 		self.media.entry(id).or_insert_with(|| v.clone());
 		let weak = Arc::downgrade(&v);
+		// self
+		// 	.by_owner
+		// 	.entry(owner)
+		// 	.and_modify(|v| {
+		// 		if !v.iter().any(|v| v.ptr_eq(&weak)) {
+		// 			v.push(weak.clone());
+		// 		};
+		// 	})
+		// 	.or_insert_with(|| vec![weak.clone()]);
 		self
 			.by_owner
 			.entry(owner)
 			.and_modify(|v| {
-				if !v.iter().any(|v| v.ptr_eq(&weak)) {
-					v.push(weak.clone());
-				};
+				v.insert(id);
 			})
-			.or_insert_with(|| vec![weak.clone()]);
+			.or_insert([id].into());
 
 		self.conversion_queue.push_back(id);
 		v
@@ -231,7 +238,7 @@ pub async fn conversion_service(db: LockedAtomic<DB>, mut shutdown_rx: watch::Re
 #[serde(default)]
 pub struct DBData {
 	media: Vec<Media>,
-	by_owner: HashMap<String, Vec<MediaId>>,
+	by_owner: HashMap<String, HashSet<MediaId>>,
 }
 
 /**
@@ -249,23 +256,24 @@ impl From<DBData> for DB {
 			})
 			.collect();
 
-		let by_owner: HashMap<String, Vec<LockedWeak<Media>>> = data
-			.by_owner
-			.into_iter()
-			.map(|(owner, ids)| {
-				(
-					owner,
-					ids
-						.into_iter()
-						.filter_map(|id| media.get(&id).map(|m| Arc::downgrade(m)))
-						.collect(),
-				)
-			})
-			.collect();
+		// let by_owner: HashMap<String, Vec<LockedWeak<Media>>> = data
+		// 	.by_owner
+		// 	.into_iter()
+		// 	.map(|(owner, ids)| {
+		// 		(
+		// 			owner,
+		// 			ids
+		// 				.into_iter()
+		// 				.filter_map(|id| media.get(&id).map(|m| Arc::downgrade(m)))
+		// 				.collect(),
+		// 		)
+		// 	})
+		// 	.collect();
+		// let by_owner = data.by_owner.into_iter().map(|(k,v)| (k,HashSet::from_iter(v))).collect();
 
 		let mut db = Self {
 			media,
-			by_owner,
+			by_owner:data.by_owner,
 			..Default::default()
 		};
 		db
@@ -278,19 +286,20 @@ impl From<&DB> for DBData {
 	fn from(db: &DB) -> Self {
 		Self {
 			media: db.media.values().map(|v| v.read().unwrap().clone()).collect(),
-			by_owner: db
-				.by_owner
-				.iter()
-				.map(|v| {
-					(
-						v.0.to_owned(),
-						v.1
-							.iter()
-							.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id))
-							.collect(),
-					)
-				})
-				.collect(),
+			// by_owner: db
+			// 	.by_owner
+			// 	.iter()
+			// 	.map(|v| {
+			// 		(
+			// 			v.0.to_owned(),
+			// 			v.1
+			// 				.iter()
+			// 				.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id))
+			// 				.collect(),
+			// 		)
+			// 	})
+			// 	.collect(),
+			by_owner: db.by_owner.clone()
 		}
 	}
 }

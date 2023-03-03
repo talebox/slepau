@@ -1,4 +1,6 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::fmt::Display;
+use std::hash::Hash;
 
 use common::{
 	proquint::Proquint,
@@ -6,6 +8,7 @@ use common::{
 };
 use media::MatcherType;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub mod def;
 
@@ -17,53 +20,83 @@ pub type MediaId = Proquint<u64>;
 pub struct Media {
 	pub id: MediaId,
 	pub name: String,
-	pub size: usize,
-	#[serde(with = "MatcherType", rename = "type")]
-	pub _type: infer::MatcherType,
-	pub conversion: ConversionInfo,
+	pub meta: FileMeta,
+	pub versions: HashMap<Version, Option<VersionInfo>>,
 }
-static CONVERSION_VERSION:usize = 1;
+static CONVERSION_VERSION: usize = 1;
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
-pub struct ConversionInfo {
+pub struct VersionInfo {
 	/// How long (in ms)
 	time: f32,
 	/// How much smaller (in percent)
-	size_reduction: f32,
-	format: String,
+	meta: FileMeta,
+	count: usize,
+	/// To redo the conversion if version changed.
 	version: usize,
+}
+#[derive(Default, Serialize, Deserialize, Clone, Debug)]
+struct FileMeta {
+	hash: Proquint<u64>,
+	size: usize,
+	/// Mime type
+	_type: String,
+}
+#[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+struct Version(BTreeMap<String, Value>);
+impl From<&str> for Version {
+	fn from(value: &str) -> Self {
+		let v = BTreeMap::<_,_>::from_iter(value.split("&").map(|v| {
+			let a = v.split("=").collect::<Vec<_>>();
+			if a.len()!=2{panic!("Not valid key=value in Version parsing.");}
+			(a[0].into(), serde_json::from_str(a[1]).unwrap())
+		}));
+		
+		Self(v)
+	}
+}
+impl Display for Version {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(
+			self
+				.0
+				.iter()
+				.map(|(k, v)| format!("{k}={v}"))
+				.collect::<Vec<_>>()
+				.join("&")
+				.as_str(),
+		)
+	}
+}
+impl Hash for Version {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.to_string().hash(state);
+	}
+}
+#[derive(Default, Serialize, Deserialize, Clone, Debug)]
+struct Task {
+	priority: usize,
+	id: MediaId,
+	version: Version,
 }
 
 #[derive(Default, Debug)]
-pub struct DB {
-	conversion_queue: VecDeque<MediaId>,
-	conversion_current: Vec<MediaId>,
+struct DB {
+	media: HashMap<MediaId, Media>,
+	by_owner: HashMap<String, HashSet<MediaId>>,
 
-	// ------------------
-	/// Media metadata, holds all metadata about all files.
-	///
-	/// This is always kept in memory, cause it's small.
-	media: HashMap<MediaId, LockedAtomic<Media>>,
-
-	// /// Owner is saved in DB separately, in case multiple owners upload the same media. They will both get to see it.
-	by_owner: HashMap<String, Vec<LockedWeak<Media>>>,
-	// /// Transcode/Conversion map. An optimization.
-	// ///
-	// /// This holds the incoming hash -> hash it was converted to.
-	// /// So we don't have to do the work of converting/transcoding again.
-	// t_map: HashMap<MediaId, LockedWeak<Media>>,
+	task_queue: VecDeque<Task>,
 }
 
 #[derive(Serialize)]
 pub struct DBStats {
-	conversion_queue: usize,
-	conversion_current: usize,
+	task_queue: usize,
+	// conversion_current: usize,
 	media: usize,
 }
 impl From<&DB> for DBStats {
 	fn from(db: &DB) -> Self {
 		Self {
-			conversion_queue: db.conversion_queue.len(),
-			conversion_current: db.conversion_current.len(),
+			task_queue: db.task_queue.len(),
 			media: db.media.len(),
 		}
 	}

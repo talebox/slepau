@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use common::utils::{DbError, LockedAtomic, LockedWeak, hostname_normalize};
+use common::utils::{hostname_normalize, DbError, LockedAtomic, LockedWeak};
 
 use crate::user::User;
 

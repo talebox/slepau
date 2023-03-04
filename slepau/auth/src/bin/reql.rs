@@ -14,7 +14,7 @@ async fn main() -> reql::Result<()> {
 	let query = r.db("movies").table("meta").limit(10);
 
 	run(query.clone(), &conn).await?;
-	
+
 	// r.expr(r.args(([1,2], func!(|v| v.sum()))));
 
 	Ok(())
@@ -27,7 +27,7 @@ fn print_json(json: Value) {
 
 async fn run(c: Command, conn: &Session) -> reql::Result<()> {
 	let mut stream = c.run(conn);
-	while let Some(v) = stream.try_next().await? as Option<Value>{
+	while let Some(v) = stream.try_next().await? as Option<Value> {
 		print_json(v)
 	}
 

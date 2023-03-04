@@ -1,12 +1,13 @@
 use std::sync::RwLockWriteGuard;
 
-use common::{utils::LockedAtomic};
+use common::utils::LockedAtomic;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use super::{
-	dbchunk::{DBChunk, self},
-	user_access::{Access, UserAccess}, chunk,
+	chunk,
+	dbchunk::{self, DBChunk},
+	user_access::{Access, UserAccess},
 };
 
 /**

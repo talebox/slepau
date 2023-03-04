@@ -47,7 +47,12 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 }
 pub fn save<T: Serialize>(db: &T) {
 	if let Some(db_path) = DB_PATH.clone() {
+		#[cfg(debug_assertions)]
+		let data = serde_json::to_string_pretty(db).unwrap();
+
+		#[cfg(not(debug_assertions))]
 		let data = serde_json::to_string(db).unwrap();
+
 		match fs::write(&db_path, &data) {
 			Ok(()) => info!("Saved on {}", db_path),
 			Err(e) => {

@@ -86,7 +86,7 @@ pub async fn main() {
 				.layer(Extension(db.clone())),
 		);
 
-	let conversion_service = tokio::spawn(db::def::conversion_service(
+	let conversion_service = tokio::spawn(db::task::conversion_service(
 		db.clone(),
 		shutdown_rx.clone(),
 		media_tx,

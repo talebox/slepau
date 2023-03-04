@@ -1,6 +1,6 @@
 use axum::{
 	extract::TypedHeader,
-	headers::{Cookie, Host, self},
+	headers::{self, Cookie, Host},
 	http::Request,
 	middleware::Next,
 	response::{IntoResponse, Response},

@@ -4,7 +4,10 @@ use axum::{
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::{utils::{DbError, LockedAtomic, WEB_DIST}, proquint::Proquint};
+use common::{
+	proquint::Proquint,
+	utils::{DbError, LockedAtomic, WEB_DIST},
+};
 use headers::ContentType;
 use hyper::{header, StatusCode};
 use lazy_static::lazy_static;
@@ -13,7 +16,12 @@ use serde::Deserialize;
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-	db::{chunk::{Chunk, ChunkId}, dbchunk::DBChunk, view::ChunkView, DB},
+	db::{
+		chunk::{Chunk, ChunkId},
+		dbchunk::DBChunk,
+		view::ChunkView,
+		DB,
+	},
 	format::value_to_html,
 	socket::{ResourceMessage, ResourceSender},
 };
@@ -22,7 +30,6 @@ pub async fn home_service(
 	// Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-
 	fn get_src() -> Option<String> {
 		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
 	}
@@ -43,8 +50,7 @@ pub async fn home_service(
 		.map(|home| {
 			(
 				[(header::CONTENT_TYPE, "text/html")],
-				home
-					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
+				home.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
 			)
 		})
 		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)

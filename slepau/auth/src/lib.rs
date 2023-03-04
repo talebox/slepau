@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
-
 use pasetors::claims::Claims;
 use serde::{Deserialize, Serialize};
-
 
 // use serde_json::json;
 
@@ -15,13 +13,12 @@ fn is_false(v: &bool) -> bool {
 #[serde(default)]
 pub struct UserClaims {
 	pub user: String,
-	
+
 	#[serde(skip_serializing_if = "is_false")]
 	pub admin: bool,
 	#[serde(rename = "super", skip_serializing_if = "is_false")]
 	pub _super: bool,
-	
-	
+
 	#[serde(skip_serializing_if = "HashSet::is_empty")]
 	pub groups: HashSet<String>,
 }

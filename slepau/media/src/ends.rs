@@ -11,9 +11,7 @@ use hyper::{body::to_bytes, StatusCode};
 
 use log::info;
 use serde::Serialize;
-use std::{
-	path::PathBuf,
-};
+use std::path::PathBuf;
 
 use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -117,18 +115,18 @@ pub async fn media_post(
 	if body.0.size_hint().upper().map(|v| v < MAX_ALLOWED_RESPONSE_SIZE) != Some(true) {
 		return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("Body > 100mb")));
 	}
-	
+
 	// Get the body
 	let body = to_bytes(body.0).await.unwrap();
-	
+
 	let id = db.read().unwrap().new_id();
-	
+
 	// Write to disk
 	let path = path.join(id.to_quint());
 	tokio::fs::write(path, &body).await.unwrap();
 	let media = db.write().unwrap().add((&body.to_vec()).into(), user_claims.user);
 	let media = media.read().unwrap().clone();
-	
+
 	Ok(Json(media))
 }
 

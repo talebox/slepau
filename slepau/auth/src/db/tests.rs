@@ -72,8 +72,7 @@ fn modify() {
 	// First admin is always super
 	db.new_admin("john_s", "john_s").unwrap();
 	db.new_admin("john_123", "john_123").unwrap();
-	
-	
+
 	// Can supers do this?
 	{
 		assert!(
@@ -91,7 +90,7 @@ fn modify() {
 			.is_ok(),
 			"Can indeed edit themselves"
 		);
-		
+
 		assert!(
 			db.mod_admin(
 				"john_s",

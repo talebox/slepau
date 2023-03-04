@@ -226,10 +226,7 @@ pub async fn user(
 ) -> impl IntoResponse {
 	Json(user_claims)
 }
-pub async fn logout(
-	TypedHeader(host): TypedHeader<headers::Host>,
-	headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn logout(TypedHeader(host): TypedHeader<headers::Host>, headers: HeaderMap) -> impl IntoResponse {
 	let host_full = host.hostname();
 	let host = hostname_normalize(host.hostname());
 
@@ -253,7 +250,7 @@ pub async fn logout(
 			// 		if *SECURE { " Secure;" } else { "" }
 			// 	),
 			// ),
-			(header::LOCATION, format!("{referer}") ),
+			(header::LOCATION, format!("{referer}")),
 		],
 	)
 }

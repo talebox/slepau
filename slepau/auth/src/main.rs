@@ -34,7 +34,7 @@ use std::{
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::{timeout::TimeoutLayer, cors::CorsLayer};
+use tower_http::{cors::CorsLayer, timeout::TimeoutLayer};
 
 mod db;
 mod ends;

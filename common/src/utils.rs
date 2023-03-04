@@ -11,7 +11,9 @@ pub type LockedAtomic<T> = Arc<RwLock<T>>;
 pub type LockedWeak<T> = Weak<RwLock<T>>;
 
 use std::{
+	collections::hash_map::DefaultHasher,
 	env,
+	hash::{Hash, Hasher},
 	net::SocketAddr,
 	str::FromStr,
 	sync::{Arc, RwLock, Weak},
@@ -165,4 +167,10 @@ pub struct DataSlice<T> {
 
 pub fn hostname_normalize<'a>(host: &'a str) -> &'a str {
 	psl::domain_str(host).unwrap_or(host)
+}
+
+pub fn get_hash<T: Hash>(v: &T) -> u64 {
+	let mut hasher = DefaultHasher::new();
+	v.hash(&mut hasher);
+	hasher.finish().into()
 }

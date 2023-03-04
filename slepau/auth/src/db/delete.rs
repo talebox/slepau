@@ -14,7 +14,7 @@ impl DBAuth {
 		// Figure out if it's an admin
 		self.admins.remove(admin).map(|_| ()).ok_or(DbError::NotFound)
 	}
-	
+
 	pub fn del_site(&mut self, admin: &str, site_id: SiteId) -> Result<(), DbError> {
 		// Figure out if site belongs to user in question, or we're super admins
 		let admin = self.admins.get(admin).ok_or(DbError::AuthError)?;

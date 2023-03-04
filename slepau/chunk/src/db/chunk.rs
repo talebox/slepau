@@ -1,4 +1,4 @@
-use common::{utils::{get_secs}, proquint::Proquint};
+use common::{proquint::Proquint, utils::get_secs};
 use serde::{Deserialize, Serialize};
 
 pub type ChunkId = Proquint<u32>;

@@ -1,11 +1,10 @@
-use auth::{validate::{KPR, index_service_user}, UserClaims};
+use auth::{
+	validate::{index_service_user, KPR},
+	UserClaims,
+};
 use axum::{
-	body::Body,
-	error_handling::HandleErrorLayer,
-	middleware::from_fn,
-	response::IntoResponse,
-	routing::{get},
-	Extension, Router, BoxError,
+	body::Body, error_handling::HandleErrorLayer, middleware::from_fn, response::IntoResponse, routing::get, BoxError,
+	Extension, Router,
 };
 
 use common::{
@@ -18,7 +17,7 @@ use env_logger::Env;
 use hyper::{header, StatusCode};
 use log::{error, info};
 use tower::ServiceBuilder;
-use tower_governor::{governor::GovernorConfigBuilder, errors::display_error, GovernorLayer};
+use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
 
 use std::{
 	fs::read_to_string,
@@ -32,12 +31,11 @@ use tokio::{
 	signal::unix::{signal, SignalKind},
 	sync::{broadcast, watch},
 };
-use tower_http::{
-	timeout::TimeoutLayer,
-};
+use tower_http::timeout::TimeoutLayer;
 
 use chunk::{
-	db, ends::{self, home_service},
+	db,
+	ends::{self, home_service},
 	socket::{self, ResourceMessage},
 };
 

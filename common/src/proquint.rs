@@ -13,7 +13,7 @@ impl<T: Quintable> Serialize for Proquint<T> {
 		serializer.serialize_str(&self.0.to_quint())
 	}
 }
-impl<T:Quintable> Proquint<T> {
+impl<T: Quintable> Proquint<T> {
 	pub fn from_quint(v: &str) -> Result<Self, QuintError> {
 		Ok(Self(T::from_quint(v)?))
 	}

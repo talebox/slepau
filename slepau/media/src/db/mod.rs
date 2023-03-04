@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 pub mod def;
+pub mod task;
 
 /// MediaId uses u64 for a max of 2^64 combinations for less collisions.
 /// As many as the neurons as 200 million humans combined.

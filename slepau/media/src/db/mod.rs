@@ -1,9 +1,10 @@
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use common::{
 	proquint::Proquint,
 	utils::{LockedAtomic, LockedWeak},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 pub mod def;
 
 /// MediaId uses u64 for a max of 2^64 combinations for less collisions.
@@ -15,7 +16,7 @@ pub struct Media {
 	pub id: MediaId,
 	pub name: String,
 	pub meta: FileMeta,
-	pub versions: HashMap<Version, Option<VersionInfo>>,
+	pub versions: HashMap<VersionString, Option<VersionInfo>>,
 }
 
 static CONVERSION_VERSION: usize = 1;
@@ -38,31 +39,42 @@ pub struct FileMeta {
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Version {
-	#[serde(skip_serializing_if = "Option::is_none", rename = "type")]
+	#[serde(rename = "type", skip_serializing_if = "Option::is_none")]
 	_type: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	xm: Option<usize>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	ym: Option<usize>,
 }
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct VersionString(String);
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
-struct Task {
+pub struct Task {
 	priority: usize,
 	id: MediaId,
-	version: Version,
+	version: VersionString,
 }
 
-
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DB {
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
-	initial_versions: HashMap<String, HashSet<Version>>,
-	
+	initial_versions: HashMap<String, HashSet<VersionString>>,
+
 	media: HashMap<MediaId, LockedAtomic<Media>>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 
 	task_queue: VecDeque<Task>,
+}
+impl Default for DB {
+	fn default() -> Self {
+		Self {
+			initial_versions: serde_json::from_value(json!({"image": ["type=image/webp"]})).unwrap(),
+			media: Default::default(),
+			by_owner: Default::default(),
+			task_queue: Default::default(),
+		}
+	}
 }
 
 #[derive(Serialize)]

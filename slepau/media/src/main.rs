@@ -21,7 +21,7 @@ use std::{
 use tokio::{
 	join,
 	signal::unix::{signal, SignalKind},
-	sync::{watch,broadcast},
+	sync::{broadcast, mpsc, oneshot, watch},
 };
 use tower_http::timeout::TimeoutLayer;
 
@@ -52,7 +52,10 @@ pub async fn main() {
 	);
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
-	let (media_tx, media_rx) = broadcast::channel(5);
+	// What media has changed, mainly used to inform the UI
+	let (media_tx, media_rx) = watch::channel(Default::default());
+	// Immediate tasks being requested from the task service
+	let (task_tx, task_rx) = mpsc::channel(5);
 	let db = common::init::init::<db::DB>().await;
 	// info!("{db:?}");
 	let db = Arc::new(RwLock::new(db));
@@ -78,10 +81,17 @@ pub async fn main() {
 				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
 				.concurrency_limit(100)
 				.layer(Extension(shutdown_rx.clone()))
+				.layer(Extension(media_rx.clone()))
+				.layer(Extension(task_tx.clone()))
 				.layer(Extension(db.clone())),
 		);
 
-	let conversion_service = tokio::spawn(db::def::conversion_service(db.clone(), shutdown_rx.clone(), media_rx, media_tx));
+	let conversion_service = tokio::spawn(db::def::conversion_service(
+		db.clone(),
+		shutdown_rx.clone(),
+		media_tx,
+		task_rx,
+	));
 
 	// Create server
 	let server = axum::Server::bind(&SOCKET)

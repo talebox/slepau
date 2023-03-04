@@ -1,20 +1,16 @@
-use common::utils::DbError;
-use common::utils::{LockedAtomic, LockedWeak, CACHE_FOLDER};
+use common::utils::LockedAtomic;
+use common::utils::{DbError, CACHE_FOLDER};
 use log::info;
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
 	collections::{hash_map::DefaultHasher, HashMap, HashSet},
-	fmt::Display,
 	hash::{Hash, Hasher},
 	io::{BufWriter, Cursor},
 	sync::{Arc, RwLock},
 };
-use tokio::{
-	select,
-	sync::{broadcast, watch},
-};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 pub fn get_hash<T: Hash>(v: &T) -> u64 {
 	let mut hasher = DefaultHasher::new();
@@ -42,44 +38,70 @@ impl From<&Vec<u8>> for Media {
 	}
 }
 
-impl From<&str> for Version {
-	fn from(value: &str) -> Self {
-		serde_json::from_value(json!(value
-			.split("&")
-			.map(|v| {
-				let a = v.split("=").collect::<Vec<_>>();
-				if a.len() != 2 {
-					panic!("Not valid key=value in Version parsing.");
-				}
-				(a[0].to_string(), serde_json::from_str::<Value>(a[1]).unwrap())
-			})
-			.collect::<Vec<_>>()))
-		.unwrap()
-	}
-}
-impl Display for Version {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.write_str(
-			json!(self)
+impl From<&Version> for VersionString {
+	fn from(value: &Version) -> Self {
+		Self(
+			serde_json::to_value(value)
+				.unwrap()
 				.as_object()
 				.unwrap()
 				.iter()
 				.map(|(k, v)| format!("{k}={v}"))
 				.collect::<Vec<_>>()
 				.join("&")
-				.as_str(),
+				.to_string(),
 		)
 	}
 }
-impl Hash for Version {
-	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		self.to_string().hash(state);
+impl From<&str> for VersionString {
+	fn from(value: &str) -> Self {
+		Self(value.into())
+	}
+}
+impl From<&VersionString> for Version {
+	fn from(value: &VersionString) -> Self {
+		let value = value
+			.0
+			.split("&")
+			.map(|v| {
+				let a = v.split("=").collect::<Vec<_>>();
+				if a.len() != 2 {
+					panic!("Not valid key=value in Version parsing.");
+				}
+				(
+					a[0].to_string(),
+					serde_json::from_str::<Value>(a[1])
+						.unwrap_or_else(|_| serde_json::from_str::<Value>(&format!("\"{}\"", a[1])).unwrap()),
+				)
+			})
+			.collect::<HashMap<_, _>>();
+		serde_json::from_value(json!(value)).unwrap()
+	}
+}
+impl Serialize for VersionString {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		self.0.serialize(serializer)
+	}
+}
+impl<'de> Deserialize<'de> for VersionString {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		Ok(Self(String::deserialize(deserializer)?))
 	}
 }
 
-use crate::db::CONVERSION_VERSION;
+impl Hash for Version {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		VersionString::from(self).hash(state)
+	}
+}
 
-use super::{FileMeta, Media, MediaId, Task, Version, DB};
+use super::{FileMeta, Media, MediaId, Task, Version, VersionString, DB};
 
 impl DB {
 	pub fn new_id(&self) -> MediaId {
@@ -110,7 +132,10 @@ impl DB {
 			}
 		})
 	}
-	pub fn tick_all() {}
+	pub fn tick_all(&mut self) {
+		let all = self.media.values().cloned().collect::<Vec<_>>();
+		all.iter().for_each(|m| self._tick(m));
+	}
 	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
 		self.media.get(&id).map(|v| v.to_owned())
 	}
@@ -174,14 +199,21 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 		}
 	}
 }
+impl Hash for Task {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.id.hash(state);
+		self.version.hash(state);
+	}
+}
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
 fn do_convert(task: Task) -> Result<(Task, Vec<u8>), DbError> {
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(task.id.to_quint());
 	let data = std::fs::read(&path).map_err(|e| DbError::NotFound)?;
+	let version: Version = (&task.version).into();
 
-	if let Some(_type) = &task.version._type {
+	if let Some(_type) = version._type {
 		if _type == "image/webp" {
 			let img = image::load_from_memory(&data).unwrap();
 			let mut _out = BufWriter::new(Cursor::new(vec![]));
@@ -270,8 +302,8 @@ fn do_convert(task: Task) -> Result<(Task, Vec<u8>), DbError> {
 pub async fn conversion_service(
 	db: LockedAtomic<DB>,
 	mut shutdown_rx: watch::Receiver<()>,
-	mut media_rx: broadcast::Receiver<()>,
-	media_tx: broadcast::Sender<()>,
+	mut media_tx: watch::Sender<MediaId>,
+	mut task_rx: mpsc::Receiver<(Task, Option<oneshot::Sender<()>>)>,
 ) {
 	let mut handles = tokio::task::JoinSet::new();
 	let cpus = num_cpus::get();
@@ -286,7 +318,7 @@ pub async fn conversion_service(
 				task = db.task_queue.pop_front();
 			}
 			if let Some(task) = task {
-				handles.spawn(tokio::task::spawn_blocking(move || do_convert(task)));
+				handles.spawn(tokio::task::spawn_blocking(move || (do_convert(task), None)));
 			} else {
 				break;
 			}
@@ -296,12 +328,20 @@ pub async fn conversion_service(
 			if handles.len() > 0 {
 				let r = handles.join_next().await.unwrap().unwrap().unwrap();
 
-				if let Ok((task, data)) = r {
-					let out_path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(task.version.to_string());
-					tokio::fs::write(out_path, data).await;
+				if let (Ok((task, data)), channel) = r {
+					let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
+					if !out_folder.exists() {
+						tokio::fs::create_dir(out_folder).await.unwrap();
+					}
+					let out_path = out_folder.join(MediaId::from(get_hash(&task)).to_quint());
+
+					info!("Writing to {out_path:?}");
+					tokio::fs::write(out_path, data).await.unwrap();
+				}else {
+					log::error!("Conversion failed {r:?}");
 				}
 			} else {
-				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+				tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 			}
 		};
 
@@ -310,6 +350,9 @@ pub async fn conversion_service(
 				break;
 			}
 			_ = wait_conversion => {}
+			Some((task,channel)) = task_rx.recv() => {
+				handles.spawn(tokio::task::spawn_blocking(move || (do_convert(task), channel)));
+			}
 		}
 	}
 
@@ -322,7 +365,7 @@ pub async fn conversion_service(
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DBData {
-	initial_versions: HashMap<String, HashSet<Version>>,
+	initial_versions: HashMap<String, HashSet<VersionString>>,
 	media: Vec<Media>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 }
@@ -363,6 +406,7 @@ impl From<DBData> for DB {
 			by_owner: data.by_owner,
 			..Default::default()
 		};
+		db.tick_all();
 		db
 	}
 }

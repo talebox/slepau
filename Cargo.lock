@@ -1605,6 +1605,7 @@ dependencies = [
  "infer",
  "lazy_static",
  "log",
+ "mime",
  "num_cpus",
  "proquint",
  "serde",

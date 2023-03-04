@@ -1,6 +1,7 @@
 WEB_DIST="web/dist/media"
 DB_BACKUP_FOLDER=".tmp/media_back"
 CACHE_PATH=".tmp/media.cache.json"
+CACHE_FOLDER=".tmp/media_cache"
 MEDIA_FOLDER=".tmp/media"
 DB_PATH=".tmp/media.db.json"
 

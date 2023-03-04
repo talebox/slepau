@@ -21,7 +21,7 @@ use std::{
 use tokio::{
 	join,
 	signal::unix::{signal, SignalKind},
-	sync::watch,
+	sync::{watch,broadcast},
 };
 use tower_http::timeout::TimeoutLayer;
 
@@ -52,6 +52,7 @@ pub async fn main() {
 	);
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+	let (media_tx, media_rx) = broadcast::channel(5);
 	let db = common::init::init::<db::DB>().await;
 	// info!("{db:?}");
 	let db = Arc::new(RwLock::new(db));
@@ -80,7 +81,7 @@ pub async fn main() {
 				.layer(Extension(db.clone())),
 		);
 
-	let conversion_service = tokio::spawn(db::def::conversion_service(db.clone(), shutdown_rx.clone()));
+	let conversion_service = tokio::spawn(db::def::conversion_service(db.clone(), shutdown_rx.clone(), media_rx, media_tx));
 
 	// Create server
 	let server = axum::Server::bind(&SOCKET)

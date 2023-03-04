@@ -1,8 +1,7 @@
 use auth::UserClaims;
 use axum::{
 	body::{Bytes, HttpBody, StreamBody},
-	debug_handler,
-	extract::{BodyStream, Path, RawBody},
+	extract::{Path, RawBody},
 	http::header,
 	response::IntoResponse,
 	Extension, Json,
@@ -13,8 +12,6 @@ use hyper::{body::to_bytes, StatusCode};
 use log::info;
 use serde::Serialize;
 use std::{
-	collections::hash_map::DefaultHasher,
-	hash::{Hash, Hasher},
 	path::PathBuf,
 };
 
@@ -24,7 +21,7 @@ use tokio_util::io::ReaderStream;
 
 use media::{MatcherType, MEDIA_FOLDER};
 
-use crate::db::{def::get_hash, DBStats, Media, MediaId, DB};
+use crate::db::{DBStats, MediaId, DB};
 
 pub async fn home_service(
 	// Extension(db): Extension<LockedAtomic<DB>>,
@@ -120,28 +117,19 @@ pub async fn media_post(
 	if body.0.size_hint().upper().map(|v| v < MAX_ALLOWED_RESPONSE_SIZE) != Some(true) {
 		return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("Body > 100mb")));
 	}
-
+	
 	// Get the body
 	let body = to_bytes(body.0).await.unwrap();
-
-	let media = db.write().unwrap().set_bytes(body.to_vec(), user_claims.user);
-	let id;
-	let matcher_type;
-	{
-		let media = media.read().unwrap();
-		id = media.id;
-		matcher_type = media._type;
-	}
+	
+	let id = db.read().unwrap().new_id();
+	
 	// Write to disk
 	let path = path.join(id.to_quint());
-	if !path.exists() {
-		tokio::fs::write(path, body).await.unwrap();
-	}
-
-	Ok(Json(MediaPostResponse {
-		id,
-		_type: matcher_type,
-	}))
+	tokio::fs::write(path, &body).await.unwrap();
+	let media = db.write().unwrap().add((&body.to_vec()).into(), user_claims.user);
+	let media = media.read().unwrap().clone();
+	
+	Ok(Json(media))
 }
 
 pub async fn stats(

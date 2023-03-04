@@ -1,48 +1,134 @@
-use common::utils::{LockedAtomic, LockedWeak};
+use common::utils::DbError;
+use common::utils::{LockedAtomic, LockedWeak, CACHE_FOLDER};
 use log::info;
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::{
 	collections::{hash_map::DefaultHasher, HashMap, HashSet},
+	fmt::Display,
 	hash::{Hash, Hasher},
 	io::{BufWriter, Cursor},
 	sync::{Arc, RwLock},
 };
-use tokio::{select, sync::watch};
+use tokio::{
+	select,
+	sync::{broadcast, watch},
+};
 
 pub fn get_hash<T: Hash>(v: &T) -> u64 {
 	let mut hasher = DefaultHasher::new();
 	v.hash(&mut hasher);
 	hasher.finish().into()
 }
-// one possible implementation of walking a directory only visiting files
-fn visit_dirs(dir: &std::path::Path, cb: &dyn Fn(&std::fs::DirEntry)) -> std::io::Result<()> {
-	if dir.is_dir() {
-		for entry in std::fs::read_dir(dir)? {
-			let entry = entry?;
-			let path = entry.path();
-			if path.is_dir() {
-				visit_dirs(&path, cb)?;
-			} else {
-				cb(&entry);
-			}
+impl From<&Vec<u8>> for FileMeta {
+	fn from(value: &Vec<u8>) -> Self {
+		let _type = infer::get(value);
+		let mime_type = _type.map(|v| v.mime_type()).unwrap_or_default();
+		Self {
+			hash: get_hash(value).into(),
+			size: value.len(),
+			_type: mime_type.into(),
 		}
 	}
-	Ok(())
+}
+
+impl From<&Vec<u8>> for Media {
+	fn from(value: &Vec<u8>) -> Self {
+		Self {
+			meta: value.into(),
+			..Default::default()
+		}
+	}
+}
+
+impl From<&str> for Version {
+	fn from(value: &str) -> Self {
+		serde_json::from_value(json!(value
+			.split("&")
+			.map(|v| {
+				let a = v.split("=").collect::<Vec<_>>();
+				if a.len() != 2 {
+					panic!("Not valid key=value in Version parsing.");
+				}
+				(a[0].to_string(), serde_json::from_str::<Value>(a[1]).unwrap())
+			})
+			.collect::<Vec<_>>()))
+		.unwrap()
+	}
+}
+impl Display for Version {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(
+			json!(self)
+				.as_object()
+				.unwrap()
+				.iter()
+				.map(|(k, v)| format!("{k}={v}"))
+				.collect::<Vec<_>>()
+				.join("&")
+				.as_str(),
+		)
+	}
+}
+impl Hash for Version {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.to_string().hash(state);
+	}
 }
 
 use crate::db::CONVERSION_VERSION;
 
-use super::{Media, MediaId, DB};
+use super::{FileMeta, Media, MediaId, Task, Version, DB};
 
 impl DB {
-	pub fn get(&self, id: MediaId) -> Option<Media> {
+	pub fn new_id(&self) -> MediaId {
+		let mut id;
+		let mut i = 0;
+		loop {
+			id = Default::default();
+			if !self.media.contains_key(&id) {
+				break;
+			}
+			if i > 10 {
+				panic!("ID clashing too much");
+			}
+			i += 1;
+		}
+		id
+	}
+	fn _tick(&mut self, v: &LockedAtomic<Media>) {
+		let m = v.read().unwrap();
+		m.versions.iter().for_each(|(v, info)| {
+			if info.is_none() {
+				// Push a task if cache for this
+				self.task_queue.push_back(Task {
+					priority: 0,
+					id: m.id,
+					version: v.clone(),
+				})
+			}
+		})
+	}
+	pub fn tick_all() {}
+	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
 		self.media.get(&id).map(|v| v.to_owned())
 	}
-	pub fn add(&mut self, value: Media, owner: String) -> Media {
-		let id = value.id;
-		let v = LockedAtomic::new(RwLock::new(value));
-
+	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
+		let id = media.id;
+		// Extend versions with db init.
+		if media.versions.is_empty() {
+			media.versions.extend(
+				self
+					.initial_versions
+					.iter()
+					.filter(|(k, _)| media.meta._type.starts_with(*k))
+					.map(|(_, v)| v)
+					.flatten()
+					.map(|v| (v.to_owned(), None)),
+			);
+		}
+		let v = LockedAtomic::new(RwLock::new(media));
 		self.media.entry(id).or_insert_with(|| v.clone());
 		let weak = Arc::downgrade(&v);
 		// self
@@ -62,24 +148,8 @@ impl DB {
 			})
 			.or_insert([id].into());
 
-		self.conversion_queue.push_back(id);
+		self._tick(&v);
 		v
-	}
-	pub fn set_bytes(&mut self, value: Vec<u8>, owner: String) -> LockedAtomic<Media> {
-		// Calculate hash
-		let id: MediaId = get_hash(&value).into();
-		let _type = infer::get(&value);
-		let matcher_type = _type.map(|v| v.matcher_type()).unwrap_or(infer::MatcherType::Custom);
-
-		let media = Media {
-			id,
-			name: Default::default(),
-			size: value.len(),
-			_type: matcher_type,
-			conversion: Default::default(),
-		};
-
-		self.add(media, owner)
 	}
 }
 
@@ -88,22 +158,17 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 	if let Ok(entries) = std::fs::read_dir(path) {
 		for entry in entries {
 			if let Ok(entry) = entry {
-				if let Ok(value) = std::fs::read(entry.path()) {
-					// info!("Sending {} bytes file", value.len());
-					let id: MediaId =
-						MediaId::from_quint(entry.file_name().to_str().unwrap()).unwrap_or_else(|_| get_hash(&value).into());
-					let _type = infer::get(&value);
-					let matcher_type = _type.map(|v| v.matcher_type()).unwrap_or(infer::MatcherType::Custom);
-
-					let media = Media {
-						id,
-						name: Default::default(),
-						size: value.len(),
-						_type: matcher_type,
-						conversion: Default::default(),
-					};
-
-					db.write().unwrap().add(media, "rubend".into());
+				let id = MediaId::from_quint(entry.file_name().to_str().unwrap()).unwrap();
+				// Only add if we can't find it in the DB;
+				if db.read().unwrap().get(id).is_none() {
+					if let Ok(value) = std::fs::read(entry.path()) {
+						let media = Media {
+							id,
+							meta: (&value).into(),
+							..Default::default()
+						};
+						db.write().unwrap().add(media, "rubend".into());
+					}
 				}
 			}
 		}
@@ -112,85 +177,102 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
-fn do_convert(db: LockedAtomic<DB>, id: MediaId) -> std::io::Result<()> {
-	let should_convert;
-	// We first just try to work with what's on RAM
-	{
-		let mut db = db.write().unwrap();
-		let media = db.media.get(&id);
-		let sc = media.map(|m| {
-			let m = m.read().unwrap();
-			// info!("{m:?}");
-			m.conversion.version != CONVERSION_VERSION
-		});
-		should_convert = sc.unwrap_or(false);
-		if should_convert {
-			db.conversion_current.push(id);
+fn do_convert(task: Task) -> Result<(Task, Vec<u8>), DbError> {
+	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(task.id.to_quint());
+	let data = std::fs::read(&path).map_err(|e| DbError::NotFound)?;
+
+	if let Some(_type) = &task.version._type {
+		if _type == "image/webp" {
+			let img = image::load_from_memory(&data).unwrap();
+			let mut _out = BufWriter::new(Cursor::new(vec![]));
+			img.write_to(&mut _out, image::ImageOutputFormat::WebP).unwrap();
+			return Ok((task, _out.into_inner().unwrap().into_inner().into()));
 		}
-	}
-	// Then we read the file and see if it conversion is needed.
-	if should_convert {
-		let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(id.to_quint());
-		let mut file = std::fs::read(&path)?;
-		let prev_file_size = file.len();
-
-		let _type = infer::get(&file);
-		let matcher_type = _type.map(|v| v.matcher_type()).unwrap_or(infer::MatcherType::Custom);
-		let mime_type = _type.map(|v| v.mime_type()).unwrap_or_default();
-
-		let mut convert_to = Default::default();
-		{
-			match matcher_type {
-				infer::MatcherType::Image => {
-					convert_to = "image/webp";
-				}
-				_ => {}
-			}
-		}
-
-		if mime_type != convert_to {
-			info!("Converting {id}");
-			let now = std::time::Instant::now();
-			// Figure out type and convert
-			{
-				if convert_to == "image/webp" {
-					let img = image::load_from_memory(&file).unwrap();
-					let mut _out = BufWriter::new(Cursor::new(vec![]));
-					// info!("Converting image w:{},h:{} to .avif", img.width(), img.height());
-					img.write_to(&mut _out, image::ImageOutputFormat::WebP).unwrap();
-					// info!("Finished conversion of w:{},h:{}", img.width(), img.height());
-					file = _out.into_inner().unwrap().into_inner().into();
-				}
-			}
-			let delay = (std::time::Instant::now() - now).as_secs_f32();
-			let size_reduction = (1. - (file.len() as f32 / prev_file_size as f32)) * 100.;
-			info!("Done Converting {id}");
-
-			let size = file.len();
-			let changes = prev_file_size != size;
-			if changes {
-				std::fs::write(&path, file)?;
-			}
-			{
-				let mut db = db.write().unwrap();
-				db.conversion_current.retain(|v| *v != id);
-				let mut media = db.media.get(&id).unwrap().write().unwrap();
-				media.conversion.version = CONVERSION_VERSION;
-				if changes {
-					media.size = size;
-					media.conversion.time = delay;
-					media.conversion.size_reduction = size_reduction;
-					media.conversion.format = convert_to.into();
-					info!("Delay {delay}, size_reduction {size_reduction} for {id}");
-				}
-			}
-		}
+	} else {
+		return Err(DbError::Custom("Type required in Task."));
 	}
 
-	Ok(())
+	Err(DbError::Custom("Error executing task."))
+
+	// let should_convert;
+	// // We first just try to work with what's on RAM
+	// {
+	// 	let mut db = db.write().unwrap();
+	// 	let media = db.media.get(&id);
+	// 	let sc = media.map(|m| {
+	// 		let m = m.read().unwrap();
+	// 		// info!("{m:?}");
+	// 		m.conversion.version != CONVERSION_VERSION
+	// 	});
+	// 	should_convert = sc.unwrap_or(false);
+	// 	if should_convert {
+	// 		db.conversion_current.push(id);
+	// 	}
+	// }
+	// // Then we read the file and see if it conversion is needed.
+	// if should_convert {
+	// 	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(id.to_quint());
+	// 	let mut file = std::fs::read(&path)?;
+	// 	let prev_file_size = file.len();
+
+	// 	let mut convert_to = Default::default();
+	// 	{
+	// 		match matcher_type {
+	// 			infer::MatcherType::Image => {
+	// 				convert_to = "image/webp";
+	// 			}
+	// 			_ => {}
+	// 		}
+	// 	}
+
+	// 	if mime_type != convert_to {
+	// 		info!("Converting {id}");
+	// 		let now = std::time::Instant::now();
+	// 		// Figure out type and convert
+	// 		{
+	// 			if convert_to == "image/webp" {
+	// let img = image::load_from_memory(&file).unwrap();
+	// let mut _out = BufWriter::new(Cursor::new(vec![]));
+	// // info!("Converting image w:{},h:{} to .avif", img.width(), img.height());
+	// img.write_to(&mut _out, image::ImageOutputFormat::WebP).unwrap();
+	// // info!("Finished conversion of w:{},h:{}", img.width(), img.height());
+	// file = _out.into_inner().unwrap().into_inner().into();
+	// 			}
+	// 		}
+	// 		let delay = (std::time::Instant::now() - now).as_secs_f32();
+	// 		let size_reduction = (1. - (file.len() as f32 / prev_file_size as f32)) * 100.;
+	// 		info!("Done Converting {id}");
+
+	// 		let size = file.len();
+	// 		let changes = prev_file_size != size;
+	// 		if changes {
+	// 			std::fs::write(&path, file)?;
+	// 		}
+	// 		{
+	// 			let mut db = db.write().unwrap();
+	// 			db.conversion_current.retain(|v| *v != id);
+	// 			let mut media = db.media.get(&id).unwrap().write().unwrap();
+	// 			media.conversion.version = CONVERSION_VERSION;
+	// 			if changes {
+	// 				media.size = size;
+	// 				media.conversion.time = delay;
+	// 				media.conversion.size_reduction = size_reduction;
+	// 				media.conversion.format = convert_to.into();
+	// 				info!("Delay {delay}, size_reduction {size_reduction} for {id}");
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	// Ok(())
 }
 
-pub async fn conversion_service(db: LockedAtomic<DB>, mut shutdown_rx: watch::Receiver<()>) {
+pub async fn conversion_service(
+	db: LockedAtomic<DB>,
+	mut shutdown_rx: watch::Receiver<()>,
+	mut media_rx: broadcast::Receiver<()>,
+	media_tx: broadcast::Sender<()>,
+) {
 	let mut handles = tokio::task::JoinSet::new();
 	let cpus = num_cpus::get();
 	loop {
@@ -198,33 +280,36 @@ pub async fn conversion_service(db: LockedAtomic<DB>, mut shutdown_rx: watch::Re
 			if handles.len() >= cpus {
 				break;
 			}
-			let id;
+			let task;
 			{
 				let mut db = db.write().unwrap();
-				id = db.conversion_queue.pop_front();
+				task = db.task_queue.pop_front();
 			}
-			if let Some(id) = id {
-				let db = db.clone();
-				handles.spawn(tokio::task::spawn_blocking(move || do_convert(db, id)));
+			if let Some(task) = task {
+				handles.spawn(tokio::task::spawn_blocking(move || do_convert(task)));
 			} else {
 				break;
 			}
 		}
 
-		if handles.is_empty() {
-			tokio::select! {
-				_ = shutdown_rx.changed() => {
-					break;
+		let wait_conversion = async {
+			if handles.len() > 0 {
+				let r = handles.join_next().await.unwrap().unwrap().unwrap();
+
+				if let Ok((task, data)) = r {
+					let out_path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(task.version.to_string());
+					tokio::fs::write(out_path, data).await;
 				}
-				_ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {}
+			} else {
+				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 			}
-		} else {
-			tokio::select! {
-				_ = shutdown_rx.changed() => {
-					break;
-				}
-				_ = handles.join_next() => {}
+		};
+
+		tokio::select! {
+			_ = shutdown_rx.changed() => {
+				break;
 			}
+			_ = wait_conversion => {}
 		}
 	}
 
@@ -237,6 +322,7 @@ pub async fn conversion_service(db: LockedAtomic<DB>, mut shutdown_rx: watch::Re
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DBData {
+	initial_versions: HashMap<String, HashSet<Version>>,
 	media: Vec<Media>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 }
@@ -272,8 +358,9 @@ impl From<DBData> for DB {
 		// let by_owner = data.by_owner.into_iter().map(|(k,v)| (k,HashSet::from_iter(v))).collect();
 
 		let mut db = Self {
+			initial_versions: data.initial_versions,
 			media,
-			by_owner:data.by_owner,
+			by_owner: data.by_owner,
 			..Default::default()
 		};
 		db
@@ -299,7 +386,8 @@ impl From<&DB> for DBData {
 			// 		)
 			// 	})
 			// 	.collect(),
-			by_owner: db.by_owner.clone()
+			by_owner: db.by_owner.clone(),
+			initial_versions: db.initial_versions.clone(),
 		}
 	}
 }

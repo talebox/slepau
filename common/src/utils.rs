@@ -6,7 +6,6 @@ use rand::prelude::*;
 use regex::Regex;
 use reqwest::Url;
 use serde::Serialize;
-use tower_governor::{governor::GovernorConfig, key_extractor::PeerIpKeyExtractor};
 
 pub type LockedAtomic<T> = Arc<RwLock<T>>;
 pub type LockedWeak<T> = Weak<RwLock<T>>;
@@ -16,7 +15,7 @@ use std::{
 	net::SocketAddr,
 	str::FromStr,
 	sync::{Arc, RwLock, Weak},
-	time::{SystemTime, UNIX_EPOCH}, path::PathBuf,
+	time::{SystemTime, UNIX_EPOCH},
 };
 
 pub fn get_secs() -> u64 {
@@ -59,6 +58,7 @@ lazy_static! {
 	pub static ref DB_INIT: Option<String> = env::var("DB_INIT").ok();
 	pub static ref DB_BACKUP_FOLDER: String = env::var("DB_BACKUP_FOLDER").unwrap_or_else(|_| "backups".into());
 	pub static ref CACHE_PATH: String = env::var("CACHE_PATH").unwrap_or_else(|_| "cache.json".into());
+	pub static ref CACHE_FOLDER: String = env::var("CACHE_FOLDER").unwrap_or_else(|_| "cache".into());
 	pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
 	/// The socket is we listen to requests from.
 	pub static ref SOCKET: SocketAddr = SocketAddr::from_str(env::var("SOCKET").unwrap_or_else(|_| "0.0.0.0:4000".into()).as_str()).expect("Socket address to be valid");

@@ -20,32 +20,31 @@ use common::{
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::{
-	sync::{watch},
+	sync::{broadcast, watch},
 	time,
 };
 
 use auth::UserClaims;
 
 use crate::db::{
-	chunk::ChunkId,
-	dbchunk::DBChunk,
-	view::{ChunkValue, ChunkVec, ChunkView, SortType, ViewType},
-	DB,
+	view::{MediaVec, SortType},
+	MediaId, DB,
 };
+
 
 
 pub async fn websocket_handler(
 	ws: WebSocketUpgrade,
 	Extension(_user): Extension<UserClaims>,
 	Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(tx_r): Extension<ResourceSender>,
-	Extension(shutdown_rx): Extension<watch::Receiver<()>>,
+	Extension(tx_resource): Extension<ResourceSender>,
+	Extension(rx_shutdown): Extension<watch::Receiver<()>>,
 	ConnectInfo(address): ConnectInfo<SocketAddr>,
 ) -> Response {
 	info!("Opening Websocket with {} on {}.", &_user.user, address);
-	ws.on_upgrade(move |socket| handle_socket(socket, _user, db, tx_r, shutdown_rx, address))
+	ws.on_upgrade(move |socket| handle_socket(socket, _user, db, tx_resource, rx_shutdown, address))
 }
 
 async fn handle_socket(
@@ -53,7 +52,7 @@ async fn handle_socket(
 	user_claims: UserClaims,
 	db: LockedAtomic<DB>,
 	tx_resource: ResourceSender,
-	mut shutdown_rx: watch::Receiver<()>,
+	mut rx_shutdown: watch::Receiver<()>,
 	address: SocketAddr,
 ) {
 	let user = &user_claims.user;
@@ -62,33 +61,11 @@ async fn handle_socket(
 
 	let (mut tx_socket, mut rx_socket) = socket.split();
 
-	let get_notes = || {
-		let mut chunks: ChunkVec = db.write().unwrap().get_chunks(user).into();
-		chunks.sort(SortType::Modified);
-		let chunks = chunks.0;
-		// maybe_paginate((query, chunks, &|v| ChunkView::from((v, user.as_str(), ViewType::Notes))))
-		let chunks = chunks
-			.into_iter()
-			.map(|v| ChunkView::from((v, user.as_str(), ViewType::Notes)))
-			.collect::<Vec<_>>();
-		json!(chunks)
-	};
+	let get_all = || {
+		let mut chunks: MediaVec = db.read().unwrap().get_all().into();
+		chunks.sort(SortType::Created);
 
-	// [[parent,parent], [child,child]]
-	let get_subtree = |root: Option<ChunkId>, view_type: ViewType| {
-		let root = root.and_then(|id| db.try_read().unwrap().get_chunk(id, user));
-		let subtree = db.try_read().unwrap().subtree(
-			root.as_ref(),
-			&user.as_str().into(),
-			&|v| {
-				let mut vec = ChunkVec::from(v);
-				vec.sort(SortType::ModifiedDynamic(user.as_str().into()));
-				vec.into()
-			},
-			&|v| json!(ChunkView::from((v, user.as_str(), view_type))),
-			1,
-		);
-		json!(subtree)
+		json!(Vec::<crate::db::view::MediaId>::from(chunks))
 	};
 
 	// Keep last resource id so when we're sending
@@ -129,100 +106,70 @@ async fn handle_socket(
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let mut piece = res.pop_front();
 
-			if piece == Some("chunks") {
-				if let Some(id) = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId.")) {
-					piece = res.pop_front();
-
-					if piece == Some("value") {
-						if let Some(value) = m.value {
-							// User wants to change a value
-							let db_chunk: DBChunk = (id.into(), value.as_str()).into();
-							match db.write().unwrap().update_chunk(db_chunk, user) {
-								Ok((users_to_notify, diff, db_chunk)) => {
-									let users = db_chunk.read().unwrap().access_users();
-									let m = ResourceMessage::from((format!("chunks/{}/value/diff", id).as_str(), users.clone(), &diff));
-									{
-										// Update our resource_id_last so we don't send the same data back when sending a signal to tx_resource
-										let mut resource_id_last = resource_id_last.write().unwrap();
-										*resource_id_last = m.id;
-									}
-									tx_resource.send(m).unwrap();
-									tx_resource
-										.send(ResourceMessage::from((
-											format!("chunks/{}", id).as_str(),
-											users,
-											&ChunkView::from((db_chunk, user.as_str(), ViewType::Edit)),
-										)))
-										.unwrap();
-
-									if !users_to_notify.is_empty() {
-										tx_resource
-											.send(ResourceMessage::from(("chunks", users_to_notify)))
-											.unwrap();
-									}
-
-									return reply(MessageType::Ok.into());
-								}
-								Err(err) => return reply((MessageType::Error, &format!("{err:?}")).into()),
-							}
-						} else {
-							// Request for "chunks/<id>/value"
-							if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-								return reply((&ChunkValue::from(v)).into());
-							}
-						}
-					} else if piece.is_none() {
-						if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-							return reply((&ChunkView::from((v, user.as_str(), ViewType::Edit))).into());
-						}
-					}
-
-					return reply((MessageType::Error, &"NotFound".to_string()).into());
-				} else {
-					// Request for "chunks"
-					// return reply((&get_notes()).into());
-				}
-			} else if piece == Some("views") {
+			if piece == Some("views") {
 				piece = res.pop_front();
-				let root_id = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId."));
-				if piece == Some("notes") {
-					return reply((&get_notes()).into());
-				} else if piece == Some("well") {
-					return reply((&get_subtree(root_id, ViewType::Well)).into());
-				} else if piece == Some("graph") {
-					return reply((&get_subtree(root_id, ViewType::Graph)).into());
+				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
+				if piece == Some("all") {
+					return reply((&get_all()).into());
 				}
 				error!("View needs name");
 				return None;
-			} else if piece == Some("user") {
-				let mut user = json!(&user_claims);
-				if let Value::Object(mut user_o) = user {
-					let mut db = db.write().unwrap();
-					let chunks = db.get_chunks(&user_claims.user);
-					user_o.insert("notes_visible".into(), chunks.len().into());
-					user_o.insert(
-						"notes_owned".into(),
-						chunks
-							.iter()
-							.filter(|chunk| chunk.read().unwrap().chunk().owner == user_claims.user)
-							.count()
-							.into(),
-					);
-					user_o.insert(
-						"notes_owned_public".into(),
-						chunks
-							.iter()
-							.filter(|chunk| {
-								let chunk = chunk.read().unwrap();
-								chunk.chunk().owner == user_claims.user && chunk.has_access(&"public".into())
-							})
-							.count()
-							.into(),
-					);
-					user = json!(user_o);
-				}
-				return reply((&user).into());
 			}
+
+			// if piece == Some("media") {
+			// 	if let Some(id) = res.pop_front().map(|id| MediaId::from_quint(id).expect("a MediaId.")) {
+			// 		piece = res.pop_front();
+
+			// 		if piece == Some("value") {
+			// 			if let Some(value) = m.value {
+			// 				// User wants to change a value
+			// 				let db_chunk: DBChunk = (id.into(), value.as_str()).into();
+			// 				match db.write().unwrap().update_chunk(db_chunk, user) {
+			// 					Ok((users_to_notify, diff, db_chunk)) => {
+			// 						let users = db_chunk.read().unwrap().access_users();
+			// 						let m = ResourceMessage::from((format!("chunks/{}/value/diff", id).as_str(), users.clone(), &diff));
+			// 						{
+			// 							// Update our resource_id_last so we don't send the same data back when sending a signal to tx_resource
+			// 							let mut resource_id_last = resource_id_last.write().unwrap();
+			// 							*resource_id_last = m.id;
+			// 						}
+			// 						tx_resource.send(m).unwrap();
+			// 						tx_resource
+			// 							.send(ResourceMessage::from((
+			// 								format!("chunks/{}", id).as_str(),
+			// 								users,
+			// 								&ChunkView::from((db_chunk, user.as_str(), ViewType::Edit)),
+			// 							)))
+			// 							.unwrap();
+
+			// 						if !users_to_notify.is_empty() {
+			// 							tx_resource
+			// 								.send(ResourceMessage::from(("chunks", users_to_notify)))
+			// 								.unwrap();
+			// 						}
+
+			// 						return reply(MessageType::Ok.into());
+			// 					}
+			// 					Err(err) => return reply((MessageType::Error, &format!("{err:?}")).into()),
+			// 				}
+			// 			} else {
+			// 				// Request for "chunks/<id>/value"
+			// 				if let Some(v) = db.read().unwrap().get_chunk(id, user) {
+			// 					return reply((&ChunkValue::from(v)).into());
+			// 				}
+			// 			}
+			// 		} else if piece.is_none() {
+			// 			if let Some(v) = db.read().unwrap().get_chunk(id, user) {
+			// 				return reply((&ChunkView::from((v, user.as_str(), ViewType::Edit))).into());
+			// 			}
+			// 		}
+
+			// 		return reply((MessageType::Error, &"NotFound".to_string()).into());
+			// 	} else {
+			// 		// Request for "chunks"
+			// 		// return reply((&get_notes()).into());
+			// 	}
+			// }
 
 			error!("Message {m:?} unknown");
 		}
@@ -300,7 +247,7 @@ async fn handle_socket(
 					break;
 				}
 			}
-			_ = shutdown_rx.changed() => {
+			_ = rx_shutdown.changed() => {
 				break;
 			}
 			// Send a ping message

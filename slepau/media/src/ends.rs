@@ -1,12 +1,15 @@
 use auth::UserClaims;
 use axum::{
 	body::{Bytes, HttpBody, StreamBody},
-	extract::{Path, RawBody},
+	extract::{Path, Query, RawBody},
 	http::header,
-	response::IntoResponse,
+	response::{IntoResponse, Response},
 	Extension, Json,
 };
-use common::utils::{LockedAtomic, WEB_DIST};
+use common::{
+	socket::{ResourceMessage, ResourceSender, SocketMessage},
+	utils::{LockedAtomic, WEB_DIST},
+};
 use hyper::{body::to_bytes, StatusCode};
 
 use log::info;
@@ -19,7 +22,7 @@ use tokio_util::io::ReaderStream;
 
 use media::{MatcherType, MEDIA_FOLDER};
 
-use crate::db::{DBStats, MediaId, DB};
+use crate::db::{task::TaskRequest, DBStats, MediaId, Task, Version, DB};
 
 pub async fn home_service(
 	// Extension(db): Extension<LockedAtomic<DB>>,
@@ -51,13 +54,34 @@ pub async fn home_service(
 		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-pub async fn media_get(Path(id): Path<String>) -> Result<impl IntoResponse, impl IntoResponse> {
-	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
-	let path = path.join(id);
+pub async fn media_get(
+	Path(id): Path<MediaId>,
+	Query(version): Query<Version>,
+	Extension(db): Extension<LockedAtomic<DB>>,
+	Extension(tx_task): Extension<tokio::sync::mpsc::Sender<TaskRequest>>,
+) -> Result<impl IntoResponse, Response> {
+	// Try getting the version, else prioritize the version
+
+	let version_ref = (id, (&version).into()).into();
+	info!("{version_ref:?}");
+	let mut path = db.read().unwrap().version_path(&version_ref);
+	if path.is_none() {
+		// Try getting the path by scheduling a task
+		let task = Task {
+			priority: 10,
+			_ref: version_ref.clone(),
+		};
+		let oneshot = tokio::sync::oneshot::channel();
+
+		tx_task.send((task, Some(oneshot.0))).await.unwrap();
+		oneshot.1.await.unwrap().map_err(|e| e.into_response())?;
+		path = db.read().unwrap().version_path(&version_ref);
+	}
+	let path = path.ok_or((StatusCode::NOT_FOUND, format!("Media can't be resolved")).into_response())?;
 
 	let mut file = match tokio::fs::File::open(&path).await {
 		Ok(file) => file,
-		Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err))),
+		Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err)).into_response()),
 	};
 
 	let mut buf = [0u8; 64];
@@ -83,7 +107,7 @@ pub async fn media_get(Path(id): Path<String>) -> Result<impl IntoResponse, impl
 		];
 		Ok((headers, body))
 	} else {
-		Err((StatusCode::NO_CONTENT, "Error reading file?".to_string()))
+		Err((StatusCode::NO_CONTENT, "Error reading file?".to_string()).into_response())
 	}
 }
 
@@ -100,6 +124,7 @@ pub struct MediaPostResponse {
 /// Conversion happens after.
 pub async fn media_post(
 	Extension(db): Extension<LockedAtomic<DB>>,
+	Extension(tx_resource): Extension<ResourceSender>,
 	Extension(user_claims): Extension<UserClaims>,
 	body: RawBody,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
@@ -124,8 +149,11 @@ pub async fn media_post(
 	// Write to disk
 	let path = path.join(id.to_quint());
 	tokio::fs::write(path, &body).await.unwrap();
-	let media = db.write().unwrap().add((&body.to_vec()).into(), user_claims.user);
+	let media = db.write().unwrap().add((id, &body.to_vec()).into(), user_claims.user);
 	let media = media.read().unwrap().clone();
+
+	// Notify
+	tx_resource.send("media".into()).ok();
 
 	Ok(Json(media))
 }

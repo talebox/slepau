@@ -192,7 +192,7 @@ pub enum SortType {
 pub struct ChunkVec(pub Vec<LockedAtomic<DBChunk>>);
 impl ChunkVec {
 	pub fn sort(&mut self, t: SortType) {
-		self.0.sort_by_key(|v| {
+		self.0.sort_by_cached_key(|v| {
 			-(match &t {
 				SortType::Created => v.read().unwrap().chunk().created,
 				SortType::Modified => v.read().unwrap().chunk().modified,

@@ -6,7 +6,7 @@ use axum::{
 };
 use common::{
 	proquint::Proquint,
-	utils::{DbError, LockedAtomic, WEB_DIST},
+	utils::{DbError, LockedAtomic, WEB_DIST}, socket::{ResourceMessage, ResourceSender},
 };
 use headers::ContentType;
 use hyper::{header, StatusCode};
@@ -23,7 +23,6 @@ use crate::{
 		DB,
 	},
 	format::value_to_html,
-	socket::{ResourceMessage, ResourceSender},
 };
 
 pub async fn home_service(

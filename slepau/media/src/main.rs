@@ -1,3 +1,4 @@
+use auth::validate::index_service_user;
 use axum::{
 	error_handling::HandleErrorLayer,
 	middleware::from_fn,
@@ -7,7 +8,7 @@ use axum::{
 
 use common::{
 	http::assets_service,
-	utils::{log_env, SOCKET, URL, WEB_DIST},
+	utils::{log_env, SOCKET, URL, WEB_DIST}, socket::ResourceMessage,
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -27,6 +28,7 @@ use tower_http::timeout::TimeoutLayer;
 
 pub mod db;
 pub mod ends;
+mod socket;
 
 #[tokio::main]
 pub async fn main() {
@@ -53,26 +55,30 @@ pub async fn main() {
 
 	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
 	// What media has changed, mainly used to inform the UI
-	let (media_tx, media_rx) = watch::channel(Default::default());
+	// let (media_tx, media_rx) = broadcast::channel(5);
 	// Immediate tasks being requested from the task service
 	let (task_tx, task_rx) = mpsc::channel(5);
+	let (resource_tx, _resource_rx) = broadcast::channel::<ResourceMessage>(16);
+
 	let db = common::init::init::<db::DB>().await;
 	// info!("{db:?}");
 	let db = Arc::new(RwLock::new(db));
-	db::def::load_existing(db.clone());
+	let load_existing_handle;
+	{
+		let db = db.clone();
+		load_existing_handle = tokio::task::spawn_blocking(move || db::def::load_existing(db));
+	}
 
 	// Build router
 	let app = Router::new()
-		.nest(
-			"/api",
-			Router::new()
-				.route("/media", post(ends::media_post))
-				.route_layer(from_fn(auth::validate::flow::auth_required))
-				.route("/media/:id", get(ends::media_get)),
-		)
+		.route("/stream", get(socket::websocket_handler))
+		.route_layer(from_fn(auth::validate::flow::auth_required))
+		.route("/media", post(ends::media_post))
+		.route("/media/:id", get(ends::media_get))
+		.route("/api/media/:id", get(ends::media_get))
 		.route("/stats", get(ends::stats))
 		.fallback(ends::home_service)
-		// .nest_service("/app", get(index_service_user))
+		.nest_service("/app", get(index_service_user))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.nest_service("/web", assets_service(WEB_DIST.as_str()))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
@@ -81,7 +87,7 @@ pub async fn main() {
 				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
 				.concurrency_limit(100)
 				.layer(Extension(shutdown_rx.clone()))
-				.layer(Extension(media_rx.clone()))
+				.layer(Extension(resource_tx.clone()))
 				.layer(Extension(task_tx.clone()))
 				.layer(Extension(db.clone())),
 		);
@@ -89,7 +95,7 @@ pub async fn main() {
 	let conversion_service = tokio::spawn(db::task::conversion_service(
 		db.clone(),
 		shutdown_rx.clone(),
-		media_tx,
+		resource_tx,
 		task_rx,
 	));
 
@@ -124,8 +130,10 @@ pub async fn main() {
 	shutdown_tx.send(()).unwrap();
 
 	info!("Waiting for everyone to shutdown.");
-	let _server_r = join!(server, conversion_service);
-	info!("Everyone's shut down, goodbye!");
-
+	let _server_r = join!(server, conversion_service, load_existing_handle);
+	info!("Everyone's shut down!");
+	
 	common::init::save(&*db.read().unwrap());
+	
+	info!("Goodbye!");
 }

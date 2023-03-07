@@ -1,14 +1,14 @@
-use super::{FileMeta, Media, MediaId, Task, Version, VersionString, DB};
-use common::utils::{get_hash, LockedAtomic};
-use common::utils::{DbError, CACHE_FOLDER};
-use log::info;
+use super::{FileMeta, Media, MediaId, Task, TaskCriteria, Version, VersionReference, VersionString, DB};
+use common::utils::{get_hash, get_secs, LockedAtomic, CACHE_FOLDER};
 use media::MEDIA_FOLDER;
+use proquint::Quintable;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
 	collections::{hash_map::DefaultHasher, HashMap, HashSet},
 	hash::{Hash, Hasher},
 	io::{BufWriter, Cursor},
+	path::PathBuf,
 	sync::{Arc, RwLock},
 };
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
@@ -29,62 +29,87 @@ impl DB {
 		}
 		id
 	}
-	fn _tick(&mut self, v: &LockedAtomic<Media>) {
-		let m = v.read().unwrap();
-		m.versions.iter().for_each(|(v, info)| {
-			if info.is_none() {
-				// Push a task if cache for this
-				self.task_queue.push_back(Task {
-					priority: 0,
-					id: m.id,
-					version: v.clone(),
+	pub fn version_path(&self, _ref: &VersionReference) -> Option<PathBuf> {
+		let m = self.media.get(&_ref.id)?.read().unwrap();
+		let mut version = _ref.version.to_version().unwrap();
+		// Media + Version => Path
+		let to_path = |version: &Version| -> Option<PathBuf> {
+			if json!(version).as_object().unwrap().len() == 0 {
+				return Some(std::path::Path::new(MEDIA_FOLDER.as_str()).join(m.id.to_string()));
+			}
+			let version_string = version.into();
+			m.versions.get(&version_string).map(|_| {
+				std::path::Path::new(CACHE_FOLDER.as_str()).join(VersionReference::from((m.id, version_string)).to_filename())
+			})
+		};
+
+		// Try getting path
+		//
+		// if unsuccessful AND type same as original type
+		// then remove type from version and try again.
+		to_path(&version).or_else(|| {
+			if version._type.as_ref() == Some(&m.meta._type) {
+				version._type = None;
+				to_path(&version)
+			} else {
+				None
+			}
+		})
+	}
+	fn _tick(&mut self, media: &LockedAtomic<Media>) {
+		let id = media.read().unwrap().id;
+		let initial_versions = self.initial_versions.clone();
+
+		initial_versions.iter().for_each(|(criteria, versions)| {
+			if criteria.matches(&media.read().unwrap()) {
+				versions.iter().for_each(|version| {
+					// If we can't find a path to the version
+					if self.version_path(&(id, version.clone()).into()).is_none() {
+						let _ref = (id, version.clone()).into();
+						// If you can't find a task with that version reference
+						if self.task_queue.iter().find(|v| v._ref == _ref).is_none() {
+							// Schedule a task for it
+							self.task_queue.push_front(Task { priority: 0, _ref })
+						}
+					}
 				})
 			}
 		})
 	}
 	pub fn tick_all(&mut self) {
+		self.task_queue.clear();
 		let all = self.media.values().cloned().collect::<Vec<_>>();
 		all.iter().for_each(|m| self._tick(m));
+		self
+			.task_queue
+			.make_contiguous()
+			.sort_by_key(|t| -(t.priority as isize));
 	}
 	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
 		self.media.get(&id).map(|v| v.to_owned())
 	}
+	pub fn get_all(&self) -> Vec<LockedAtomic<Media>> {
+		self.media.values().cloned().collect()
+	}
 	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
-		let id = media.id;
-		// Extend versions with db init.
-		if media.versions.is_empty() {
-			media.versions.extend(
-				self
-					.initial_versions
-					.iter()
-					.filter(|(k, _)| media.meta._type.starts_with(*k))
-					.map(|(_, v)| v)
-					.flatten()
-					.map(|v| (v.to_owned(), None)),
-			);
-		}
-		let v = LockedAtomic::new(RwLock::new(media));
-		self.media.entry(id).or_insert_with(|| v.clone());
-		let weak = Arc::downgrade(&v);
-		// self
-		// 	.by_owner
-		// 	.entry(owner)
-		// 	.and_modify(|v| {
-		// 		if !v.iter().any(|v| v.ptr_eq(&weak)) {
-		// 			v.push(weak.clone());
-		// 		};
-		// 	})
-		// 	.or_insert_with(|| vec![weak.clone()]);
 		self
 			.by_owner
 			.entry(owner)
 			.and_modify(|v| {
-				v.insert(id);
+				v.insert(media.id);
 			})
-			.or_insert([id].into());
+			.or_insert([media.id].into());
 
-		self._tick(&v);
-		v
+		if let Some(media) = self.media.get(&media.id) {
+			media.to_owned()
+		} else {
+			media.created = get_secs();
+			let id = media.id;
+			let v = LockedAtomic::new(RwLock::new(media));
+			self.media.insert(id, v.clone());
+			self._tick(&v);
+			v
+		}
 	}
 }
 
@@ -97,12 +122,7 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 				// Only add if we can't find it in the DB;
 				if db.read().unwrap().get(id).is_none() {
 					if let Ok(value) = std::fs::read(entry.path()) {
-						let media = Media {
-							id,
-							meta: (&value).into(),
-							..Default::default()
-						};
-						db.write().unwrap().add(media, "rubend".into());
+						db.write().unwrap().add((id, &value).into(), "rubend".into());
 					}
 				}
 			}
@@ -116,7 +136,8 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DBData {
-	initial_versions: HashMap<String, HashSet<VersionString>>,
+	allow_public_post: bool,
+	initial_versions: HashMap<TaskCriteria, HashSet<VersionString>>,
 	media: Vec<Media>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 }
@@ -135,7 +156,6 @@ impl From<DBData> for DB {
 				(id, arc)
 			})
 			.collect();
-
 		// let by_owner: HashMap<String, Vec<LockedWeak<Media>>> = data
 		// 	.by_owner
 		// 	.into_iter()
@@ -151,11 +171,13 @@ impl From<DBData> for DB {
 		// 	.collect();
 		// let by_owner = data.by_owner.into_iter().map(|(k,v)| (k,HashSet::from_iter(v))).collect();
 
+
 		let mut db = Self {
+			allow_public_post: data.allow_public_post,
 			initial_versions: data.initial_versions,
 			media,
 			by_owner: data.by_owner,
-			..Default::default()
+			task_queue: Default::default(),
 		};
 		db.tick_all();
 		db
@@ -167,6 +189,7 @@ impl From<DBData> for DB {
 impl From<&DB> for DBData {
 	fn from(db: &DB) -> Self {
 		Self {
+			allow_public_post: db.allow_public_post,
 			media: db.media.values().map(|v| v.read().unwrap().clone()).collect(),
 			// by_owner: db
 			// 	.by_owner

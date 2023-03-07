@@ -72,10 +72,10 @@ impl DBAuth {
 			let making_inactive = admin.user.active && !v.active;
 			if changing_themselves {
 				if turning_off_super {
-					return Err(DbError::Custom("You can't get rid of your powers."));
+					return Err("You can't get rid of your powers.".into());
 				}
 				if making_inactive {
-					return Err(DbError::Custom("Your power is too strong to be disabled."));
+					return Err("Your power is too strong to be disabled.".into());
 				}
 			}
 		}

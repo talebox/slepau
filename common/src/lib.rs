@@ -5,6 +5,7 @@ pub mod http;
 pub mod init;
 pub mod proquint;
 pub mod utils;
+pub mod socket;
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(default)]

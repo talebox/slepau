@@ -100,7 +100,7 @@ pub enum DbError {
 	InvalidUsername(&'static str),
 	InvalidPassword(&'static str),
 	InvalidChunk(&'static str),
-	Custom(&'static str),
+	Custom(String),
 	NotFound,
 }
 impl IntoResponse for DbError {
@@ -116,6 +116,16 @@ impl IntoResponse for DbError {
 			),
 		)
 			.into_response()
+	}
+}
+impl From<&str> for DbError {
+	fn from(value: &str) -> Self {
+		Self::Custom(value.into())
+	}
+}
+impl From<String> for DbError {
+	fn from(value: String) -> Self {
+		Self::Custom(value)
 	}
 }
 

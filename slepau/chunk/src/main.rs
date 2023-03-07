@@ -11,7 +11,7 @@ use common::{
 	http::{assets_service, index_service},
 	init::backup::backup_service,
 	utils::{log_env, SOCKET, URL, WEB_DIST},
-	Cache,
+	Cache, socket::ResourceMessage,
 };
 use env_logger::Env;
 use hyper::{header, StatusCode};
@@ -36,7 +36,7 @@ use tower_http::timeout::TimeoutLayer;
 use chunk::{
 	db,
 	ends::{self, home_service},
-	socket::{self, ResourceMessage},
+	socket::{self},
 };
 
 #[tokio::main]

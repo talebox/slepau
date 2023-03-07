@@ -33,7 +33,7 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 			Some(db_path) => match fs::read_to_string(&db_path) {
 				Ok(db_json) => {
 					let db_in =
-						serde_json::from_str::<T>(db_json.as_str()).unwrap_or_else(|_| panic!("Couldn't read {}", &db_path));
+						serde_json::from_str::<T>(db_json.as_str()).unwrap();
 
 					info!("Read {}", &db_path);
 

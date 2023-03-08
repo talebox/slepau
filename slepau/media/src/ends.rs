@@ -22,7 +22,7 @@ use tokio_util::io::ReaderStream;
 
 use media::{MatcherType, MEDIA_FOLDER};
 
-use crate::db::{task::TaskRequest, DBStats, MediaId, Task, Version, DB};
+use crate::db::{DBStats, MediaId, DB, version::Version, task::Task};
 
 pub async fn home_service(
 	// Extension(db): Extension<LockedAtomic<DB>>,
@@ -58,23 +58,19 @@ pub async fn media_get(
 	Path(id): Path<MediaId>,
 	Query(version): Query<Version>,
 	Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(tx_task): Extension<tokio::sync::mpsc::Sender<TaskRequest>>,
+	Extension(tx_task): Extension<tokio::sync::mpsc::Sender<Task>>,
 ) -> Result<impl IntoResponse, Response> {
 	// Try getting the version, else prioritize the version
 
 	let version_ref = (id, (&version).into()).into();
-	info!("{version_ref:?}");
 	let mut path = db.read().unwrap().version_path(&version_ref);
 	if path.is_none() {
 		// Try getting the path by scheduling a task
-		let task = Task {
-			priority: 10,
-			_ref: version_ref.clone(),
-		};
-		let oneshot = tokio::sync::oneshot::channel();
+		let (sender, receiver) = tokio::sync::oneshot::channel();
+		let task = Task::from((10, version_ref.clone(), sender));
 
-		tx_task.send((task, Some(oneshot.0))).await.unwrap();
-		oneshot.1.await.unwrap().map_err(|e| e.into_response())?;
+		tx_task.send(task).await.unwrap();
+		receiver.await.unwrap().map_err(|e| e.into_response())?;
 		path = db.read().unwrap().version_path(&version_ref);
 	}
 	let path = path.ok_or((StatusCode::NOT_FOUND, format!("Media can't be resolved")).into_response())?;

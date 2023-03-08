@@ -1,17 +1,13 @@
-use super::{FileMeta, Media, MediaId, Task, TaskCriteria, Version, VersionReference, VersionString, DB};
-use common::utils::{get_hash, get_secs, LockedAtomic, CACHE_FOLDER};
+use super::{task::{TaskCriteria, Task}, version::{VersionString, VersionReference, Version}, Media, MediaId, DB};
+use common::utils::{ get_secs, LockedAtomic, CACHE_FOLDER};
 use media::MEDIA_FOLDER;
-use proquint::Quintable;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-	collections::{hash_map::DefaultHasher, HashMap, HashSet},
-	hash::{Hash, Hasher},
-	io::{BufWriter, Cursor},
+	collections::{HashMap, HashSet},
 	path::PathBuf,
 	sync::{Arc, RwLock},
 };
-use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 impl DB {
 	pub fn new_id(&self) -> MediaId {
@@ -69,7 +65,7 @@ impl DB {
 						// If you can't find a task with that version reference
 						if self.task_queue.iter().find(|v| v._ref == _ref).is_none() {
 							// Schedule a task for it
-							self.task_queue.push_front(Task { priority: 0, _ref })
+							self.task_queue.push_front((0, _ref).into())
 						}
 					}
 				})
@@ -156,21 +152,6 @@ impl From<DBData> for DB {
 				(id, arc)
 			})
 			.collect();
-		// let by_owner: HashMap<String, Vec<LockedWeak<Media>>> = data
-		// 	.by_owner
-		// 	.into_iter()
-		// 	.map(|(owner, ids)| {
-		// 		(
-		// 			owner,
-		// 			ids
-		// 				.into_iter()
-		// 				.filter_map(|id| media.get(&id).map(|m| Arc::downgrade(m)))
-		// 				.collect(),
-		// 		)
-		// 	})
-		// 	.collect();
-		// let by_owner = data.by_owner.into_iter().map(|(k,v)| (k,HashSet::from_iter(v))).collect();
-
 
 		let mut db = Self {
 			allow_public_post: data.allow_public_post,
@@ -191,19 +172,6 @@ impl From<&DB> for DBData {
 		Self {
 			allow_public_post: db.allow_public_post,
 			media: db.media.values().map(|v| v.read().unwrap().clone()).collect(),
-			// by_owner: db
-			// 	.by_owner
-			// 	.iter()
-			// 	.map(|v| {
-			// 		(
-			// 			v.0.to_owned(),
-			// 			v.1
-			// 				.iter()
-			// 				.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id))
-			// 				.collect(),
-			// 		)
-			// 	})
-			// 	.collect(),
 			by_owner: db.by_owner.clone(),
 			initial_versions: db.initial_versions.clone(),
 		}

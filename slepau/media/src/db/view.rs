@@ -16,6 +16,7 @@ use super::{Media};
 // #[derive(Serialize, Debug, Default)]
 // pub struct MediaView {
 // 	pub id: MediaId,
+// 	pub cache: 
 // 	pub created: Option<u64>,
 // }
 
@@ -38,6 +39,12 @@ use super::{Media};
 //   }
 // }
 
+impl From<LockedAtomic<Media>> for Media {
+	fn from(rc: LockedAtomic<Media>) -> Self {
+		rc.read().unwrap().clone()
+	}
+}
+
 /**
  * ChunkId is meant for Views
  * It turns an Rc<Media> to an Id String
@@ -54,6 +61,8 @@ impl From<&LockedAtomic<Media>> for MediaId {
 		Self(rc.read().unwrap().id.clone())
 	}
 }
+
+
 pub enum SortType {
 	Created,
 }

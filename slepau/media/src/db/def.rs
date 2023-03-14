@@ -1,5 +1,9 @@
-use super::{task::{TaskCriteria, Task}, version::{VersionString, VersionReference, Version}, Media, MediaId, DB};
-use common::utils::{ get_secs, LockedAtomic, CACHE_FOLDER};
+use super::{
+	task::{Task, TaskCriteria},
+	version::{Version, VersionReference, VersionString},
+	Media, MediaId, DB,
+};
+use common::utils::{get_secs, DbError, LockedAtomic, CACHE_FOLDER};
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -106,6 +110,14 @@ impl DB {
 			self._tick(&v);
 			v
 		}
+	}
+	pub fn del(&mut self, id: MediaId) -> Result<LockedAtomic<Media>, DbError> {
+		self.task_queue.retain(|task| task._ref.id != id);
+		self.by_owner.iter_mut().for_each(|(_, ids)| {
+			ids.remove(&id);
+		});
+
+		self.media.remove(&id).ok_or(DbError::NotFound)
 	}
 }
 

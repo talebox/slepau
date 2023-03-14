@@ -91,7 +91,7 @@ pub fn standardize(v: &str) -> String {
 /**
  * Describes a handled error.
  */
-#[derive(Debug, PartialEq, Serialize, Eq)]
+#[derive(Debug, PartialEq, Serialize, Eq, Clone)]
 pub enum DbError {
 	UserTaken,
 	AuthError,

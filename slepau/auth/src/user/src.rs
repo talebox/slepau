@@ -34,8 +34,11 @@ impl User {
 		)
 	}
 	pub fn new(user: &str, pass: &str) -> Result<Self, DbError> {
-		if !REGEX_USERNAME.is_match(user) || BLACKLIST.iter().any(|v| user.contains(v)) {
+		if !REGEX_USERNAME.is_match(user) {
 			return Err(DbError::InvalidUsername(REGEX_USERNAME_HUMAN.as_str()));
+		}
+		if BLACKLIST.iter().any(|v| user == *v) {
+			return Err(DbError::InvalidUsername("Username blacklisted... :|"));
 		}
 
 		Ok(Self {

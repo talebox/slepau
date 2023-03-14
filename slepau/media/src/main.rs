@@ -1,3 +1,5 @@
+#![feature(result_flattening)]
+
 use auth::validate::index_service_user;
 use axum::{
 	error_handling::HandleErrorLayer,
@@ -8,7 +10,8 @@ use axum::{
 
 use common::{
 	http::assets_service,
-	utils::{log_env, SOCKET, URL, WEB_DIST}, socket::ResourceMessage,
+	socket::ResourceMessage,
+	utils::{log_env, SOCKET, URL, WEB_DIST},
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -74,7 +77,7 @@ pub async fn main() {
 		.route("/stream", get(socket::websocket_handler))
 		.route_layer(from_fn(auth::validate::flow::auth_required))
 		.route("/media", post(ends::media_post))
-		.route("/media/:id", get(ends::media_get))
+		.route("/media/:id", get(ends::media_get).patch(ends::media_patch).delete(ends::media_delete))
 		.route("/api/media/:id", get(ends::media_get))
 		.route("/stats", get(ends::stats))
 		.fallback(ends::home_service)
@@ -132,8 +135,8 @@ pub async fn main() {
 	info!("Waiting for everyone to shutdown.");
 	let _server_r = join!(server, conversion_service, load_existing_handle);
 	info!("Everyone's shut down!");
-	
+
 	common::init::save(&*db.read().unwrap());
-	
+
 	info!("Goodbye!");
 }

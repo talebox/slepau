@@ -13,7 +13,7 @@ use std::{
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 use super::meta::FileMeta;
-use super::version::{Version, VersionReference};
+use super::version::{Max, Version, VersionReference};
 use super::{Media, DB};
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -60,9 +60,9 @@ impl Hash for Task {
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
-fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), DbError> {
+fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), (VersionReference, DbError)> {
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(_ref.id.to_quint());
-	let data = std::fs::read(&path).map_err(|e| DbError::NotFound)?;
+	let data = std::fs::read(&path).map_err(|e| (_ref.clone(), DbError::NotFound))?;
 
 	let meta: FileMeta = (&data).into();
 	let version: Version = (&_ref.version).into();
@@ -93,23 +93,34 @@ fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), DbE
 			}
 		}
 
-		if let Some(max) = version.size {
+		if let Some(max) = version.max {
 			let mut width = img.width() as f32;
 			let mut height = img.height() as f32;
-			let max = max as f32;
-			let max_to_current = max / (width * height).sqrt();
-			// info!("Max to current {max_to_current}");
-			if max_to_current < 1. {
-				width = width * max_to_current;
-				height = height * max_to_current;
+
+			match max {
+				Max::Absolute(x, y) => {
+					if let Some(x) = x {
+						width = x as f32
+					}
+					if let Some(y) = y {
+						height = y as f32
+					}
+				}
+				Max::Area(area) => {
+					let max_area = area as f32;
+					let max_to_current = (max_area / (width * height)).sqrt();
+					if max_to_current < 1. {
+						width = width * max_to_current;
+						height = height * max_to_current;
+					}
+				}
 			}
-			// info!("new width {width}, new height {height}");
 			img = img.resize(width.round() as u32, height.round() as u32, FilterType::Triangle);
 		}
 
 		if let Some(_type) = version._type {
 			format = ImageFormat::from_mime_type(_type.clone())
-				.ok_or_else(|| DbError::from(format!("Unknown image type '{}'.", _type)))?;
+				.ok_or_else(|| (_ref.clone(), DbError::from(format!("Unknown image type '{}'.", _type))))?;
 		}
 
 		let mut _out = BufWriter::new(Cursor::new(vec![]));
@@ -119,7 +130,10 @@ fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), DbE
 		img.write_to(&mut _out, format_out).unwrap();
 		return Ok((_ref, _out.into_inner().unwrap().into_inner().into()));
 	} else {
-		return Err(format!("Can't convert from unknown type '{}'.", meta._type).into());
+		return Err((
+			_ref,
+			format!("Can't convert from unknown type '{}'.", meta._type).into(),
+		));
 	}
 }
 
@@ -156,44 +170,64 @@ pub async fn conversion_service(
 				break;
 			}
 			r = handles.join_next(), if handles.len() > 0 => {
-				if let Ok((_ref, data)) = r.unwrap().unwrap().unwrap() {
 
-					let task;
-					{
-						let mut db = db.write().unwrap();
-						task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
-					}
-					if let Some(task) = task {
-						let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
-
-						let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
-						if !out_folder.exists() {
-							tokio::fs::create_dir(out_folder).await.unwrap();
-						}
-						let out_path = out_folder.join(task._ref.to_filename());
-
-						// info!("Writing {task:?} to {out_path:?}");
-						let meta: FileMeta = (&data).into();
-						tokio::fs::write(out_path, data).await.unwrap();
+				match r.unwrap().flatten().unwrap() {
+					Ok((_ref, data)) => {
+						let task;
 						{
-							let m = db.write().unwrap().get(task._ref.id).unwrap();
-							let mut m = m.write().unwrap();
-							// Only modify time/meta on versioninfo
-							let mut info = m.versions.get(&task._ref.version).cloned().unwrap_or_default();
-							info.time = time.as_secs_f32();
-							info.meta = meta;
+							let mut db = db.write().unwrap();
+							task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
+						}
+						if let Some(task) = task {
+							let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
 
-							m.versions.insert(task._ref.version, info);
+							let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
+							if !out_folder.exists() {
+								tokio::fs::create_dir(out_folder).await.unwrap();
+							}
+							let out_path = out_folder.join(task._ref.to_filename());
+
+							// info!("Writing {task:?} to {out_path:?}");
+							let meta: FileMeta = (&data).into();
+							tokio::fs::write(out_path.clone(), data).await.unwrap();
+							{
+								let m = db.read().unwrap().get(task._ref.id);
+								if let Some(m) = m {
+									let mut m = m.write().unwrap();
+									// Only modify time/meta on versioninfo
+									let mut info = m.versions.get(&task._ref.version).cloned().unwrap_or_default();
+									info.time = time.as_secs_f32();
+									info.meta = meta;
+
+									m.versions.insert(task._ref.version, info);
+								}else {
+									// Remove the file, most likely the entry was deleted.
+									tokio::fs::remove_file(out_path).await.ok();
+								}
+							}
+							// Notify
+							for callback in task.callbacks {
+								callback.send(Ok(())).ok();
+							}
+							// Notify
+							tx_resource.send(format!("media/{}", task._ref.id).as_str().into()).ok();
 						}
-						// Notify
-						for callback in task.callbacks {
-							callback.send(Ok(())).ok();
+					}
+					Err((_ref, err)) => {
+						let task;
+						{
+							let mut db = db.write().unwrap();
+							task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
 						}
-						// Notify
-						tx_resource.send("media".into()).ok();
+						if let Some(task) = task {
+							for callback in task.callbacks {
+								callback.send(Err(err.clone())).ok();
+							}
+						}
 					}
 				}
 			}
+
 			Some(task) = task_rx.recv() => {
 				let mut db = db.write().unwrap();
 				let _task = db.task_queue.iter_mut().find(|v| v._ref == task._ref);
@@ -209,23 +243,4 @@ pub async fn conversion_service(
 	}
 
 	info!("Aborting all handles.");
-}
-
-#[cfg(test)]
-mod test {
-	use crate::db::version::VersionString;
-
-	#[test]
-	fn version_string() {
-		assert_eq!(
-			"type=\"img/test\"",
-			VersionString::from("type=img/test").0,
-			"Should parse strings without quotes correctly."
-		);
-		assert_eq!(
-			"size=100&type=\"img/test\"",
-			VersionString::from("size=100&type=img/test").0,
-			"Should only allow Version key and should reorder alphabetically."
-		);
-	}
 }

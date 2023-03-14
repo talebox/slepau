@@ -2,7 +2,7 @@ TITLE = "^# +([^\\n\\-=>]*\\w+[^\\n\\-=>]*)(?:[-=]?> *((?:,? *(?:_?[aioubdfghjkl
 ACCESS = "^(?:share|access): *((?: *,? *[a-z0-9_]{3,15} +(?:r|w|a|read|write|admin))+) *$"
 PROQUINT = "(?:_?[aioubdfghjklmnprstvz]{5})+"
 USERNAME = "^[a-z0-9_]{3,15}$"
-USERNAME_HUMAN = "Characters and digits only, min 3, max 15"
+USERNAME_HUMAN = "Lowercase, underscore, and digits only, min 3, max 15"
 PASSWORD = "^.{6,64}$"
 PASSWORD_HUMAN = "Minimum 6, max 64"
 PROPERTY = "^([a-z0-9_]+): (.*)$"

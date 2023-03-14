@@ -15,6 +15,11 @@ fn users() {
 		db.new_user("Nana3", "1234", site_id).is_err(),
 		"Username characters invalid, only lowercase"
 	);
+	assert_eq!(
+		db.new_user("isa", "123445", site_id),
+		Ok(()),
+		"Username characters valid, should succeed!"
+	);
 	assert!(
 		db.new_user("Nana&", "1234", site_id).is_err(),
 		"Username characters invalid, no special"
@@ -43,6 +48,7 @@ fn users() {
 		db.login("nana", "wrong_pass", Some(site_id)).is_err(),
 		"User nana doesn't exist"
 	);
+
 	assert!(db.login("nina", "nina's pass", Some(site_id)).is_ok(), "Login success");
 }
 

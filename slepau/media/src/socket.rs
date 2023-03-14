@@ -15,7 +15,7 @@ use axum::{
 };
 
 use common::{
-	socket::{MessageType, ResourceMessage, SocketMessage, ResourceSender},
+	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
 	utils::LockedAtomic,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
@@ -32,8 +32,6 @@ use crate::db::{
 	view::{MediaVec, SortType},
 	MediaId, DB,
 };
-
-
 
 pub async fn websocket_handler(
 	ws: WebSocketUpgrade,
@@ -65,7 +63,7 @@ async fn handle_socket(
 		let mut chunks: MediaVec = db.read().unwrap().get_all().into();
 		chunks.sort(SortType::Created);
 
-		json!(Vec::<crate::db::view::MediaId>::from(chunks))
+		json!(Vec::<crate::db::Media>::from(chunks))
 	};
 
 	// Keep last resource id so when we're sending
@@ -106,72 +104,26 @@ async fn handle_socket(
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let mut piece = res.pop_front();
 
-			if piece == Some("views") {
+			if piece == Some("media") {
+				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
+				if let Some(id) = root_id {
+					return reply((&db.read().unwrap().get(id).map(|v| crate::db::Media::from(v))).into());
+				} else {
+					error!("Media request needs an id");
+					return None;
+				}
+			} else if piece == Some("views") {
 				piece = res.pop_front();
 				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
+
 				if piece == Some("all") {
 					return reply((&get_all()).into());
 				}
-				error!("View needs name");
+				error!("View '{piece:?}' not recognized");
 				return None;
 			}
 
-			// if piece == Some("media") {
-			// 	if let Some(id) = res.pop_front().map(|id| MediaId::from_quint(id).expect("a MediaId.")) {
-			// 		piece = res.pop_front();
-
-			// 		if piece == Some("value") {
-			// 			if let Some(value) = m.value {
-			// 				// User wants to change a value
-			// 				let db_chunk: DBChunk = (id.into(), value.as_str()).into();
-			// 				match db.write().unwrap().update_chunk(db_chunk, user) {
-			// 					Ok((users_to_notify, diff, db_chunk)) => {
-			// 						let users = db_chunk.read().unwrap().access_users();
-			// 						let m = ResourceMessage::from((format!("chunks/{}/value/diff", id).as_str(), users.clone(), &diff));
-			// 						{
-			// 							// Update our resource_id_last so we don't send the same data back when sending a signal to tx_resource
-			// 							let mut resource_id_last = resource_id_last.write().unwrap();
-			// 							*resource_id_last = m.id;
-			// 						}
-			// 						tx_resource.send(m).unwrap();
-			// 						tx_resource
-			// 							.send(ResourceMessage::from((
-			// 								format!("chunks/{}", id).as_str(),
-			// 								users,
-			// 								&ChunkView::from((db_chunk, user.as_str(), ViewType::Edit)),
-			// 							)))
-			// 							.unwrap();
-
-			// 						if !users_to_notify.is_empty() {
-			// 							tx_resource
-			// 								.send(ResourceMessage::from(("chunks", users_to_notify)))
-			// 								.unwrap();
-			// 						}
-
-			// 						return reply(MessageType::Ok.into());
-			// 					}
-			// 					Err(err) => return reply((MessageType::Error, &format!("{err:?}")).into()),
-			// 				}
-			// 			} else {
-			// 				// Request for "chunks/<id>/value"
-			// 				if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-			// 					return reply((&ChunkValue::from(v)).into());
-			// 				}
-			// 			}
-			// 		} else if piece.is_none() {
-			// 			if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-			// 				return reply((&ChunkView::from((v, user.as_str(), ViewType::Edit))).into());
-			// 			}
-			// 		}
-
-			// 		return reply((MessageType::Error, &"NotFound".to_string()).into());
-			// 	} else {
-			// 		// Request for "chunks"
-			// 		// return reply((&get_notes()).into());
-			// 	}
-			// }
-
-			error!("Message {m:?} unknown");
+			error!("{m:?} unknown");
 		}
 
 		None

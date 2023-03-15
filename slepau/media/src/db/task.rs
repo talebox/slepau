@@ -61,7 +61,7 @@ impl Hash for Task {
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
-fn do_convert(_ref: VersionReference) -> Result<(VersionReference, PathBuf), (VersionReference, DbError)> {
+fn do_convert(_ref: VersionReference) -> Result<(VersionReference, FileMeta, PathBuf), (VersionReference, DbError)> {
 	let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
 	if !out_folder.exists() {
 		std::fs::create_dir(out_folder).unwrap();
@@ -75,7 +75,7 @@ fn do_convert(_ref: VersionReference) -> Result<(VersionReference, PathBuf), (Ve
 
 	if meta._type.starts_with("image") {
 		// let mut format = image::guess_format(&data).unwrap();
-		let format = ImageFormat::from_mime_type(meta._type.clone()).ok_or_else(|| {
+		let mut format = ImageFormat::from_mime_type(meta._type.clone()).ok_or_else(|| {
 			(
 				_ref.clone(),
 				DbError::from(format!("Unknown image type '{}'.", meta._type)),
@@ -143,9 +143,14 @@ fn do_convert(_ref: VersionReference) -> Result<(VersionReference, PathBuf), (Ve
 		// let mut _out = BufWriter::new(Cursor::new(vec![]));
 
 		// let format_out = ImageOutputFormat::from(format);
+		
 
 		img.save_with_format(path_out.clone(), format).unwrap();
-		return Ok((_ref, path_out));
+		
+		
+		
+		let meta = FileMeta::from_path(&path_out);
+		return Ok((_ref, meta, path_out));
 	} else {
 		return Err((
 			_ref,
@@ -199,7 +204,7 @@ pub async fn conversion_service(
 			r = handles.join_next(), if handles.len() > 0 => {
 
 				match r.unwrap().flatten().unwrap() {
-					Ok((_ref, data)) => {
+					Ok((_ref, meta, out_path)) => {
 						let task;
 						{
 							let mut db = db.write().unwrap();
@@ -210,7 +215,7 @@ pub async fn conversion_service(
 							let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
 
 							// let meta: FileMeta = (&data).into();
-							tokio::fs::write(out_path.clone(), data).await.unwrap();
+							// tokio::fs::write(out_path.clone(), data).await.unwrap();
 							{
 								let m = db.read().unwrap().get(task._ref.id);
 								if let Some(m) = m {
@@ -248,7 +253,6 @@ pub async fn conversion_service(
 					}
 				}
 			}
-
 			Some(task) = task_rx.recv() => {
 				let mut db = db.write().unwrap();
 				let _task = db.task_queue.iter_mut().find(|v| v._ref == task._ref);

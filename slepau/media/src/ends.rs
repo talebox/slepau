@@ -148,6 +148,7 @@ pub struct MediaPatch {
 	name: Option<String>,
 }
 
+
 pub async fn media_patch(
 	Path(id): Path<MediaId>,
 	Extension(db): Extension<LockedAtomic<DB>>,

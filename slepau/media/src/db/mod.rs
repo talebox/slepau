@@ -66,6 +66,11 @@ pub struct DB {
 
 	task_queue: VecDeque<task::Task>,
 }
+impl DB {
+	pub fn tasks_len(&self) -> usize {
+		self.task_queue.len()
+	}
+}
 impl Default for DB {
 	fn default() -> Self {
 		Self {

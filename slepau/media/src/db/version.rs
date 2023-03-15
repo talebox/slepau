@@ -87,9 +87,13 @@ impl From<(MediaId, VersionString)> for VersionReference {
 	}
 }
 impl VersionReference {
-	pub fn to_filename(&self) -> String {
+	pub fn filename_in(&self) -> String {
+		self.id.to_quint()
+	}
+	pub fn filename_out(&self) -> String {
 		get_hash(self).to_quint()
 	}
+	
 }
 
 impl From<&Version> for VersionString {

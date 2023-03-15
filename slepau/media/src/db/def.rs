@@ -39,7 +39,7 @@ impl DB {
 			}
 			let version_string = version.into();
 			m.versions.get(&version_string).map(|_| {
-				std::path::Path::new(CACHE_FOLDER.as_str()).join(VersionReference::from((m.id, version_string)).to_filename())
+				std::path::Path::new(CACHE_FOLDER.as_str()).join(VersionReference::from((m.id, version_string)).filename_out())
 			})
 		};
 

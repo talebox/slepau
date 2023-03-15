@@ -104,7 +104,9 @@ async fn handle_socket(
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let mut piece = res.pop_front();
 
-			if piece == Some("media") {
+			if piece == Some("tasks") {
+				return reply((&db.read().unwrap().tasks_len()).into());
+			} else if piece == Some("media") {
 				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
 				if let Some(id) = root_id {
 					return reply((&db.read().unwrap().get(id).map(|v| crate::db::Media::from(v))).into());

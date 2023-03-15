@@ -1,10 +1,11 @@
-use common::socket::ResourceMessage;
+use common::socket::{ResourceMessage, SocketMessage};
 use common::utils::{DbError, LockedAtomic, CACHE_FOLDER};
 use image::imageops::FilterType;
 use image::{ImageFormat, ImageOutputFormat};
 use log::info;
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{
 	hash::{Hash, Hasher},
 	io::{BufWriter, Cursor},
@@ -60,16 +61,32 @@ impl Hash for Task {
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
-fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), (VersionReference, DbError)> {
-	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(_ref.id.to_quint());
-	let data = std::fs::read(&path).map_err(|e| (_ref.clone(), DbError::NotFound))?;
+fn do_convert(_ref: VersionReference) -> Result<(VersionReference, PathBuf), (VersionReference, DbError)> {
+	let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
+	if !out_folder.exists() {
+		std::fs::create_dir(out_folder).unwrap();
+	}
+	let path_in = std::path::Path::new(MEDIA_FOLDER.as_str()).join(_ref.filename_in());
+	let path_out = out_folder.join(_ref.filename_out());
 
-	let meta: FileMeta = (&data).into();
+	// let data = std::fs::read(&path).map_err(|e| (_ref.clone(), DbError::NotFound))?;
+	let meta = FileMeta::from_path(&path_in);
 	let version: Version = (&_ref.version).into();
 
 	if meta._type.starts_with("image") {
-		let mut format = image::guess_format(&data).unwrap();
-		let mut img = image::load_from_memory_with_format(&data, format.clone()).unwrap();
+		// let mut format = image::guess_format(&data).unwrap();
+		let format = ImageFormat::from_mime_type(meta._type.clone()).ok_or_else(|| {
+			(
+				_ref.clone(),
+				DbError::from(format!("Unknown image type '{}'.", meta._type)),
+			)
+		})?;
+
+		let mut img = image::load(
+			std::io::BufReader::new(std::fs::File::open(path_in).ok().unwrap()),
+			format.clone(),
+		)
+		.unwrap();
 
 		if let Some(orientation) = meta.exif.and_then(|v| {
 			v.to_exif()
@@ -123,12 +140,12 @@ fn do_convert(_ref: VersionReference) -> Result<(VersionReference, Vec<u8>), (Ve
 				.ok_or_else(|| (_ref.clone(), DbError::from(format!("Unknown image type '{}'.", _type))))?;
 		}
 
-		let mut _out = BufWriter::new(Cursor::new(vec![]));
+		// let mut _out = BufWriter::new(Cursor::new(vec![]));
 
-		let format_out = ImageOutputFormat::from(format);
+		// let format_out = ImageOutputFormat::from(format);
 
-		img.write_to(&mut _out, format_out).unwrap();
-		return Ok((_ref, _out.into_inner().unwrap().into_inner().into()));
+		img.save_with_format(path_out.clone(), format).unwrap();
+		return Ok((_ref, path_out));
 	} else {
 		return Err((
 			_ref,
@@ -146,10 +163,16 @@ pub async fn conversion_service(
 	let mut handles = tokio::task::JoinSet::new();
 
 	let cpus = num_cpus::get();
+	let send_tasks = |db: &DB| {
+		tx_resource
+			.send(SocketMessage::from(("tasks", &db.tasks_len())).into())
+			.ok();
+	};
 	loop {
 		// This loop fills the JoinSet with tasks.
 		{
 			let mut db = db.write().unwrap();
+			let mut spawned = false;
 			loop {
 				if handles.len() >= cpus {
 					break;
@@ -159,9 +182,13 @@ pub async fn conversion_service(
 					task.started = Some(Instant::now());
 					let _ref = task._ref.to_owned();
 					handles.spawn(tokio::task::spawn_blocking(move || do_convert(_ref)));
+					spawned = true;
 				} else {
 					break;
 				}
+			}
+			if spawned {
+				send_tasks(&db);
 			}
 		}
 
@@ -177,18 +204,12 @@ pub async fn conversion_service(
 						{
 							let mut db = db.write().unwrap();
 							task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
+							send_tasks(&db);
 						}
 						if let Some(task) = task {
 							let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
 
-							let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
-							if !out_folder.exists() {
-								tokio::fs::create_dir(out_folder).await.unwrap();
-							}
-							let out_path = out_folder.join(task._ref.to_filename());
-
-							// info!("Writing {task:?} to {out_path:?}");
-							let meta: FileMeta = (&data).into();
+							// let meta: FileMeta = (&data).into();
 							tokio::fs::write(out_path.clone(), data).await.unwrap();
 							{
 								let m = db.read().unwrap().get(task._ref.id);
@@ -236,6 +257,7 @@ pub async fn conversion_service(
 					_task.callbacks.extend(task.callbacks)
 				}else{
 					db.task_queue.push_front(task);
+					// send_tasks(&db);
 				}
 			}
 			_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}

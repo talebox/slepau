@@ -126,7 +126,7 @@ pub async fn media_delete(
 		.versions
 		.iter()
 		.map(|version| {
-			tokio::fs::remove_file(cache.join(VersionReference::from((media.id, version.0.clone())).to_filename()))
+			tokio::fs::remove_file(cache.join(VersionReference::from((media.id, version.0.clone())).filename_out()))
 		})
 		.collect::<Vec<_>>();
 

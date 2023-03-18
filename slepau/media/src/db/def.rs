@@ -1,5 +1,5 @@
 use super::{
-	task::{Task, TaskCriteria},
+	task::{Task, TaskCriteria, TaskQuery},
 	version::{Version, VersionReference, VersionString},
 	Media, MediaId, DB,
 };
@@ -60,12 +60,13 @@ impl DB {
 		let id = media.read().unwrap().id;
 		let initial_versions = self.initial_versions.clone();
 
-		initial_versions.iter().for_each(|(criteria, versions)| {
+		initial_versions.iter().for_each(|(criteria, queries)| {
 			if criteria.matches(&media.read().unwrap()) {
-				versions.iter().for_each(|version| {
+				queries.iter().for_each(|query| {
+					
 					// If we can't find a path to the version
-					if self.version_path(&(id, version.clone()).into()).is_none() {
-						let _ref = (id, version.clone()).into();
+					if self.version_path(&(id, query.version.clone()).into()).is_none() {
+						let _ref = (id, query.version.clone()).into();
 						// If you can't find a task with that version reference
 						if self.task_queue.iter().find(|v| v._ref == _ref).is_none() {
 							// Schedule a task for it
@@ -145,7 +146,7 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 #[serde(default)]
 pub struct DBData {
 	allow_public_post: bool,
-	initial_versions: HashMap<TaskCriteria, HashSet<VersionString>>,
+	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
 	media: Vec<Media>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 }

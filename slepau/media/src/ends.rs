@@ -1,7 +1,7 @@
 use auth::UserClaims;
 use axum::{
 	body::{Bytes, HttpBody, StreamBody},
-	extract::{Path, Query, RawBody},
+	extract::{BodyStream, Path, Query, RawBody},
 	http::header,
 	response::{IntoResponse, Response},
 	Extension, Json,
@@ -18,14 +18,14 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use lazy_static::lazy_static;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 
 use media::{MatcherType, MEDIA_FOLDER};
 
 use crate::db::{
 	task::Task,
-	version::{Version, VersionReference, Max},
+	version::{Max, Version, VersionReference},
 	DBStats, Media, MediaId, DB,
 };
 
@@ -66,7 +66,7 @@ pub async fn media_get(
 	Extension(tx_task): Extension<tokio::sync::mpsc::Sender<Task>>,
 ) -> Result<impl IntoResponse, Response> {
 	// Try getting the version, else prioritize the version
-	
+
 	version.max = version.max.or_else(|| Some(Max::Absolute(Some(300), Some(300))));
 
 	let version_ref = (id, (&version).into()).into();
@@ -148,7 +148,6 @@ pub struct MediaPatch {
 	name: Option<String>,
 }
 
-
 pub async fn media_patch(
 	Path(id): Path<MediaId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
@@ -157,7 +156,9 @@ pub async fn media_patch(
 	let media = db.read().unwrap().get(id).ok_or(DbError::NotFound)?;
 	let mut media = media.write().unwrap();
 
-	if let Some(v) = media_patch.name {media.name = v}
+	if let Some(v) = media_patch.name {
+		media.name = v
+	}
 
 	Ok(Json(media.clone()))
 }
@@ -170,6 +171,8 @@ pub struct MediaPostResponse {
 	_type: infer::MatcherType,
 }
 
+use futures::StreamExt;
+
 /// Body arrives, we write to disk and return id
 ///
 /// Conversion happens after.
@@ -177,7 +180,7 @@ pub async fn media_post(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(tx_resource): Extension<ResourceSender>,
 	Extension(user_claims): Extension<UserClaims>,
-	body: RawBody,
+	mut body: BodyStream,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
 	if !path.exists() {
@@ -185,22 +188,31 @@ pub async fn media_post(
 		info!("Created media folder at '{}'.", path.to_string_lossy());
 	}
 
-	const MAX_ALLOWED_RESPONSE_SIZE: u64 = 1024 * 1024 * 100; // 100mb;
-
-	// Check if body isn't too big
-	if body.0.size_hint().upper().map(|v| v < MAX_ALLOWED_RESPONSE_SIZE) != Some(true) {
-		return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("Body > 100mb")));
-	}
-
-	// Get the body
-	let body = to_bytes(body.0).await.unwrap();
+	const MAX_ALLOWED_MEDIA_SIZE: usize = 1024 * 1024 * 100; // 100mb;
 
 	let id = db.read().unwrap().new_id();
-
-	// Write to disk
 	let path = path.join(id.to_quint());
-	tokio::fs::write(path, &body).await.unwrap();
-	let media = db.write().unwrap().add((id, &body.to_vec()).into(), user_claims.user);
+	{
+		let mut file = tokio::fs::File::create(path.clone()).await.unwrap();
+
+		let mut size = 0;
+		while let Some(Ok(mut chunk)) = body.next().await {
+			info!("write chunk {}", chunk.len());
+			size += chunk.len();
+			if size >= MAX_ALLOWED_MEDIA_SIZE {
+				return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("Body > 100mb")));
+			}
+			file.write_buf(&mut chunk).await.unwrap();
+		}
+		info!("write total {}", size);
+
+		// Reset file position
+		// file.seek(std::io::SeekFrom::Start(0));
+		
+		file.sync_all().await.unwrap();
+	}
+
+	let media = db.write().unwrap().add((id, &path).into(), user_claims.user);
 	let media = media.read().unwrap().clone();
 
 	// Notify

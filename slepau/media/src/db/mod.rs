@@ -4,7 +4,13 @@ use common::{
 };
 use proquint::Quintable;
 use serde::{Deserialize, Serialize};
-use std::collections::{ HashMap, HashSet, VecDeque};
+use serde_json::json;
+use std::{
+	collections::{HashMap, HashSet, VecDeque},
+	path::PathBuf,
+};
+
+use self::{task::{TaskCriteria, TaskQuery}, version::VersionString};
 
 pub mod def;
 pub mod meta;
@@ -36,6 +42,17 @@ pub struct VersionInfo {
 	meta: meta::FileMeta,
 	count: usize,
 }
+
+impl From<(MediaId, &PathBuf)> for Media {
+	fn from((id, path): (MediaId, &PathBuf)) -> Self {
+		Self {
+			id,
+			meta: meta::FileMeta::from_path(path),
+			..Default::default()
+		}
+	}
+}
+
 impl From<&Vec<u8>> for Media {
 	fn from(value: &Vec<u8>) -> Self {
 		Self {
@@ -59,7 +76,9 @@ pub struct DB {
 	/// Allows new media by public user
 	allow_public_post: bool,
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
-	initial_versions: HashMap<task::TaskCriteria, HashSet<version::VersionString>>,
+	///
+	/// Value is "version" = task_replace_bool
+	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
 
 	media: HashMap<MediaId, LockedAtomic<Media>>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
@@ -75,8 +94,8 @@ impl Default for DB {
 	fn default() -> Self {
 		Self {
 			allow_public_post: false,
-			initial_versions: Default::default(),
-			// initial_versions: serde_json::from_value(json!({"image": ["type=image/webp"]})).unwrap(),
+			// initial_versions: Default::default(),
+			initial_versions: serde_json::from_value(json!({"video": [{"version":"type=video/webm", "replace": false}]})).unwrap(),
 			media: Default::default(),
 			by_owner: Default::default(),
 			task_queue: Default::default(),

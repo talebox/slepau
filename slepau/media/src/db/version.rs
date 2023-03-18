@@ -51,6 +51,10 @@ impl Serialize for Max {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Max {
 	Absolute(Option<usize>, Option<usize>),
+	/// Defines a max ^2 squared size for the image.
+	///
+	/// Such a way that if max = 100, that means image will be capped at 100*100 px.
+	/// That means image can be 10 * 1000, or 1 * 10000, this cap is only pixel-wize.
 	Area(usize),
 }
 
@@ -59,12 +63,23 @@ pub enum Max {
 pub struct Version {
 	#[serde(rename = "type", skip_serializing_if = "Option::is_none")]
 	pub _type: Option<String>,
-	/// Defines a max ^2 squared size for the image.
-	///
-	/// Such a way that if max = 100, that means image will be capped at 100*100 px.
-	/// That means image can be 10 * 1000, or 1 * 10000, this cap is only pixel-wize.
+
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub max: Option<Max>,
+
+	/// Codec video
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub c_v: Option<String>,
+	/// Codec audio
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub c_a: Option<String>,
+
+	/// Bitrate video
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub b_v: Option<String>,
+	/// Bitrate audio
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub b_a: Option<String>,
 }
 /// Encodes a version as a string.
 ///
@@ -93,7 +108,6 @@ impl VersionReference {
 	pub fn filename_out(&self) -> String {
 		get_hash(self).to_quint()
 	}
-	
 }
 
 impl From<&Version> for VersionString {

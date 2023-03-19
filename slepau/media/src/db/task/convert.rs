@@ -100,47 +100,57 @@ pub fn do_convert(
 		info!("In {}, out {}", path_in.to_str().unwrap(), path_out.to_str().unwrap());
 
 		let mut command = std::process::Command::new("ffmpeg");
-		command.args([
-			"-i",
-			path_in.to_str().unwrap(),
-		]);
-		
-		// Codec video
-		let c_v = version.c_v.or_else(|| Some("libsvtav1".into()));
-		if let Some(c_v) = c_v {
+		command.args(["-i", path_in.to_str().unwrap()]);
+
+		if version._type.clone().map(|t| t.starts_with("image")) == Some(true) {
+			// Export first frame as an image
+			// ffmpeg -i inputfile.mkv -vf "select=eq(n\,0)" -q:v 3 output_image.jpg
+
+			command.args(["-frames:v", "1", "-f", "image2"]);
+			
 			command.args([
 				"-c:v",
-				c_v.as_str(),
+				version
+					._type
+					.and_then(|t| t.split("/").last().map(|t| t.to_string()))
+					.or(version.c_v)
+					.unwrap_or_else(|| "webp".into())
+					.as_str(),
 			]);
-		}
-		// Codec audio
-		if let Some(c_a) = version.c_a {
+			
+		} else {
+			// Set video output options
+
+			// Codec video
+			let c_v = version.c_v.or_else(|| Some("libsvtav1".into()));
+			if let Some(c_v) = c_v {
+				command.args(["-c:v", c_v.as_str()]);
+			}
+			// Codec audio
+			if let Some(c_a) = version.c_a {
+				command.args(["-c:a", c_a.as_str()]);
+			}
+
+			// Bitrate video
+			let b_v = version.b_v.or_else(|| Some("1M".into()));
+			if let Some(b_v) = b_v {
+				command.args(["-b:v", b_v.as_str()]);
+			}
+			// Bitrate audio
+			if let Some(b_a) = version.b_a {
+				command.args(["-b:a", b_a.as_str()]);
+			}
+
 			command.args([
-				"-c:a",
-				c_a.as_str(),
+				"-f",
+				version
+					._type
+					.and_then(|t| t.split("/").last().map(|t| t.to_string()))
+					.unwrap_or_else(|| "webm".into())
+					.as_str(),
 			]);
 		}
-		
-		// Bitrate video
-		let b_v = version.b_v.or_else(|| Some("1M".into()));
-		if let Some(b_v) = b_v {
-			command.args([
-				"-b:v",
-				b_v.as_str(),
-			]);
-		}
-		// Bitrate audio
-		if let Some(b_a) = version.b_a {
-			command.args([
-				"-b:a",
-				b_a.as_str(),
-			]);
-		}
-		
-		command.args([
-			"-f",
-			version._type.and_then(|t| t.split("/").last().map(|t| t.to_string())).unwrap_or_else(|| "webm".into()).as_str(),
-		]);
+
 		command.arg(path_out.to_str().unwrap());
 
 		command.output().unwrap();

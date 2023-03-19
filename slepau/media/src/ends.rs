@@ -67,7 +67,7 @@ pub async fn media_get(
 ) -> Result<impl IntoResponse, Response> {
 	// Try getting the version, else prioritize the version
 
-	version.max = version.max.or_else(|| Some(Max::Absolute(Some(300), Some(300))));
+	// version.max = version.max.or_else(|| Some(Max::Absolute(Some(300), Some(300))));
 
 	let version_ref = (id, (&version).into()).into();
 	let mut path = db.read().unwrap().version_path(&version_ref);

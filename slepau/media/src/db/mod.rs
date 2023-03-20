@@ -10,7 +10,10 @@ use std::{
 	path::PathBuf,
 };
 
-use self::{task::{TaskCriteria, TaskQuery}, version::VersionString};
+use self::{
+	task::{TaskCriteria, TaskQuery},
+	version::VersionString,
+};
 
 pub mod def;
 pub mod meta;
@@ -29,10 +32,45 @@ pub struct Media {
 	pub name: String,
 	pub meta: meta::FileMeta,
 	pub versions: HashMap<version::VersionString, VersionInfo>,
+	
 	/// Media record creation time
 	///
 	/// Note: this is not the image's metadata creation time
 	pub created: u64,
+}
+#[derive(Default, Serialize)]
+pub struct MediaStats {
+	/// The size, in bytes
+	pub size: usize,
+}
+impl std::ops::Add<Self> for MediaStats {
+	type Output = Self;
+	fn add(self, rhs: Self) -> Self::Output {
+		Self {
+			size: self.size + rhs.size,
+		}
+	}
+}
+impl From<&LockedWeak<Media>> for MediaStats {
+	fn from(value: &LockedWeak<Media>) -> Self {
+		value
+			.upgrade()
+			.map(|v| {
+				let v = v.read().unwrap();
+				Self {
+					size: v.meta.size + v.versions.values().fold(0, |a, v| a + v.meta.size),
+				}
+			})
+			.unwrap_or_default()
+	}
+}
+impl<'a> FromIterator<&'a LockedWeak<Media>> for MediaStats {
+	fn from_iter<T: IntoIterator<Item = &'a LockedWeak<Media>>>(iter: T) -> Self {
+		iter
+			.into_iter()
+			.map(|v| Self::from(v))
+			.fold(Default::default(), |a, v| a + v)
+	}
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
@@ -73,15 +111,15 @@ impl From<(MediaId, &Vec<u8>)> for Media {
 
 #[derive(Debug)]
 pub struct DB {
-	/// Allows new media by public user
-	allow_public_post: bool,
+	/// Should we allow new media by `public` user?
+	pub allow_public_post: bool,
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
 	///
 	/// Value is "version" = task_replace_bool
 	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
 
 	media: HashMap<MediaId, LockedAtomic<Media>>,
-	by_owner: HashMap<String, HashSet<MediaId>>,
+	by_owner: HashMap<String, Vec<LockedWeak<Media>>>,
 
 	task_queue: VecDeque<task::Task>,
 }
@@ -94,8 +132,8 @@ impl Default for DB {
 	fn default() -> Self {
 		Self {
 			allow_public_post: false,
-			// initial_versions: Default::default(),
-			initial_versions: serde_json::from_value(json!({"video": [{"version":"type=video/webm", "replace": false}]})).unwrap(),
+			initial_versions: Default::default(),
+			// initial_versions: serde_json::from_value(json!({"video": [{"version":"type=video/webm", "replace": false}]})).unwrap(),
 			media: Default::default(),
 			by_owner: Default::default(),
 			task_queue: Default::default(),

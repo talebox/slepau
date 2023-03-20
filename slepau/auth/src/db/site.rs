@@ -58,16 +58,26 @@ impl From<&Admin> for AdminView {
 
 pub type SiteId = Proquint<u32>;
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(default)]
 pub struct Site {
 	pub id: SiteId,
 	pub name: String,
 	pub users: BTreeMap<String, User>,
+	
 	/// Max age for the token (in secs, default is 1d)
 	pub max_age: usize,
+	
 	/// Can an admin login from this site?
 	///
 	/// Only `super` users can change this.
 	pub allow_admin: bool,
+	
+	/// These are site global claims
+	/// 
+	/// They get applied to all users that login on this site.
+	/// 
+	/// You can set things like
+	pub claims: BTreeMap<String, Value>,
 }
 impl Default for Site {
 	fn default() -> Self {
@@ -77,6 +87,7 @@ impl Default for Site {
 			max_age: 60 * 60 * 24,
 			name: Default::default(),
 			allow_admin: false,
+			claims: Default::default()
 		}
 	}
 }
@@ -85,6 +96,7 @@ pub struct SiteSet {
 	pub name: String,
 	pub hosts: Vec<String>,
 	pub max_age: usize,
+	pub claims: BTreeMap<String, Value>,
 }
 #[derive(Serialize)]
 pub struct SiteView {
@@ -93,6 +105,7 @@ pub struct SiteView {
 	pub hosts: Vec<String>,
 	pub users: usize,
 	pub max_age: usize,
+	pub claims: BTreeMap<String, Value>,
 }
 
 impl From<&Site> for SiteView {
@@ -103,6 +116,7 @@ impl From<&Site> for SiteView {
 			users: value.users.len(),
 			max_age: value.max_age,
 			hosts: Default::default(),
+			claims: value.claims.to_owned()
 		}
 	}
 }

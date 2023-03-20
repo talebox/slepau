@@ -123,6 +123,7 @@ pub async fn conversion_service(
 									send_tasks(&db);
 								}
 								if let Some(task) = task {
+									
 									let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
 
 									// let meta: FileMeta = (&data).into();

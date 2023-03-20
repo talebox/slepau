@@ -182,13 +182,38 @@ pub async fn media_post(
 	Extension(user_claims): Extension<UserClaims>,
 	mut body: BodyStream,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
+	if user_claims.user == "public" && !db.read().unwrap().allow_public_post {
+		// body.count().await;
+		return Err((StatusCode::FORBIDDEN, format!("Public isn't allowed to upload.")))
+	}
+
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
 	if !path.exists() {
 		tokio::fs::create_dir(&path).await.unwrap();
 		info!("Created media folder at '{}'.", path.to_string_lossy());
 	}
 
-	const MAX_ALLOWED_MEDIA_SIZE: usize = 1024 * 1024 * 100; // 100mb;
+	const MB: usize = 1024 * 1024;
+	const MAX_ALLOWED_MEDIA_SIZE: usize = 100 * MB;
+
+	let stats = db.read().unwrap().user_stats(&user_claims.user);
+	info!(
+		"Stats for {} are {}",
+		&user_claims.user,
+		serde_json::to_string(&stats).unwrap()
+	);
+
+	if user_claims.media_limit > 0 && stats.size >= user_claims.media_limit {
+		// body.count().await;
+		return Err((
+			StatusCode::FORBIDDEN,
+			format!(
+				"You've reached your limit of {}MB.
+				\nContact your admin for a limit upgrade or optimize some of your media.",
+				user_claims.media_limit / MB
+			),
+		));
+	}
 
 	let id = db.read().unwrap().new_id();
 	let path = path.join(id.to_quint());
@@ -197,26 +222,25 @@ pub async fn media_post(
 
 		let mut size = 0;
 		while let Some(Ok(mut chunk)) = body.next().await {
-			info!("write chunk {}", chunk.len());
+			// info!("write chunk {}", chunk.len());
 			size += chunk.len();
 			if size >= MAX_ALLOWED_MEDIA_SIZE {
-				return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("Body > 100mb")));
+				return Err((
+					StatusCode::PAYLOAD_TOO_LARGE,
+					format!("Body > {}MB", MAX_ALLOWED_MEDIA_SIZE / MB),
+				));
 			}
 			file.write_buf(&mut chunk).await.unwrap();
 		}
-		info!("write total {}", size);
-
-		// Reset file position
-		// file.seek(std::io::SeekFrom::Start(0));
-		
+		// info!("write total {}", size);
 		file.sync_all().await.unwrap();
 	}
 
-	let media = db.write().unwrap().add((id, &path).into(), user_claims.user);
+	let media = db.write().unwrap().add((id, &path).into(), user_claims.user.clone());
 	let media = media.read().unwrap().clone();
 
 	// Notify
-	tx_resource.send("media".into()).ok();
+	tx_resource.send(("media", [user_claims.user].into()).into()).ok();
 
 	Ok(Json(media))
 }

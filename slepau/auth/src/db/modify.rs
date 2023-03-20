@@ -33,11 +33,29 @@ impl DBAuth {
 		self
 			.hosts
 			.extend(v.hosts.into_iter().map(|h| (h, site_weak.to_owned())));
+		
+		// Parse claims
+		let claims = v
+			.claims
+			.into_iter()
+			.map(|(k, v)| {
+				(
+					k.to_owned(),
+					if let Value::String(s) = &v {
+						serde_json::from_str(&s).unwrap_or(v)
+					} else {
+						v
+					},
+				)
+			})
+			.collect();
+		
 		// Modify site
 		{
 			let mut site = site.write().unwrap();
 			site.max_age = v.max_age;
 			site.name = v.name;
+			site.claims = claims;
 		}
 		Ok(())
 	}

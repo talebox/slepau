@@ -36,19 +36,24 @@ impl DBAuth {
 		)
 	}
 
-	pub fn login(&self, user: &str, pass: &str, site: Option<SiteId>) -> Result<(User, bool, bool, usize), DbError> {
+	pub fn login(
+		&self,
+		user: &str,
+		pass: &str,
+		site: Option<SiteId>,
+	) -> Result<(User, Option<Site>, bool, bool, usize), DbError> {
 		if let Some(site) = site {
 			let site = self.sites.get(&site).ok_or(DbError::InvalidSite("No site found."))?;
 			let site = site.read().unwrap();
 			let user = site.users.get(user).ok_or(DbError::AuthError)?;
 			user.verify_login(pass)?;
-			Ok((user.clone(), false, false, site.max_age))
+			Ok((user.clone(), Some(site.clone()), false, false, site.max_age))
 		} else {
 			let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
 			let admin = admin.read().unwrap();
 			let user = &admin.user;
 			user.verify_login(pass)?;
-			Ok((user.clone(), true, admin._super, 60 * 60))
+			Ok((user.clone(), None, true, admin._super, 60 * 60))
 		}
 	}
 	pub fn reset(&mut self, user: &str, pass: &str, old_pass: &str, site: Option<SiteId>) -> Result<(), DbError> {

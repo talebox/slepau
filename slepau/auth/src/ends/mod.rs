@@ -115,14 +115,26 @@ pub async fn login(
 	}
 
 	db.login(&user, &pass, site_id)
-		.map(|(user, is_admin, is_super, max_age)| {
+		.map(|(user, site, is_admin, is_super, max_age)| {
 			// Create token
 			let mut claims = Claims::new().unwrap();
 			// Set Issuer
 			claims.issuer("slepau:auth").unwrap();
 			// Set Audience
 			claims.audience(&host).unwrap();
-			//
+
+			// Add site claims except 'admin' and 'super'
+			if let Some(site) = site {
+				site
+					.claims
+					.into_iter()
+					.filter(|(k, _)| k != "admin" && k != "super")
+					.for_each(|(k, v)| {
+						claims.add_additional(&k, v).ok();
+					});
+			}
+			
+			// Add user claims except 'admin' and 'super'
 			user
 				.claims
 				.into_iter()

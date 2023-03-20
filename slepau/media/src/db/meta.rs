@@ -38,7 +38,7 @@ impl Exif {
 #[serde(default)]
 pub struct FileMeta {
 	hash: Proquint<u64>,
-	size: usize,
+	pub size: usize,
 	/// Mime type
 	#[serde(rename = "type")]
 	pub _type: String,

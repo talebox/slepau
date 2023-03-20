@@ -1,7 +1,7 @@
 use super::{
 	task::{Task, TaskCriteria, TaskQuery},
 	version::{Version, VersionReference, VersionString},
-	Media, MediaId, DB,
+	Media, MediaId, DB, MediaStats,
 };
 use common::utils::{get_secs, DbError, LockedAtomic, CACHE_FOLDER};
 use media::MEDIA_FOLDER;
@@ -63,7 +63,6 @@ impl DB {
 		initial_versions.iter().for_each(|(criteria, queries)| {
 			if criteria.matches(&media.read().unwrap()) {
 				queries.iter().for_each(|query| {
-					
 					// If we can't find a path to the version
 					if self.version_path(&(id, query.version.clone()).into()).is_none() {
 						let _ref = (id, query.version.clone()).into();
@@ -92,30 +91,36 @@ impl DB {
 	pub fn get_all(&self) -> Vec<LockedAtomic<Media>> {
 		self.media.values().cloned().collect()
 	}
+	pub fn user_stats(&self, user: &str) -> MediaStats {
+		self.by_owner.get(user).map(|medias| MediaStats::from_iter(medias)).unwrap_or_default()
+	}
 	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
-		self
-			.by_owner
-			.entry(owner)
-			.and_modify(|v| {
-				v.insert(media.id);
-			})
-			.or_insert([media.id].into());
-
+		let _media;
 		if let Some(media) = self.media.get(&media.id) {
-			media.to_owned()
+			_media = media.to_owned()
 		} else {
 			media.created = get_secs();
 			let id = media.id;
-			let v = LockedAtomic::new(RwLock::new(media));
-			self.media.insert(id, v.clone());
-			self._tick(&v);
-			v
+			_media = LockedAtomic::new(RwLock::new(media));
+			self.media.insert(id, _media.clone());
+			self._tick(&_media);
 		}
+
+		let _media_weak = Arc::downgrade(&_media);
+		self
+			.by_owner
+			.entry(owner)
+			.and_modify(|medias| {
+				medias.push(_media_weak.clone());
+			})
+			.or_insert([_media_weak].into());
+
+		_media
 	}
 	pub fn del(&mut self, id: MediaId) -> Result<LockedAtomic<Media>, DbError> {
 		self.task_queue.retain(|task| task._ref.id != id);
-		self.by_owner.iter_mut().for_each(|(_, ids)| {
-			ids.remove(&id);
+		self.by_owner.iter_mut().for_each(|(_, medias)| {
+			medias.retain(|v| v.upgrade().map(|v| v.read().unwrap().id == id).unwrap_or(false));
 		});
 
 		self.media.remove(&id).ok_or(DbError::NotFound)
@@ -165,12 +170,25 @@ impl From<DBData> for DB {
 				(id, arc)
 			})
 			.collect();
+		let by_owner = data
+			.by_owner
+			.into_iter()
+			.map(|(owner, ids)| {
+				(
+					owner,
+					ids
+						.into_iter()
+						.filter_map(|id| media.get(&id).map(|v| Arc::downgrade(v)))
+						.collect(),
+				)
+			})
+			.collect();
 
 		let mut db = Self {
 			allow_public_post: data.allow_public_post,
 			initial_versions: data.initial_versions,
 			media,
-			by_owner: data.by_owner,
+			by_owner,
 			task_queue: Default::default(),
 		};
 		db.tick_all();
@@ -185,7 +203,20 @@ impl From<&DB> for DBData {
 		Self {
 			allow_public_post: db.allow_public_post,
 			media: db.media.values().map(|v| v.read().unwrap().clone()).collect(),
-			by_owner: db.by_owner.clone(),
+			// by_owner: db.by_owner.clone(),
+			by_owner: db
+				.by_owner
+				.iter()
+				.map(|(owner, medias)| {
+					(
+						owner.to_owned(),
+						medias
+							.iter()
+							.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id.clone()))
+							.collect(),
+					)
+				})
+				.collect(),
 			initial_versions: db.initial_versions.clone(),
 		}
 	}

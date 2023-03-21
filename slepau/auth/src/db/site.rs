@@ -1,6 +1,6 @@
 use common::{proquint::Proquint, utils::LockedWeak};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use crate::user::User;
 use serde::{Deserialize, Serialize};
@@ -63,19 +63,19 @@ pub struct Site {
 	pub id: SiteId,
 	pub name: String,
 	pub users: BTreeMap<String, User>,
-	
+
 	/// Max age for the token (in secs, default is 1d)
 	pub max_age: usize,
-	
+
 	/// Can an admin login from this site?
 	///
 	/// Only `super` users can change this.
 	pub allow_admin: bool,
-	
+
 	/// These are site global claims
-	/// 
+	///
 	/// They get applied to all users that login on this site.
-	/// 
+	///
 	/// You can set things like
 	pub claims: BTreeMap<String, Value>,
 }
@@ -87,7 +87,7 @@ impl Default for Site {
 			max_age: 60 * 60 * 24,
 			name: Default::default(),
 			allow_admin: false,
-			claims: Default::default()
+			claims: Default::default(),
 		}
 	}
 }
@@ -116,7 +116,7 @@ impl From<&Site> for SiteView {
 			users: value.users.len(),
 			max_age: value.max_age,
 			hosts: Default::default(),
-			claims: value.claims.to_owned()
+			claims: value.claims.to_owned(),
 		}
 	}
 }

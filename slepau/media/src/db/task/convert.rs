@@ -1,12 +1,30 @@
 use common::utils::{DbError, CACHE_FOLDER};
 use image::imageops::FilterType;
 use image::ImageFormat;
-use log::info;
+use log::{error, info};
 use media::MEDIA_FOLDER;
 use std::path::PathBuf;
 
 use crate::db::meta::FileMeta;
 use crate::db::version::{Max, Version, VersionReference};
+
+/// With the help of the FileMeta we're able to further constrain the version
+pub fn version_mapping(meta: &FileMeta, mut version: Version) -> Version {
+	if version._type.as_deref() == Some(&meta._type) {
+		version._type = None
+	}
+	if meta._type.starts_with("image") {
+		version.b_a = None;
+		version.b_v = None;
+		version.c_a = None;
+		version.c_v = None;
+	}
+	if meta._type.starts_with("video") {
+		version.max = None;
+	}
+
+	version
+}
 
 /// Does conversion, this is the function spawned
 /// that actually does the conversion and updates accordingly
@@ -118,10 +136,7 @@ pub fn do_convert(
 					.as_str(),
 			]);
 
-			command.arg(path_out.to_str().unwrap());
-			command.output().unwrap();
-			// I was thinking of going over the output with the image conversion processor above but nah, too much work.
-		
+		// I was thinking of going over the output with the image conversion processor above but nah, too much work.
 		} else {
 			// Set video output options
 
@@ -131,27 +146,43 @@ pub fn do_convert(
 				command.args(["-c:v", c_v.as_str()]);
 			}
 			// Codec audio
+			// let c_a = version.c_a.or_else(|| Some("mp3".into()));
 			if let Some(c_a) = version.c_a {
 				command.args(["-c:a", c_a.as_str()]);
 			}
 
 			// Bitrate video
-			let b_v = version.b_v.or_else(|| Some("1M".into()));
-			if let Some(b_v) = b_v {
+			// let b_v = version.b_v.or_else(|| Some("2M".into()));
+			if let Some(b_v) = version.b_v {
 				command.args(["-b:v", b_v.as_str()]);
 			}
 			// Bitrate audio
+			// let b_a = version.b_a.or_else(|| Some("90k".into()));
 			if let Some(b_a) = version.b_a {
 				command.args(["-b:a", b_a.as_str()]);
 			}
 
-			let _type = version._type.or(Some(meta._type));
+			let _type = Some("video/mp4".to_string())// version._type.or(Some(meta._type))
+			;
 			if let Some(_type) = _type.and_then(|t| t.split("/").last().map(|t| t.to_string())) {
 				command.args(["-f", _type.as_str()]);
 			}
+		}
 
-			command.arg(path_out.to_str().unwrap());
-			command.output().unwrap();
+		command.arg(path_out.to_str().unwrap());
+		match command.output() {
+			Ok(out) => {
+				if !out.status.success() {
+					error!(
+						"ffmpeg error: {}\n{}",
+						String::from_utf8(out.stdout).unwrap_or_default(),
+						String::from_utf8(out.stderr).unwrap_or_default()
+					)
+				}
+			}
+			Err(err) => {
+				return Err((_ref, format!("ffmpeg error: {}", err).into()));
+			}
 		}
 
 		let meta_out = FileMeta::from_path(&path_out);

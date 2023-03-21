@@ -5,15 +5,15 @@ use axum::{
 	Json, TypedHeader,
 };
 use common::{
-	proquint::Proquint,
-	utils::{DbError, LockedAtomic, WEB_DIST}, socket::{ResourceMessage, ResourceSender},
+	socket::{ResourceMessage, ResourceSender},
+	utils::{DbError, LockedAtomic},
 };
 use headers::ContentType;
-use hyper::{header, StatusCode};
+
 use lazy_static::lazy_static;
 use log::{info, trace};
 use serde::Deserialize;
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
 
 use crate::{
 	db::{
@@ -24,36 +24,6 @@ use crate::{
 	},
 	format::value_to_html,
 };
-
-pub async fn home_service(
-	// Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
-	}
-
-	let src;
-	// If we're debugging, get home every time
-	if cfg!(debug_assertions) {
-		src = get_src();
-	} else {
-		lazy_static! {
-			static ref HOME: Option<String> = get_src();
-		}
-		src = HOME.to_owned();
-	}
-
-	src
-		.as_ref()
-		.map(|home| {
-			(
-				[(header::CONTENT_TYPE, "text/html")],
-				home.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
-			)
-		})
-		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
-}
 
 pub async fn chunks_get(
 	Extension(db): Extension<LockedAtomic<DB>>,

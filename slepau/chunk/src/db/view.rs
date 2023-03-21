@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 use super::{
 	chunk,
-	dbchunk::{self, DBChunk},
+	dbchunk::DBChunk,
 	user_access::{Access, UserAccess},
 };
 

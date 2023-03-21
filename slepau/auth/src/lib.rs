@@ -19,7 +19,7 @@ pub struct UserClaims {
 	pub admin: bool,
 	#[serde(rename = "super", skip_serializing_if = "is_false")]
 	pub _super: bool,
-	
+
 	/// Media limit, in bytes
 	#[serde(skip_serializing_if = "is_zero")]
 	pub media_limit: usize,

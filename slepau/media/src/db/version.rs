@@ -1,9 +1,10 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
-use common::utils::{get_hash, DbError};
+use common::utils::{get_hash, DbError, CACHE_FOLDER};
+use media::MEDIA_FOLDER;
 use proquint::Quintable;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 
 use super::MediaId;
 
@@ -61,9 +62,11 @@ pub enum Max {
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields, default)]
 pub struct Version {
+	/// File container
 	#[serde(rename = "type", skip_serializing_if = "Option::is_none")]
 	pub _type: Option<String>,
 
+	/// Max resolution
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub max: Option<Max>,
 
@@ -102,6 +105,15 @@ impl From<(MediaId, VersionString)> for VersionReference {
 	}
 }
 impl VersionReference {
+	pub fn path_in(&self) -> PathBuf {
+		VersionReference::to_path_in(self.id)
+	}
+	pub fn to_path_in(id: MediaId) -> PathBuf {
+		std::path::Path::new(MEDIA_FOLDER.as_str()).join(id.to_quint())
+	}
+	pub fn path_out(&self) -> PathBuf {
+		std::path::Path::new(CACHE_FOLDER.as_str()).join(self.filename_out())
+	}
 	pub fn filename_in(&self) -> String {
 		self.id.to_quint()
 	}

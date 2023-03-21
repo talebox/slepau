@@ -11,7 +11,7 @@ export def deploy_keys [] {
 	docker run -v talebox_keys:/server/keys --name keys_s keys
 }
 
-export def deploy [name] {
+export def deploy_docker [name] {
 	docker context use anty
 	do -i {docker stop $"($name)_s"}
 	do -i {docker rm $"($name)_s"}
@@ -21,10 +21,10 @@ export def deploy [name] {
 	docker volume create -d local $"($name)_backup"
 	let ports = {
 		"auth": 4501,
-		"chunk": 4500,
-		"media": 4502,
+		"chunk": 4502,
+		"media": 4503,
 	}
-	docker run -dp $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" --name $"($name)_s" $name
+	docker run -d --restart unless-stopped -p $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" --name $"($name)_s" $name
 }
 
 export def deploy_static [name] {
@@ -43,14 +43,19 @@ export def deploy_static [name] {
 	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/" 
 }
 
+export def deploy_nginx [] {
+	scp out/nginx/sites/* root@anty.dev:/etc/nginx/sites-available/
+	ssh root@anty.dev systemctl restart nginx
+}
+
 export def deploy_all [] {
-	# Deploy slepau first
 	test
-	build
+	build_all
 	
-	deploy auth
-	deploy chunk
-	deploy media
+	deploy_docker auth
+	deploy_docker chunk
+	deploy_docker media
+	deploy_static talebox
 	
-	deploy_talebox
+	deploy_nginx
 }

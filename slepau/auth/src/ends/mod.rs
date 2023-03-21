@@ -1,7 +1,4 @@
-use auth::{
-	validate::{KP, KPR},
-	UserClaims,
-};
+use auth::{validate::KPR, UserClaims};
 use axum::{
 	extract::{Extension, Query},
 	headers,
@@ -10,86 +7,19 @@ use axum::{
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECS_IN_DAY, SECURE, WEB_DIST};
+use common::utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE};
 use hyper::StatusCode;
-use lazy_static::lazy_static;
+
 use log::{error, info};
-use pasetors::{claims::Claims, local, public};
+use pasetors::{claims::Claims, local};
 use serde::Deserialize;
-use std::path::PathBuf;
+use serde_json::Value;
+
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub mod admin;
 
 use crate::db::DBAuth;
-
-pub async fn home_service(
-	TypedHeader(host): TypedHeader<headers::Host>,
-	Extension(claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-	let host = hostname_normalize(host.hostname());
-
-	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
-	}
-
-	let src;
-	// If we're debugging, get every time
-	if cfg!(debug_assertions) {
-		src = get_src();
-	} else {
-		lazy_static! {
-			static ref SRC: Option<String> = get_src();
-		}
-		src = SRC.to_owned();
-	}
-
-	src
-		.as_ref()
-		.map(|src| {
-			(
-				[(header::CONTENT_TYPE, "text/html")],
-				src
-					.replace("_HOST_", serde_json::to_string(host).unwrap().as_str())
-					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
-			)
-		})
-		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
-}
-/// Populates index.html with the needed request data
-pub async fn login_service(
-	headers: HeaderMap,
-	// Extension(db): Extension<LockedAtomic<DBAuth>>,
-	Extension(claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("login.html")).ok()
-	}
-	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();
-
-	let src;
-	// If we're debugging, get every time
-	if cfg!(debug_assertions) {
-		src = get_src();
-	} else {
-		lazy_static! {
-			static ref SRC: Option<String> = get_src();
-		}
-		src = SRC.to_owned();
-	}
-
-	src
-		.as_ref()
-		.map(|src| {
-			(
-				[(header::CONTENT_TYPE, "text/html")],
-				src
-					.replace("_REFERER_", serde_json::to_string(referer).unwrap().as_str())
-					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
-			)
-		})
-		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
-}
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -133,7 +63,7 @@ pub async fn login(
 						claims.add_additional(&k, v).ok();
 					});
 			}
-			
+
 			// Add user claims except 'admin' and 'super'
 			user
 				.claims
@@ -238,8 +168,23 @@ pub async fn user(
 ) -> impl IntoResponse {
 	Json(user_claims)
 }
+
+/// Allows users to modify certain whitelisted claims.
+pub async fn user_patch(
+	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(db): Extension<LockedAtomic<DBAuth>>,
+	Extension(user_claims): Extension<UserClaims>,
+	Json(patch): Json<Value>,
+) -> Result<impl IntoResponse, DbError> {
+	let (_, site_id) = db.read().unwrap().host_to_site_id(host.hostname());
+	let site_id = site_id.ok_or(DbError::NotFound)?;
+	db.write().unwrap().mod_user_self(site_id, &user_claims.user, patch)?;
+
+	Ok(())
+}
+
 pub async fn logout(TypedHeader(host): TypedHeader<headers::Host>, headers: HeaderMap) -> impl IntoResponse {
-	let host_full = host.hostname();
+	// let host_full = host.hostname();
 	let host = hostname_normalize(host.hostname());
 
 	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();

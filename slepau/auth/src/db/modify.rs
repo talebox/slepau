@@ -5,8 +5,9 @@ use super::{
 	DBAuth,
 };
 use crate::user::UserSet;
-use common::utils::DbError;
-use serde_json::Value;
+use common::{proquint::Proquint, utils::DbError};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 impl DBAuth {
 	pub fn mod_site(&mut self, admin: &str, site_id: SiteId, v: SiteSet) -> Result<(), DbError> {
@@ -33,7 +34,7 @@ impl DBAuth {
 		self
 			.hosts
 			.extend(v.hosts.into_iter().map(|h| (h, site_weak.to_owned())));
-		
+
 		// Parse claims
 		let claims = v
 			.claims
@@ -49,7 +50,7 @@ impl DBAuth {
 				)
 			})
 			.collect();
-		
+
 		// Modify site
 		{
 			let mut site = site.write().unwrap();
@@ -151,4 +152,22 @@ impl DBAuth {
 
 		Ok(())
 	}
+	/// Allows a user to modify certain fields of themselves
+	pub fn mod_user_self(&mut self, site_id: SiteId, user: &str, v: Value) -> Result<(), DbError> {
+		let claims: ClaimPatch = serde_json::from_value(v).map_err(|_| DbError::AuthError)?;
+		let site = self.sites.get(&site_id).ok_or(DbError::AuthError)?;
+		let mut site = site.write().unwrap();
+		let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
+		user
+			.claims
+			.extend(json!(claims).as_object().unwrap().clone().into_iter());
+		Ok(())
+	}
+}
+
+#[derive(Deserialize, Serialize, Default)]
+#[serde(default)]
+pub struct ClaimPatch {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	photo: Option<Proquint<u64>>,
 }

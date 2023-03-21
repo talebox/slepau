@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
-mod convert;
+pub mod convert;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TaskCriteria(String);
@@ -83,7 +83,6 @@ pub async fn conversion_service(
 			.ok();
 	};
 	loop {
-		
 		{
 			let mut db = db.write().unwrap();
 			let mut spawned = false;
@@ -123,7 +122,7 @@ pub async fn conversion_service(
 									send_tasks(&db);
 								}
 								if let Some(task) = task {
-									
+
 									let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
 
 									// let meta: FileMeta = (&data).into();
@@ -171,15 +170,7 @@ pub async fn conversion_service(
 				}
 			}
 			Some(task) = task_rx.recv() => {
-				let mut db = db.write().unwrap();
-				let _task = db.task_queue.iter_mut().find(|v| v._ref == task._ref);
-				if let Some(_task) = _task {
-					_task.priority = std::cmp::max(_task.priority, task.priority);
-					_task.callbacks.extend(task.callbacks)
-				}else{
-					db.task_queue.push_front(task);
-					// send_tasks(&db);
-				}
+				let _db = db.write().unwrap().queue(task);
 			}
 			_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}
 		}

@@ -1,31 +1,24 @@
-use auth::{
-	validate::{index_service_user, KP, KPR},
-	UserClaims,
-};
+use auth::validate::KPR;
 use axum::{
-	body::Body,
 	error_handling::HandleErrorLayer,
-	response::IntoResponse,
-	routing::{get, get_service, post, put},
+	routing::{get, post, put},
 	BoxError, Extension, Router,
 };
 
 use common::{
-	http::{assets_service, index_service},
+	http::{index_service, static_routes},
 	init::backup::backup_service,
-	utils::{log_env, SOCKET, URL, WEB_DIST},
+	utils::{log_env, SOCKET, URL, WEB_DIST_LOGIN},
 	Cache,
 };
 use env_logger::Env;
-use hyper::{header, StatusCode};
+use hyper::StatusCode;
 use log::{error, info};
 use tower::ServiceBuilder;
 use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
 
 use std::{
-	fs::read_to_string,
 	net::SocketAddr,
-	path::PathBuf,
 	sync::{Arc, RwLock},
 	time::Duration,
 };
@@ -39,8 +32,6 @@ use tower_http::{cors::CorsLayer, timeout::TimeoutLayer};
 mod db;
 mod ends;
 mod user;
-
-use ends::home_service;
 
 #[tokio::main]
 async fn main() {
@@ -131,29 +122,24 @@ async fn main() {
 		)
 		.merge(
 			Router::new()
-				.route("/user", get(crate::ends::user))
+				.route("/user", get(crate::ends::user).patch(crate::ends::user_patch))
 				.route("/logout", get(crate::ends::logout)), // .layer(security_limit(1, 1)),
 		)
-		.fallback(home_service)
-		.nest_service("/app", get(index_service_user))
-		.nest(
+		.route(
 			"/login",
-			Router::new()
-				.route("/", post(crate::ends::login).fallback(ends::login_service))
-				.fallback(ends::login_service),
+			post(crate::ends::login).get(index_service(WEB_DIST_LOGIN.as_str(), Some("index.html"))),
 		)
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
+		// The request limiter :)
 		.layer(
 			ServiceBuilder::new()
-				// this middleware goes above `GovernorLayer` because it will receive
-				// errors returned by `GovernorLayer`
 				.layer(HandleErrorLayer::new(|e: BoxError| async move { display_error(e) }))
 				.layer(GovernorLayer {
-					// We can leak this because it is created once and then
 					config: Box::leak(governor_conf),
 				}),
 		)
-		.nest_service("/web", assets_service(WEB_DIST.as_str()))
+		// Serves static assets
+		.fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()

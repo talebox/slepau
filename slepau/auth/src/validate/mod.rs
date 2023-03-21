@@ -121,37 +121,3 @@ pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response,
 
 	Ok(next.run(req).await)
 }
-
-pub async fn index_service_user(
-	TypedHeader(host): TypedHeader<headers::Host>,
-	Extension(claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-	let host = hostname_normalize(host.hostname());
-
-	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("index.html")).ok()
-	}
-
-	let src;
-	// If we're debugging, get home every time
-	if cfg!(debug_assertions) {
-		src = get_src();
-	} else {
-		lazy_static! {
-			static ref HOME: Option<String> = get_src();
-		}
-		src = HOME.to_owned();
-	}
-
-	src
-		.as_ref()
-		.map(|home| {
-			(
-				[(header::CONTENT_TYPE, "text/html")],
-				home
-					.replace("_HOST_", serde_json::to_string(host).unwrap().as_str())
-					.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
-			)
-		})
-		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
-}

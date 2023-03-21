@@ -8,7 +8,7 @@ export def-env setup_dev [] {
 }
 
 
-export def start [] {
+export def main [] {
 	stop_force
 	setup_dev
 	
@@ -48,6 +48,9 @@ export def run_gen_key [] {
 	setup_dev
 	
 	cargo run --bin gen_key
+}
+export def run_nginx [] {
+	nginx -g 'daemon off;pid /dev/null;' -p $"(pwd)/config/nginx/" -c nginx.conf
 }
 
 export def test [] {

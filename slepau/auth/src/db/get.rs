@@ -38,7 +38,7 @@ impl DBAuth {
 				.any
 				.as_ref()
 				.map(|filter| match filter {
-					AnyFilter::Id(id) => true,
+					AnyFilter::Id(_id) => true,
 					AnyFilter::String(name) => v.user.user.contains(name.as_str()),
 				})
 				.unwrap_or(true)
@@ -112,7 +112,7 @@ impl DBAuth {
 				.any
 				.as_ref()
 				.map(|filter| match filter {
-					AnyFilter::Id(id) => true,
+					AnyFilter::Id(_id) => true,
 					AnyFilter::String(name) => v.user.contains(name.as_str()),
 				})
 				.unwrap_or(true)

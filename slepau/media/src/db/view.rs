@@ -1,12 +1,7 @@
-use std::sync::RwLockWriteGuard;
-
 use common::utils::LockedAtomic;
 use serde::Serialize;
-use serde_json::{Map, Value};
 
-use super::{Media};
-
-
+use super::Media;
 
 /**
  * ChunkView is meant for specific Chunk Data
@@ -16,7 +11,7 @@ use super::{Media};
 // #[derive(Serialize, Debug, Default)]
 // pub struct MediaView {
 // 	pub id: MediaId,
-// 	pub cache: 
+// 	pub cache:
 // 	pub created: Option<u64>,
 // }
 
@@ -35,7 +30,7 @@ use super::{Media};
 // impl From<&LockedAtomic<Media>> for MediaView {
 // 	fn from(value: &LockedAtomic<Media>) -> Self {
 //     let mut value = value.write().unwrap();
-    
+
 //   }
 // }
 
@@ -61,7 +56,6 @@ impl From<&LockedAtomic<Media>> for MediaId {
 		Self(rc.read().unwrap().id.clone())
 	}
 }
-
 
 pub enum SortType {
 	Created,

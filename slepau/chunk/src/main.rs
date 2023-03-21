@@ -1,28 +1,21 @@
-use auth::{
-	validate::{index_service_user, KPR},
-	UserClaims,
-};
-use axum::{
-	body::Body, error_handling::HandleErrorLayer, middleware::from_fn, response::IntoResponse, routing::get, BoxError,
-	Extension, Router,
-};
+use auth::validate::KPR;
+use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::get, BoxError, Extension, Router};
 
 use common::{
-	http::{assets_service, index_service},
+	http::static_routes,
 	init::backup::backup_service,
-	utils::{log_env, SOCKET, URL, WEB_DIST},
-	Cache, socket::ResourceMessage,
+	socket::ResourceMessage,
+	utils::{log_env, SOCKET, URL},
+	Cache,
 };
 use env_logger::Env;
-use hyper::{header, StatusCode};
+use hyper::StatusCode;
 use log::{error, info};
 use tower::ServiceBuilder;
 use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
 
 use std::{
-	fs::read_to_string,
 	net::SocketAddr,
-	path::PathBuf,
 	sync::{Arc, RwLock},
 	time::Duration,
 };
@@ -35,7 +28,7 @@ use tower_http::timeout::TimeoutLayer;
 
 use chunk::{
 	db,
-	ends::{self, home_service},
+	ends::{self},
 	socket::{self},
 };
 
@@ -84,36 +77,27 @@ async fn main() {
 
 	// Build router
 	let app = Router::new()
-		.nest(
-			"/api",
-			Router::new()
-				.route(
-					"/chunks",
-					get(ends::chunks_get).put(ends::chunks_put).delete(ends::chunks_del),
-				)
-				// ONLY if NOT public ^
-				.route_layer(from_fn(auth::validate::flow::auth_required))
-				.route("/chunks/:id", get(ends::chunks_get_id))
-				.route("/stream", get(socket::websocket_handler))
-				// ONLY GET if public ^
-				.route_layer(from_fn(auth::validate::flow::public_only_get))
-				.route("/mirror/:bean", get(common::init::magic_bean::mirror_bean::<db::DB>)),
+		.route(
+			"/chunks",
+			get(ends::chunks_get).put(ends::chunks_put).delete(ends::chunks_del),
 		)
+		// ONLY if NOT public ^
+		.route_layer(from_fn(auth::validate::flow::auth_required))
+		.route("/chunks/:id", get(ends::chunks_get_id))
+		.route("/stream", get(socket::websocket_handler))
+		// ONLY GET if public ^
+		.route_layer(from_fn(auth::validate::flow::public_only_get))
 		.route("/page/:id", get(ends::page_get_id))
-		.fallback(home_service)
-		.nest_service("/app", get(index_service_user))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
+		// The request limiter :)
 		.layer(
 			ServiceBuilder::new()
-				// this middleware goes above `GovernorLayer` because it will receive
-				// errors returned by `GovernorLayer`
 				.layer(HandleErrorLayer::new(|e: BoxError| async move { display_error(e) }))
 				.layer(GovernorLayer {
-					// We can leak this because it is created once and then
 					config: Box::leak(governor_conf),
 				}),
 		)
-		.nest_service("/web", assets_service(WEB_DIST.as_str()))
+		.fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()

@@ -10,7 +10,7 @@ def do_kill [name,p] {
 		sleep 1sec
 	}
 }
-export def stop [] {
+export def stop_graceful [] {
 	let p_name = "cargo";let p = (ps --long | find $p_name)
 	do_kill $p_name $p
 

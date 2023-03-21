@@ -1,12 +1,12 @@
 use common::{
 	proquint::Proquint,
-	utils::{get_hash, LockedAtomic, LockedWeak},
+	utils::{LockedAtomic, LockedWeak},
 };
-use proquint::Quintable;
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-	collections::{HashMap, HashSet, VecDeque},
+	collections::{HashMap, VecDeque},
 	path::PathBuf,
 };
 
@@ -32,7 +32,7 @@ pub struct Media {
 	pub name: String,
 	pub meta: meta::FileMeta,
 	pub versions: HashMap<version::VersionString, VersionInfo>,
-	
+
 	/// Media record creation time
 	///
 	/// Note: this is not the image's metadata creation time
@@ -115,8 +115,12 @@ pub struct DB {
 	pub allow_public_post: bool,
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
 	///
-	/// Value is "version" = task_replace_bool
+	/// Makes sure entry has X version/s.
 	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
+	/// Key is matcher, gets applied to whoever's mime type begins with this.
+	///
+	/// On empty query, provide X version.
+	default_version: HashMap<TaskCriteria, VersionString>,
 
 	media: HashMap<MediaId, LockedAtomic<Media>>,
 	by_owner: HashMap<String, Vec<LockedWeak<Media>>>,
@@ -134,6 +138,12 @@ impl Default for DB {
 			allow_public_post: false,
 			initial_versions: Default::default(),
 			// initial_versions: serde_json::from_value(json!({"video": [{"version":"type=video/webm", "replace": false}]})).unwrap(),
+			// default_version: Default::default(),
+			default_version: serde_json::from_value(json!({
+				"video": "c_v=libsvtav1&c_a=mp3",
+				"image": "type=image/webp&max=500_2"
+			}))
+			.unwrap(),
 			media: Default::default(),
 			by_owner: Default::default(),
 			task_queue: Default::default(),

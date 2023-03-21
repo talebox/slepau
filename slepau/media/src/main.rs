@@ -1,6 +1,5 @@
 #![feature(result_flattening)]
 
-use auth::validate::index_service_user;
 use axum::{
 	error_handling::HandleErrorLayer,
 	middleware::from_fn,
@@ -9,9 +8,9 @@ use axum::{
 };
 
 use common::{
-	http::assets_service,
+	http::static_routes,
 	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL, WEB_DIST},
+	utils::{log_env, SOCKET, URL},
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -25,7 +24,7 @@ use std::{
 use tokio::{
 	join,
 	signal::unix::{signal, SignalKind},
-	sync::{broadcast, mpsc, oneshot, watch},
+	sync::{broadcast, mpsc, watch},
 };
 use tower_http::timeout::TimeoutLayer;
 
@@ -76,14 +75,14 @@ pub async fn main() {
 	let app = Router::new()
 		.route("/stream", get(socket::websocket_handler))
 		.route_layer(from_fn(auth::validate::flow::auth_required))
-		.route("/media", post(ends::media_post))
-		.route("/media/:id", get(ends::media_get).patch(ends::media_patch).delete(ends::media_delete))
-		.route("/api/media/:id", get(ends::media_get))
 		.route("/stats", get(ends::stats))
-		.fallback(ends::home_service)
-		.nest_service("/app", get(index_service_user))
+		.route("/media", post(ends::media_post))
+		.route(
+			"/media/:id",
+			get(ends::media_get).patch(ends::media_patch).delete(ends::media_delete),
+		)
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
-		.nest_service("/web", assets_service(WEB_DIST.as_str()))
+		.fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()

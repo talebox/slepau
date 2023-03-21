@@ -3,3 +3,6 @@
 WEB_DIST = "web/dist/web"
 DB_PATH = "db.json"
 RUST_LOG = "info"
+
+HOSTNAME_AUTH="auth.local"
+WEB_DIST_LOGIN="web/dist/login"

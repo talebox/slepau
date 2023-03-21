@@ -25,6 +25,7 @@ def separate_out [] {
 			echo $"Doing ($a)."
 			# Make slepau dir
 			mkdir $"slepau/($a)"
+				
 			# Don't for ...
 			if $a not-in ["talebox"]  {
 				echo $"Bin/docker for ($a)."
@@ -40,11 +41,32 @@ def separate_out [] {
 				# Copy web
 				cp -r $"web/($a)/*" $"slepau/($a)/web/"
 			}
+			
+			# Copy login project
+			if $a not-in ["talebox", "gen_key"]  {
+				cp -r web/login $"slepau/($a)/web/"
+			}
 		};
 		
-	exit 
+		cp -r ../config/nginx ./
+		enter nginx/sites
+		
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/8080/443 ssl/g'
+			
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/\.local/.anty.dev/g'
+			
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/anty.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/anty.dev/privkey.pem; # managed by Certbot$g'
+			
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
+			
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
+		
+		exit
+		
+	exit
+	
 }
-export def build [] {
+export def build_all [] {
 	
 	# Just to make sure everything has stopped
 	stop_force
@@ -82,9 +104,12 @@ export def build [] {
 	separate_out
 }
 
+
+
+
 # Makes standalone (TESTING)
 export def standalone [] {
-	build
+	build_all
 	
 	let out = "talebox_x86_64"
 	

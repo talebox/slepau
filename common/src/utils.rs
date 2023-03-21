@@ -62,6 +62,7 @@ lazy_static! {
 	pub static ref CACHE_PATH: String = env::var("CACHE_PATH").unwrap_or_else(|_| "cache.json".into());
 	pub static ref CACHE_FOLDER: String = env::var("CACHE_FOLDER").unwrap_or_else(|_| "cache".into());
 	pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
+	pub static ref WEB_DIST_LOGIN: String = env::var("WEB_DIST_LOGIN").unwrap_or_else(|_| "web/login".into());
 	/// The socket is we listen to requests from.
 	pub static ref SOCKET: SocketAddr = SocketAddr::from_str(env::var("SOCKET").unwrap_or_else(|_| "0.0.0.0:4000".into()).as_str()).expect("Socket address to be valid");
 	/// The URL is where users go to access this slepau.
@@ -106,7 +107,10 @@ pub enum DbError {
 impl IntoResponse for DbError {
 	fn into_response(self) -> axum::response::Response {
 		(
-			StatusCode::FORBIDDEN,
+			match self {
+				DbError::Custom(_) => StatusCode::INTERNAL_SERVER_ERROR,
+				_ => StatusCode::FORBIDDEN,
+			},
 			format!(
 				"{}",
 				match self {

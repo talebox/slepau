@@ -1,6 +1,8 @@
 from archlinux
 
-run pacman -Sy --noconfirm openssl
+run pacman-key --init
+run pacman -Sy --noconfirm archlinux-keyring
+run pacman -Sy --noconfirm openssl ffmpeg
 
 workdir /server
 

@@ -1,5 +1,5 @@
 #!/bin/nu
-export def status [] {
+export def status_ps [] {
 	echo "Status -------"
 	let p = (ps --long | find "cargo");echo $"cargo ($p | length) active";echo $p
 	let p = (ps --long | find "yarn parcel");echo $"yarn parcel ($p | length) active";echo $p

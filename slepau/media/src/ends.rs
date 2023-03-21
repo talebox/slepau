@@ -1,20 +1,21 @@
 use auth::UserClaims;
 use axum::{
-	body::{Bytes, HttpBody, StreamBody},
-	extract::{BodyStream, Path, Query, RawBody},
+	body::{HttpBody, StreamBody},
+	extract::{BodyStream, Path, Query},
 	http::header,
 	response::{IntoResponse, Response},
 	Extension, Json,
 };
 use common::{
-	socket::{ResourceMessage, ResourceSender, SocketMessage},
+	socket::ResourceSender,
 	utils::{DbError, LockedAtomic, CACHE_FOLDER, WEB_DIST},
 };
 use futures::{future::join_all, join};
-use hyper::{body::to_bytes, StatusCode};
+use hyper::StatusCode;
 
 use log::info;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::path::PathBuf;
 
 use lazy_static::lazy_static;
@@ -25,63 +26,64 @@ use media::{MatcherType, MEDIA_FOLDER};
 
 use crate::db::{
 	task::Task,
-	version::{Max, Version, VersionReference},
+	version::{Version, VersionReference},
 	DBStats, Media, MediaId, DB,
 };
 
-pub async fn home_service(
-	// Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-	fn get_src() -> Option<String> {
-		std::fs::read_to_string(PathBuf::from(WEB_DIST.as_str()).join("home.html")).ok()
-	}
-
-	let src;
-	// If we're debugging, get home every time
-	if cfg!(debug_assertions) {
-		src = get_src();
-	} else {
-		lazy_static! {
-			static ref HOME: Option<String> = get_src();
-		}
-		src = HOME.to_owned();
-	}
-
-	src
-		.as_ref()
-		.map(|home| {
-			(
-				[(header::CONTENT_TYPE, "text/html")],
-				home.replace("_USER_", serde_json::to_string(&claims).unwrap().as_str()),
-			)
-		})
-		.ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+#[derive(Deserialize)]
+pub struct Options {
+	raw: String,
+}
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum Any {
+	Options(Options),
+	Version(Version),
 }
 
 pub async fn media_get(
 	Path(id): Path<MediaId>,
-	Query(mut version): Query<Version>,
+	Query(any): Query<Any>,
 	Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(tx_task): Extension<tokio::sync::mpsc::Sender<Task>>,
+	// Extension(tx_task): Extension<tokio::sync::mpsc::Sender<Task>>,
 ) -> Result<impl IntoResponse, Response> {
-	// Try getting the version, else prioritize the version
+	let path;
+	let mut version = Default::default();
+	let mut wants_raw = false;
+	match any {
+		Any::Options(opts) => wants_raw = opts.raw == "true",
+		Any::Version(_version) => version = _version,
+	};
+	let version_empty = json!(version).as_object().unwrap().len() == 0;
 
-	// version.max = version.max.or_else(|| Some(Max::Absolute(Some(300), Some(300))));
-
-	let version_ref = (id, (&version).into()).into();
-	let mut path = db.read().unwrap().version_path(&version_ref);
-	if path.is_none() {
-		info!("Generating {version_ref:?}");
-		// Try getting the path by scheduling a task
-		let (sender, receiver) = tokio::sync::oneshot::channel();
-		let task = Task::from((10, version_ref.clone(), sender));
-
-		tx_task.send(task).await.unwrap();
-		receiver.await.unwrap().map_err(|e| e.into_response())?;
-		path = db.read().unwrap().version_path(&version_ref);
+	if wants_raw {
+		path = VersionReference::to_path_in(id);
+	} else if version_empty {
+		path = db.write().unwrap().default_version_path(id);
+	// Schedule the task and don't wait for it
+	// let task = Task::from((0, version_ref.clone()));
+	// tx_task.send(task).await.unwrap();
+	} else {
+		// Wait for task, someone wants something specific
+		let _ref: VersionReference = (id, (&version).into()).into();
+		let _path = db.read().unwrap().version_path(_ref);
+		match _path {
+			Ok(_path) => {
+				path = _path;
+			}
+			Err(_ref) => {
+				let (sender, receiver) = tokio::sync::oneshot::channel();
+				let task = Task::from((10, _ref.clone(), sender));
+				db.write().unwrap().queue(task);
+				receiver
+					.await
+					.map_err(|_| "Receiver error".into())
+					.flatten()
+					.map_err(|e| e.into_response())?;
+				path = db.read().unwrap().version_path(_ref).unwrap();
+			}
+		}
 	}
-	let path = path.ok_or((StatusCode::NOT_FOUND, format!("Media can't be resolved")).into_response())?;
 
 	let mut file = match tokio::fs::File::open(&path).await {
 		Ok(file) => file,
@@ -135,7 +137,7 @@ pub async fn media_delete(
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str()).join(media.id.to_quint());
 	let original = tokio::fs::remove_file(path);
 
-	let (removes, original) = join!(removes, original);
+	let (_removes, original) = join!(removes, original);
 
 	original.map_err(|_| DbError::from("File not found"))?;
 
@@ -184,7 +186,7 @@ pub async fn media_post(
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	if user_claims.user == "public" && !db.read().unwrap().allow_public_post {
 		// body.count().await;
-		return Err((StatusCode::FORBIDDEN, format!("Public isn't allowed to upload.")))
+		return Err((StatusCode::FORBIDDEN, format!("Public isn't allowed to upload.")));
 	}
 
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
@@ -197,14 +199,19 @@ pub async fn media_post(
 	const MAX_ALLOWED_MEDIA_SIZE: usize = 100 * MB;
 
 	let stats = db.read().unwrap().user_stats(&user_claims.user);
-	info!(
-		"Stats for {} are {}",
-		&user_claims.user,
-		serde_json::to_string(&stats).unwrap()
-	);
+	// info!(
+	// 	"Stats for {} are {}",
+	// 	&user_claims.user,
+	// 	serde_json::to_string(&stats).unwrap()
+	// );
 
 	if user_claims.media_limit > 0 && stats.size >= user_claims.media_limit {
 		// body.count().await;
+		log::error!(
+			"{} reached his limit of {}MB",
+			user_claims.user,
+			user_claims.media_limit / MB
+		);
 		return Err((
 			StatusCode::FORBIDDEN,
 			format!(

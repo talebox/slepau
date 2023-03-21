@@ -1,9 +1,4 @@
-use std::{
-	collections::{HashSet, VecDeque},
-	net::SocketAddr,
-	sync::RwLock,
-	time::Duration,
-};
+use std::{collections::VecDeque, net::SocketAddr, sync::RwLock, time::Duration};
 
 use axum::{
 	extract::{
@@ -21,10 +16,7 @@ use common::{
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use serde_json::json;
-use tokio::{
-	sync::{broadcast, watch},
-	time,
-};
+use tokio::{sync::watch, time};
 
 use auth::UserClaims;
 
@@ -116,13 +108,17 @@ async fn handle_socket(
 				}
 			} else if piece == Some("views") {
 				piece = res.pop_front();
-				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
+				let _root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
 
 				if piece == Some("all") {
 					return reply((&get_all()).into());
 				}
 				error!("View '{piece:?}' not recognized");
 				return None;
+			} else if piece == Some("user") {
+				let stats = db.read().unwrap().user_stats(&user_claims.user);
+
+				return reply((&stats).into());
 			}
 
 			error!("{m:?} unknown");

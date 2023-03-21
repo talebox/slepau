@@ -1,9 +1,10 @@
 use super::{
-	task::{Task, TaskCriteria, TaskQuery},
-	version::{Version, VersionReference, VersionString},
-	Media, MediaId, DB, MediaStats,
+	task::{convert::version_mapping, Task, TaskCriteria, TaskQuery},
+	version::{VersionReference, VersionString},
+	Media, MediaId, MediaStats, DB,
 };
-use common::utils::{get_secs, DbError, LockedAtomic, CACHE_FOLDER};
+use common::utils::{get_secs, DbError, LockedAtomic};
+use log::info;
 use media::MEDIA_FOLDER;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -29,33 +30,80 @@ impl DB {
 		}
 		id
 	}
-	pub fn version_path(&self, _ref: &VersionReference) -> Option<PathBuf> {
-		let m = self.media.get(&_ref.id)?.read().unwrap();
-		let mut version = _ref.version.to_version().unwrap();
-		// Media + Version => Path
-		let to_path = |version: &Version| -> Option<PathBuf> {
-			if json!(version).as_object().unwrap().len() == 0 {
-				return Some(std::path::Path::new(MEDIA_FOLDER.as_str()).join(m.id.to_string()));
-			}
-			let version_string = version.into();
-			m.versions.get(&version_string).map(|_| {
-				std::path::Path::new(CACHE_FOLDER.as_str()).join(VersionReference::from((m.id, version_string)).filename_out())
-			})
-		};
 
-		// Try getting path
-		//
-		// if unsuccessful AND type same as original type
-		// then remove type from version and try again.
-		to_path(&version).or_else(|| {
-			if version._type.as_ref() == Some(&m.meta._type) {
-				version._type = None;
-				to_path(&version)
-			} else {
-				None
-			}
-		})
+	/// Tries to fetch version path, else returns a normalized VersionReference that has to be queued for a path to be found.
+	pub fn version_path(&self, mut _ref: VersionReference) -> Result<PathBuf, VersionReference> {
+		let media = self.get(_ref.id).ok_or(_ref.clone())?;
+		let media = media.read().unwrap();
+
+		let mut version = _ref.version.to_version().unwrap();
+		version = version_mapping(&media.meta, version);
+
+		if json!(version).as_object().unwrap().len() == 0 {
+			return Ok(VersionReference::to_path_in(media.id));
+		}
+		let version_string: VersionString = (&version).into();
+
+		let _ref = VersionReference::from((media.id, version_string.clone()));
+		media.versions.get(&version_string).map(|_| _ref.path_out()).ok_or(_ref)
 	}
+	/// Queues default version if it hasn't been built, returning the Path to the original.
+	/// Or returns the path to the default version. This is guranteed to always return a path.
+	pub fn default_version_path(&mut self, id: MediaId) -> PathBuf {
+		// Check if the media exists
+		if let Some(media) = self.get(id) {
+			let default_version;
+			{
+				let media = media.read().unwrap();
+				default_version = self.default_version.iter().find_map(|(criteria, version)| {
+					if criteria.matches(&media) {
+						Some(version.to_owned())
+					} else {
+						None
+					}
+				})
+			}
+			// Check if there's any default version for this media
+			if let Some(default_version) = default_version {
+				// Check if default version exists.
+				match self.version_path((id, default_version.to_owned()).into()) {
+					Ok(path) => {
+						// Version exists
+						return path;
+					}
+					Err(_ref) => {
+						// Version doesn't exist, just quee a task for it
+						self.queue((0, _ref).into());
+					}
+				}
+			}
+		}
+
+		VersionReference::from((id, "".into())).path_in()
+	}
+
+	pub fn queue(&mut self, task: Task) {
+		// If you can't find a task with that version reference
+		match self.task_queue.iter_mut().find(|v| v._ref == task._ref) {
+			Some(_task) => {
+				_task.priority = std::cmp::max(_task.priority, task.priority);
+				_task.callbacks.extend(task.callbacks)
+			}
+			None => {
+				// Schedule a task for it
+				if task.priority > 0 {
+					self.task_queue.push_front(task);
+				} else {
+					self.task_queue.push_back(task);
+				}
+				self
+					.task_queue
+					.make_contiguous()
+					.sort_by_key(|t| -(t.priority as isize));
+			}
+		}
+	}
+
 	fn _tick(&mut self, media: &LockedAtomic<Media>) {
 		let id = media.read().unwrap().id;
 		let initial_versions = self.initial_versions.clone();
@@ -64,13 +112,9 @@ impl DB {
 			if criteria.matches(&media.read().unwrap()) {
 				queries.iter().for_each(|query| {
 					// If we can't find a path to the version
-					if self.version_path(&(id, query.version.clone()).into()).is_none() {
-						let _ref = (id, query.version.clone()).into();
-						// If you can't find a task with that version reference
-						if self.task_queue.iter().find(|v| v._ref == _ref).is_none() {
-							// Schedule a task for it
-							self.task_queue.push_front((0, _ref).into())
-						}
+					if let Err(_ref) = self.version_path((id, query.version.clone()).into()) {
+						// let _ref = (id, query.version.clone()).into();
+						self.queue((0, _ref).into())
 					}
 				})
 			}
@@ -80,10 +124,6 @@ impl DB {
 		self.task_queue.clear();
 		let all = self.media.values().cloned().collect::<Vec<_>>();
 		all.iter().for_each(|m| self._tick(m));
-		self
-			.task_queue
-			.make_contiguous()
-			.sort_by_key(|t| -(t.priority as isize));
 	}
 	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
 		self.media.get(&id).map(|v| v.to_owned())
@@ -92,7 +132,11 @@ impl DB {
 		self.media.values().cloned().collect()
 	}
 	pub fn user_stats(&self, user: &str) -> MediaStats {
-		self.by_owner.get(user).map(|medias| MediaStats::from_iter(medias)).unwrap_or_default()
+		self
+			.by_owner
+			.get(user)
+			.map(|medias| MediaStats::from_iter(medias))
+			.unwrap_or_default()
 	}
 	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
 		let _media;
@@ -152,6 +196,7 @@ pub fn load_existing(db: LockedAtomic<DB>) {
 pub struct DBData {
 	allow_public_post: bool,
 	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
+	default_version: HashMap<TaskCriteria, VersionString>,
 	media: Vec<Media>,
 	by_owner: HashMap<String, HashSet<MediaId>>,
 }
@@ -187,6 +232,7 @@ impl From<DBData> for DB {
 		let mut db = Self {
 			allow_public_post: data.allow_public_post,
 			initial_versions: data.initial_versions,
+			default_version: data.default_version,
 			media,
 			by_owner,
 			task_queue: Default::default(),
@@ -218,6 +264,7 @@ impl From<&DB> for DBData {
 				})
 				.collect(),
 			initial_versions: db.initial_versions.clone(),
+			default_version: db.default_version.clone(),
 		}
 	}
 }

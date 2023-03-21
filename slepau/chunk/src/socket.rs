@@ -1,9 +1,4 @@
-use std::{
-	collections::{HashSet, VecDeque},
-	net::SocketAddr,
-	sync::RwLock,
-	time::Duration,
-};
+use std::{collections::VecDeque, net::SocketAddr, sync::RwLock, time::Duration};
 
 use axum::{
 	extract::{
@@ -15,16 +10,13 @@ use axum::{
 };
 
 use common::{
-	socket::{MessageType, ResourceMessage, SocketMessage, ResourceSender},
+	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
 	utils::LockedAtomic,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use serde_json::{json, Value};
-use tokio::{
-	sync::{watch},
-	time,
-};
+use tokio::{sync::watch, time};
 
 use auth::UserClaims;
 
@@ -34,7 +26,6 @@ use crate::db::{
 	view::{ChunkValue, ChunkVec, ChunkView, SortType, ViewType},
 	DB,
 };
-
 
 pub async fn websocket_handler(
 	ws: WebSocketUpgrade,

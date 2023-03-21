@@ -16,7 +16,7 @@ fn md_to_html(value: &str) -> String {
 
 pub fn value_transform(value: &str) -> String {
 	lazy_static! {
-		static ref REPLACEMENTS: [(Regex, &'static str); 7] = [
+		static ref REPLACEMENTS: [(Regex, &'static str); 8] = [
 			(REGEX_TITLE.clone(), "# $1\n"),
 			(Regex::new(r"\[ \]").unwrap(), "&#x2610;"),
 			(Regex::new(r"\[[xX]\]").unwrap(), "&#x2612;"),
@@ -24,7 +24,25 @@ pub fn value_transform(value: &str) -> String {
 			(REGEX_ACCESS.clone(), ""),
 			(
 				Regex::new(concat!(r"\(media/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
-				"(/api/media/$1)"
+				"(/media/$1)"
+			),
+			(
+				Regex::new(concat!(r"\(image/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
+				r#"
+
+<img
+	style="display: block"
+	src="/media/$1?max=800x"
+	srcset="
+		/media/$1?max=480x   480w,
+		/media/$1?max=800x   800w,
+		/media/$1?max=1200x 1200w,
+		/media/$1?max=x 1600w
+	"
+	sizes="(min-width:800px) 800px, 100vw"
+/>
+
+"#
 			),
 			(
 				Regex::new(concat!(r"\(chunks?/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),

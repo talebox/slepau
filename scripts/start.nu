@@ -52,7 +52,7 @@ export def run_nginx [] {
 export def test [] {
 	load_env_dev
 	
-	cargo test -j 1
+	cargo test
 }
 
 export def check [] {

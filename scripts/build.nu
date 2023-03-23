@@ -50,7 +50,7 @@ export def organize_out [] {
 		};
 		
 		cp -r ../config/nginx ./
-		enter nginx/sites
+		enter nginx
 		
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/8080/443 ssl/g'
 			
@@ -91,7 +91,7 @@ export def organize_out [] {
 	print "Seprating done."
 }
 
-export def build_server [] {
+export def build_server [is_musl] {
 	load_env_prod
 	
 	rm -rf out/bin
@@ -103,7 +103,7 @@ export def build_server [] {
 		if $a not-in ["talebox"]  {
 			cargo build --release --bin $a
 			
-			if ("target/x86_64-unknown-linux-musl" | path exists) {
+			if $is_musl {
 				cp $"target/x86_64-unknown-linux-musl/release/($a)" out/bin/	
 			} else {
 				cp $"target/release/($a)" out/bin/
@@ -118,7 +118,7 @@ export def build_web [] {
 	rm -rf out/web
 	mkdir out/web
 	
-	print "Building web."
+	print "Building webc."
 	# Build webapp
 	enter web
 		# Remove cache/build dirs

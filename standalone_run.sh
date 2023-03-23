@@ -11,4 +11,4 @@ echo "We're using domain '*.local', you should have this in your /etc/hosts file
 
 echo "But nginx is setup to handle any domain you want without any config changes here. So using something other than '*.local' would also work, just make sure it begins with 'auth.' 'media.' etc.... Have fun :)"
 
-sh -c "cd nginx; ./nginx.sh"
+sh -c "cd nginx; chmod +x nginx.sh; ./nginx.sh"

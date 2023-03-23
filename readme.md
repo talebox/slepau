@@ -58,3 +58,12 @@ Development is currently happening on [Arch Linux](https://wiki.archlinux.org/),
 - Run media like so: `run_chunk`
 
 For more information just read scripts on `scripts` folder.
+
+# To build:
+
+## Ubuntu
+- Get build dependencies `apt install openssl libssl-dev pkg-config ffmpeg gcc`
+- Install rust environment `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- Nuhsell `cargo install nu`
+- On nushell `source scripts/source.nu; build_all`
+- Built files will be on the `out` directory.

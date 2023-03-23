@@ -188,7 +188,7 @@ checksum = "debc29dde2e69f9e47506b525f639ed42300fc014a3e007832592448fa8e4599"
 
 [[package]]
 name = "auth"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "argon2",
  "axum",
@@ -495,7 +495,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chunk"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "auth",
  "axum",
@@ -570,7 +570,7 @@ checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "common"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "diff",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "media"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "auth",
  "axum",

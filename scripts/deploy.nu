@@ -40,7 +40,11 @@ export def deploy_static [name] {
 	# exit
 	# scp $"web/dist/($name)/*" $"anty.dev:/srv/http/($name)/" 
 	
-	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/" 
+	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/"
+	if $name in ["talebox"] {
+		scp out/standalone.tar.xz $"anty.dev:/srv/http/($name)/"
+		scp standalone.sh $"anty.dev:/srv/http/($name)/"
+	}
 }
 
 export def deploy_nginx [] {

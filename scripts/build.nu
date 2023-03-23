@@ -17,6 +17,7 @@ export def clean [] {
 }
 
 def separate_out [] {
+	print "Separating, or organizing all built files."
 	
 	enter out
 		rm -rf slepau
@@ -63,10 +64,31 @@ def separate_out [] {
 		
 		exit
 		
+		
+		print "Making standalone."
+		rm -rf standalone
+		mkdir standalone
+		enter standalone
+			mkdir keys
+			cp ../bin/gen_key ./
+			
+			["auth","chunk","media"] | each {|a|
+				cp -r $"../slepau/($a)" ./
+				enter $a
+					ln -s ../keys keys
+				exit
+			};
+			cp ../../readme_standalone.md ./readme.md
+		exit
+		
+		print "Compressing standalone."
+		tar -cavf standalone.tar.xz standalone
 	exit
 	
+	print "Seprating done."
 }
 export def build_all [] {
+	print "Building everying."
 	
 	# Just to make sure everything has stopped
 	stop_force
@@ -83,7 +105,6 @@ export def build_all [] {
 
 	# Build server
 	['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
-	
 		if $a not-in ["talebox"]  {
 			cargo build --release --bin $a
 			cp $"target/release/($a)" out/bin/
@@ -102,6 +123,8 @@ export def build_all [] {
 	cp -r web/dist/* out/web/
 	
 	separate_out
+	
+	print "Build of everything finished. You can safely deploy now."
 }
 
 

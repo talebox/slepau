@@ -16,8 +16,8 @@ export def clean [] {
 	exit 
 }
 
-def separate_out [] {
-	print "Separating, or organizing all built files."
+export def organize_out [] {
+	print "Organizing all built files."
 	
 	enter out
 		rm -rf slepau
@@ -54,7 +54,7 @@ def separate_out [] {
 		
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/8080/443 ssl/g'
 			
-			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/\.local/.anty.dev/g'
+			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/\.\*/.anty.dev/g'
 			
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/anty.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/anty.dev/privkey.pem; # managed by Certbot$g'
 			
@@ -63,7 +63,6 @@ def separate_out [] {
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
 		
 		exit
-		
 		
 		print "Making standalone."
 		rm -rf standalone
@@ -78,7 +77,11 @@ def separate_out [] {
 					ln -s ../keys keys
 				exit
 			};
-			cp ../../readme_standalone.md ./readme.md
+			
+			cp -r ../../config/nginx ./
+			
+			cp ../../standalone_readme.md ./readme.md
+			cp ../../standalone_run.sh ./run.sh
 		exit
 		
 		print "Compressing standalone."
@@ -87,30 +90,35 @@ def separate_out [] {
 	
 	print "Seprating done."
 }
-export def build_all [] {
-	print "Building everying."
-	
-	# Just to make sure everything has stopped
-	stop_force
-	
-	# Load all configs into build scope
-	load_env
-	open "config/prod.toml" | load-env
-	
-	enter out
-		# Create output dirs
-		rm -rf bin web
-		mkdir bin web
-	exit
 
+export def build_server [] {
+	load_env_prod
+	
+	rm -rf out/bin
+	mkdir out/bin
+	
+	print "Building server."
 	# Build server
 	['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
 		if $a not-in ["talebox"]  {
 			cargo build --release --bin $a
-			cp $"target/release/($a)" out/bin/
+			
+			if ("target/x86_64-unknown-linux-musl" | path exists) {
+				cp $"target/x86_64-unknown-linux-musl/release/($a)" out/bin/	
+			} else {
+				cp $"target/release/($a)" out/bin/
+			}
 		}
 	};
+	print "Building server done."
+}
+export def build_web [] {
+	load_env_prod
 	
+	rm -rf out/web
+	mkdir out/web
+	
+	print "Building web."
 	# Build webapp
 	enter web
 		# Remove cache/build dirs
@@ -122,13 +130,32 @@ export def build_all [] {
 	# Copy webapp to output
 	cp -r web/dist/* out/web/
 	
-	separate_out
+	print "Finished building web."
+}
+
+
+export def build_all [] {
+	print "Building everying."
+	
+	# Just to make sure everything has stopped
+	stop_force
+	
+	build_server_musl
+	build_web
+	
+	organize_out
 	
 	print "Build of everything finished. You can safely deploy now."
 }
 
+export def create_musl_builder [] {
+	docker build -t musl_builder -f ./container/musl_builder.dockerfile ./container
+}
 
-
+export def build_server_musl [] {
+	alias musl_builder = docker run --rm -it -v $"(pwd):/volume" -v cargo-registry:/root/.cargo/registry musl_builder
+	musl_builder nu -c "source scripts/source.nu; build_server"
+}
 
 # Makes standalone (TESTING)
 export def standalone [] {
@@ -141,7 +168,7 @@ export def standalone [] {
 	mkdir $out
 	
 	cp out/bin/gen_key $"($out)/"
-	cp readme_standalone.md $"($out)/readme.md"
+	cp standalone_readme.md $"($out)/readme.md"
 	
 	enter $out
 		mkdir keys

@@ -27,6 +27,8 @@ Where all environment variables are set for running slepau on development/produc
 
 It also holds project regex. So they can be shared between rust and javascript.
 
+As well as nginx (an http reverse proxy server) configuration files.
+
 ## Scripts 🗒
 
 Nushell scripts to automate run/stop/deploy actions.
@@ -37,7 +39,7 @@ Slepau temporary savefiles/cache when running locally for debugging/testing.
 
 ## Out 📦
 
-All production files generated after `build` is executed.
+All production files generated after `build_all` is executed.
 
 ## Container ⚓
 
@@ -55,15 +57,13 @@ Development is currently happening on [Arch Linux](https://wiki.archlinux.org/),
 - To build web projects and watch for changes: `cd web; yarn watch`
 - Run auth like so: `run_auth`
 - Run chunk like so: `run_chunk`
-- Run media like so: `run_chunk`
+- Run media like so: `run_media`
 
 For more information just read scripts on `scripts` folder.
 
 # To build:
 
-## Ubuntu
-- Get build dependencies `apt install openssl libssl-dev pkg-config ffmpeg gcc`
-- Install rust environment `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- Nuhsell `cargo install nu`
-- On nushell `source scripts/source.nu; build_all`
-- Built files will be on the `out` directory.
+## On Linux
+- Get build dependencies `apt install ffmpeg nginx`
+- Add this line to /etc/hosts `127.0.0.1 auth.local chunk.local media.local`
+- Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.anty.dev/standalone.sh | sh` which will download, extract, and run the standalone project.

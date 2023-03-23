@@ -5,7 +5,12 @@ export def-env load_env [] {
 	$env.APP_VERSION = (open Cargo.toml | get workspace.package.version)
 	$env.APP_BUILD_TIME = (date now | date format "%D %R")
 }
-
-# def main [] {
-# 	env_load "config/regex.toml"
-# }
+export def-env load_env_prod [] {
+	# Load all configs into build scope
+	load_env
+	open "config/prod.toml" | load-env
+}
+export def-env load_env_dev [] {
+	load_env
+	open "config/dev.toml" | load-env
+}

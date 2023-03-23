@@ -1,0 +1,8 @@
+location /media {
+	proxy_pass http://localhost:4003;
+	client_max_body_size 100M;
+	
+	# Authenticator needs cookie + host
+	proxy_set_header  Host	$host;
+	proxy_pass_header Cookie;
+}

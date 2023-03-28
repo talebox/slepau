@@ -16,9 +16,6 @@ use hyper::StatusCode;
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::path::PathBuf;
-
-use lazy_static::lazy_static;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 
@@ -26,7 +23,7 @@ use media::{MatcherType, MEDIA_FOLDER};
 
 use crate::db::{
 	task::Task,
-	version::{Version, VersionReference},
+	version::{Version, VersionReference, VersionString},
 	DBStats, Media, MediaId, DB,
 };
 
@@ -57,13 +54,25 @@ pub async fn media_get(
 	let version_empty = json!(version).as_object().unwrap().len() == 0;
 
 	if wants_raw {
+		// if cfg!(debug_assertions) {
+		// 	info!("User wants raw for {id}");
+		// }
 		path = VersionReference::to_path_in(id);
 	} else if version_empty {
+		// if cfg!(debug_assertions) {
+		// 	info!("User wants default for {id}");
+		// }
 		path = db.write().unwrap().default_version_path(id);
+		// if cfg!(debug_assertions) {
+		// 	info!("Deafult is {path:?}");
+		// }
 	// Schedule the task and don't wait for it
 	// let task = Task::from((0, version_ref.clone()));
 	// tx_task.send(task).await.unwrap();
 	} else {
+		// if cfg!(debug_assertions) {
+		// 	info!("User wants {id} version {}", VersionString::from(&version));
+		// }
 		// Wait for task, someone wants something specific
 		let _ref: VersionReference = (id, (&version).into()).into();
 		let _path = db.read().unwrap().version_path(_ref);
@@ -72,6 +81,7 @@ pub async fn media_get(
 				path = _path;
 			}
 			Err(_ref) => {
+				let _ref = _ref.map_err(|e| e.into_response())?;
 				let (sender, receiver) = tokio::sync::oneshot::channel();
 				let task = Task::from((10, _ref.clone(), sender));
 				db.write().unwrap().queue(task);
@@ -119,9 +129,10 @@ pub async fn media_get(
 
 pub async fn media_delete(
 	Path(id): Path<MediaId>,
+	Extension(user_claims): Extension<UserClaims>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 ) -> Result<impl IntoResponse, DbError> {
-	let media = Media::from(db.write().unwrap().del(id)?);
+	let media = Media::from(db.write().unwrap().del(id, &user_claims.user)?);
 
 	let cache = std::path::Path::new(CACHE_FOLDER.as_str());
 	let removes = media

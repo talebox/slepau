@@ -2,10 +2,10 @@ use auth::validate::KPR;
 use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::get, BoxError, Extension, Router};
 
 use common::{
-	http::static_routes,
+	http::{static_routes, index_service},
 	init::backup::backup_service,
 	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL},
+	utils::{log_env, SOCKET, URL, WEB_DIST},
 	Cache,
 };
 use env_logger::Env;
@@ -88,6 +88,7 @@ async fn main() {
 		// ONLY GET if public ^
 		.route_layer(from_fn(auth::validate::flow::public_only_get))
 		.route("/page/:id", get(ends::page_get_id))
+		.nest_service("/preview", index_service(WEB_DIST.as_str(), Some("preview.html")))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		// The request limiter :)
 		.layer(

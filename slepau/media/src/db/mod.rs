@@ -77,8 +77,12 @@ impl<'a> FromIterator<&'a LockedWeak<Media>> for MediaStats {
 pub struct VersionInfo {
 	/// How long (in seconds)
 	time: f32,
+	/// The metadata of output.
 	meta: meta::FileMeta,
+	/// How many times has this been accessed.
 	count: usize,
+	/// Did an error occour, and what was it.
+	error: Option<String>,
 }
 
 impl From<(MediaId, &PathBuf)> for Media {

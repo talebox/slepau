@@ -4,6 +4,7 @@ use common::socket::{ResourceMessage, SocketMessage};
 use common::utils::{DbError, LockedAtomic};
 use log::info;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::{
 	hash::{Hash, Hasher},
 	time::Instant,
@@ -96,6 +97,7 @@ pub async fn conversion_service(
 					task.started = Some(Instant::now());
 					let _ref = task._ref.to_owned();
 					handles.spawn(tokio::task::spawn_blocking(move || convert::do_convert(_ref)));
+					info!("Spawned task {}", task._ref);
 					spawned = true;
 				} else {
 					break;
@@ -113,55 +115,69 @@ pub async fn conversion_service(
 			r = handles.join_next(), if handles.len() > 0 => {
 				match r.unwrap().flatten() {
 					Ok(v) => {
+
+						let _ref;
+						let meta;
+						let out_path;
+						let err;
 						match v {
-							Ok((_ref, meta, out_path)) => {
-								let task;
-								{
-									let mut db = db.write().unwrap();
-									task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
-									send_tasks(&db);
-								}
-								if let Some(task) = task {
+							Ok((__ref, _meta, _out_path)) => {
+								log::info!("Task {} success!", __ref);
+								_ref = __ref;
+								meta = Some(_meta);
+								out_path = Some(_out_path);
+								err = None;
+							}
+							Err((__ref, _err)) => {
+								log::error!("Task {} failed: {_err:?}", __ref);
+								_ref = __ref;
+								meta = None;
+								out_path = None;
+								err = Some(_err);
+							}
+						}
 
-									let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
+						let task;
+						{
+							let mut db = db.write().unwrap();
+							task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
+							send_tasks(&db);
+						}
 
-									// let meta: FileMeta = (&data).into();
-									// tokio::fs::write(out_path.clone(), data).await.unwrap();
-									{
-										let m = db.read().unwrap().get(task._ref.id);
-										if let Some(m) = m {
-											let mut m = m.write().unwrap();
-											// Only modify time/meta on versioninfo
-											let mut info = m.versions.get(&task._ref.version).cloned().unwrap_or_default();
-											info.time = time.as_secs_f32();
-											info.meta = meta;
+						if let Some(task) = task {
 
-											m.versions.insert(task._ref.version, info);
-										}else {
-											// Remove the file, most likely the entry was deleted.
-											tokio::fs::remove_file(out_path).await.ok();
-										}
+							let time = Instant::now() - task.started.expect("This task should have started before finishing :|");
+
+							// let meta: FileMeta = (&data).into();
+							// tokio::fs::write(out_path.clone(), data).await.unwrap();
+							{
+								let m = db.read().unwrap().get(task._ref.id);
+								if let Some(m) = m {
+									let mut m = m.write().unwrap();
+									// Only modify time/meta on versioninfo
+									let mut info = m.versions.get(&task._ref.version).cloned().unwrap_or_default();
+									info.time = time.as_secs_f32();
+									info.meta = meta.unwrap_or_default();
+									info.error = err.clone().map(|v| format!("{v:?}"));
+									
+									m.versions.insert(task._ref.version, info);
+								}else {
+									// Remove the file, most likely the entry was deleted.
+									if let Some(out_path) = out_path {
+										tokio::fs::remove_file(out_path).await.ok();
 									}
-									// Notify
-									for callback in task.callbacks {
-										callback.send(Ok(())).ok();
-									}
-									// Notify
-									tx_resource.send(format!("media/{}", task._ref.id).as_str().into()).ok();
 								}
 							}
-							Err((_ref, err)) => {
-								let task;
-								{
-									let mut db = db.write().unwrap();
-									task = db.task_queue.iter().position(|v| v._ref == _ref).and_then(|p| db.task_queue.remove(p));
-								}
-								if let Some(task) = task {
-									for callback in task.callbacks {
-										callback.send(Err(err.clone())).ok();
-									}
+							// Notify
+							for callback in task.callbacks {
+								if let Some(err) = err.clone() {
+									callback.send(Err(err)).ok();
+								}else{
+									callback.send(Ok(())).ok();
 								}
 							}
+							// Notify
+							tx_resource.send(format!("media/{}", task._ref.id).as_str().into()).ok();
 						}
 					}
 					Err(join_err) => {

@@ -16,7 +16,7 @@ fn md_to_html(value: &str) -> String {
 
 pub fn value_transform(value: &str) -> String {
 	lazy_static! {
-		static ref REPLACEMENTS: [(Regex, &'static str); 8] = [
+		static ref REPLACEMENTS: [(Regex, &'static str); 9] = [
 			(REGEX_TITLE.clone(), "# $1\n"),
 			(Regex::new(r"\[ \]").unwrap(), "&#x2610;"),
 			(Regex::new(r"\[[xX]\]").unwrap(), "&#x2612;"),
@@ -28,9 +28,7 @@ pub fn value_transform(value: &str) -> String {
 			),
 			(
 				Regex::new(concat!(r"\(image/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
-				r#"
-
-<img
+				r#"<img
 	style="display: block"
 	src="/media/$1?max=800x"
 	srcset="
@@ -40,9 +38,13 @@ pub fn value_transform(value: &str) -> String {
 		/media/$1?max=x 1600w
 	"
 	sizes="(min-width:800px) 800px, 100vw"
-/>
-
-"#
+/>"#
+			),
+			(
+				Regex::new(concat!(r"\(video/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
+				r#"<video controls> 
+<source src="/media/$1?type=video/webm" type="video/webm" />
+<source src="/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4" type="video/mp4" />Your browser doesn't support HTML video. Click to download <a href="/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4">$1</a> instead.</video>"#
 			),
 			(
 				Regex::new(concat!(r"\(chunks?/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),

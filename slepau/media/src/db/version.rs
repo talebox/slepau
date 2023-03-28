@@ -99,6 +99,7 @@ pub struct VersionReference {
 	pub id: MediaId,
 	pub version: VersionString,
 }
+
 impl From<(MediaId, VersionString)> for VersionReference {
 	fn from((id, version): (MediaId, VersionString)) -> Self {
 		Self { id, version }
@@ -119,6 +120,11 @@ impl VersionReference {
 	}
 	pub fn filename_out(&self) -> String {
 		get_hash(self).to_quint()
+	}
+}
+impl Display for VersionReference {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+			write!(f, "({}, {})", self.id, self.version)
 	}
 }
 

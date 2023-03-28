@@ -6,6 +6,7 @@ tar -xpaf standalone.tar.xz
 cd standalone
 
 	./gen_key
+	chmod -x run.sh
 	./run.sh
 	
 cd ..

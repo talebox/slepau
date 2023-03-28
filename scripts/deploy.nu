@@ -38,8 +38,10 @@ export def deploy_static [name] {
 	print $"Deploying static site '($name)'."
 	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/"
 	if $name in ["talebox"] {
-		scp out/standalone.tar.xz $"anty.dev:/srv/http/($name)/"
-		scp standalone.sh $"anty.dev:/srv/http/($name)/"
+		if ("out/standalone.tar.xz" | path exists) {
+			scp out/standalone.tar.xz $"anty.dev:/srv/http/($name)/"
+			scp standalone.sh $"anty.dev:/srv/http/($name)/"
+		}
 	}
 	print "Done."
 }

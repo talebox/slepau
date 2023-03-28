@@ -5,16 +5,15 @@ run pacman -Sy --noconfirm archlinux-keyring
 run pacman -Sy --noconfirm openssl ffmpeg
 
 workdir /server
-
-copy ./media ./
-copy ./web ./web
+cmd ["./media"]
+expose 4000
 
 env CACHE_PATH=data/cache.json
+env CACHE_FOLDER=data/media_cache
 env MEDIA_FOLDER=data/media
 env DB_PATH=data/db.json 
 env DB_BACKUP_FOLDER=backup
 env URL=https://media.anty.dev
 
-expose 4000
-
-cmd ["./media"]
+copy ./media ./
+copy ./web ./web

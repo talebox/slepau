@@ -45,7 +45,7 @@ export def run_gen_key [] {
 }
 export def run_nginx [] {
 	enter config/nginx
-		./nginx.sh
+		sudo ./nginx.sh
 	exit
 }
 

@@ -26,7 +26,7 @@ use tokio::{
 	signal::unix::{signal, SignalKind},
 	sync::{broadcast, mpsc, watch},
 };
-use tower_http::timeout::TimeoutLayer;
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
 pub mod db;
 pub mod ends;
@@ -92,7 +92,9 @@ pub async fn main() {
 				.layer(Extension(resource_tx.clone()))
 				.layer(Extension(task_tx.clone()))
 				.layer(Extension(db.clone())),
-		);
+		)
+		// .layer(TraceLayer::new_for_http())
+		;
 
 	let conversion_service = tokio::spawn(db::task::conversion_service(
 		db.clone(),

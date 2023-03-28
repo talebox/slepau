@@ -31,9 +31,12 @@ impl DB {
 		id
 	}
 
-	/// Tries to fetch version path, else returns a normalized VersionReference that has to be queued for a path to be found.
-	pub fn version_path(&self, mut _ref: VersionReference) -> Result<PathBuf, VersionReference> {
-		let media = self.get(_ref.id).ok_or(_ref.clone())?;
+	/// Tries to fetch version path, else returns a normalifzed VersionReference that has to be queued for a path to be found.
+	pub fn version_path(&self, mut _ref: VersionReference) -> Result<PathBuf, Result<VersionReference, DbError>> {
+		let media = self
+			.get(_ref.id)
+			.expect(format!("The id {} to be valid", _ref.id).as_str());
+
 		let media = media.read().unwrap();
 
 		let mut version = _ref.version.to_version().unwrap();
@@ -45,7 +48,20 @@ impl DB {
 		let version_string: VersionString = (&version).into();
 
 		let _ref = VersionReference::from((media.id, version_string.clone()));
-		media.versions.get(&version_string).map(|_| _ref.path_out()).ok_or(_ref)
+
+		media
+			.versions
+			.get(&version_string)
+			// Return Some(_ref) if you couldn't find the thing
+			.ok_or(Ok(_ref.clone()))
+			// Or if you found it, return an Err(None) to indicate that you found, but no good. or an Ok()
+			.and_then(|v| {
+				if let Some(err) = v.error.clone() {
+					Err(Err(err.into()))
+				} else {
+					Ok(_ref.path_out())
+				}
+			})
 	}
 	/// Queues default version if it hasn't been built, returning the Path to the original.
 	/// Or returns the path to the default version. This is guranteed to always return a path.
@@ -72,8 +88,13 @@ impl DB {
 						return path;
 					}
 					Err(_ref) => {
-						// Version doesn't exist, just quee a task for it
-						self.queue((0, _ref).into());
+						match _ref {
+							Ok(_ref) => {
+								// Version doesn't exist, just quee a task for it
+								self.queue((0, _ref).into());
+							}
+							_ => {}
+						}
 					}
 				}
 			}
@@ -83,13 +104,18 @@ impl DB {
 	}
 
 	pub fn queue(&mut self, task: Task) {
+		// if cfg!(debug_assertions) {
+		// 	info!("Trying to queue {}", task._ref);
+		// }
 		// If you can't find a task with that version reference
 		match self.task_queue.iter_mut().find(|v| v._ref == task._ref) {
 			Some(_task) => {
+				info!("Merged task {}.", task._ref);
 				_task.priority = std::cmp::max(_task.priority, task.priority);
 				_task.callbacks.extend(task.callbacks)
 			}
 			None => {
+				info!("Scheduled task {}.", task._ref);
 				// Schedule a task for it
 				if task.priority > 0 {
 					self.task_queue.push_front(task);
@@ -112,7 +138,7 @@ impl DB {
 			if criteria.matches(&media.read().unwrap()) {
 				queries.iter().for_each(|query| {
 					// If we can't find a path to the version
-					if let Err(_ref) = self.version_path((id, query.version.clone()).into()) {
+					if let Err(Ok(_ref)) = self.version_path((id, query.version.clone()).into()) {
 						// let _ref = (id, query.version.clone()).into();
 						self.queue((0, _ref).into())
 					}
@@ -128,8 +154,12 @@ impl DB {
 	pub fn get(&self, id: MediaId) -> Option<LockedAtomic<Media>> {
 		self.media.get(&id).map(|v| v.to_owned())
 	}
-	pub fn get_all(&self) -> Vec<LockedAtomic<Media>> {
-		self.media.values().cloned().collect()
+	pub fn get_all(&self, user: &str) -> Vec<LockedAtomic<Media>> {
+		self
+			.by_owner
+			.get(user)
+			.map(|v| v.iter().filter_map(|v| v.upgrade()).collect())
+			.unwrap_or_default()
 	}
 	pub fn user_stats(&self, user: &str) -> MediaStats {
 		self
@@ -161,13 +191,25 @@ impl DB {
 
 		_media
 	}
-	pub fn del(&mut self, id: MediaId) -> Result<LockedAtomic<Media>, DbError> {
+	pub fn del(&mut self, id: MediaId, user: &str) -> Result<LockedAtomic<Media>, DbError> {
+		// Get media
+		let media = self.get(id).ok_or(DbError::NotFound)?;
+		let media_weak = Arc::downgrade(&media);
+		// Check that media belongs to owner
+		self
+			.by_owner
+			.get(user)
+			.map(|u| u.iter().any(|v| v.ptr_eq(&media_weak)))
+			.ok_or(DbError::AuthError)?;
+
+		// Remove all tasks for this media.
 		self.task_queue.retain(|task| task._ref.id != id);
+		// Remove this media from all owners.
 		self.by_owner.iter_mut().for_each(|(_, medias)| {
-			medias.retain(|v| v.upgrade().map(|v| v.read().unwrap().id == id).unwrap_or(false));
+			medias.retain(|v| !v.ptr_eq(&media_weak));
 		});
 
-		self.media.remove(&id).ok_or(DbError::NotFound)
+		Ok(self.media.remove(&id).expect("Media has to exist, we just used it."))
 	}
 }
 

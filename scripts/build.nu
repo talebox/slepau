@@ -61,9 +61,60 @@ export def organize_out [] {
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
 			
 			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
+			
+			/bin/find . -type f -name "talebox.conf" -print0 | xargs -0 sed -i -E 's/root .*;/root /srv/http/talebox;/g'
 		
 		exit
-		
+	exit
+	
+	print "Seprating done."
+}
+
+export def build_server [is_musl:bool = false] {
+	load_env_prod
+	
+	rm -rf out/bin
+	mkdir out/bin
+	
+	print "Building binaries to out/bin."
+	# Build server
+	['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
+		if $a not-in ["talebox"]  {
+			cargo build --release --bin $a
+			
+			if $is_musl {
+				cp $"target/x86_64-unknown-linux-musl/release/($a)" out/bin/	
+			} else {
+				cp $"target/release/($a)" out/bin/
+			}
+		}
+	};
+	print "Binaries built."
+}
+export def build_web [] {
+	load_env_prod
+	
+	rm -rf out/web
+	mkdir out/web
+	
+	print "Building webc."
+	# Build webapp
+	enter web
+		# Remove cache/build dirs
+		rm -rf dist .parcel-cache
+		# Build optimized
+		yarn parcel build --public-url /web --no-source-maps
+	exit
+
+	# Copy webapp to output
+	cp -r web/dist/* out/web/
+	
+	print "Finished building web."
+}
+
+# Creates standalone compressed in out folder
+def make_standalone [] {
+	enter out
 		print "Making standalone."
 		rm -rf standalone
 		mkdir standalone
@@ -87,52 +138,17 @@ export def organize_out [] {
 		print "Compressing standalone."
 		tar -cavf standalone.tar.xz standalone
 	exit
-	
-	print "Seprating done."
 }
 
-export def build_server [is_musl] {
-	load_env_prod
-	
-	rm -rf out/bin
-	mkdir out/bin
-	
-	print "Building server."
-	# Build server
-	['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
-		if $a not-in ["talebox"]  {
-			cargo build --release --bin $a
-			
-			if $is_musl {
-				cp $"target/x86_64-unknown-linux-musl/release/($a)" out/bin/	
-			} else {
-				cp $"target/release/($a)" out/bin/
-			}
-		}
-	};
-	print "Building server done."
+export def build_standalone [] {
+	print "Making musl binaries, so we can make a truly standalone app."
+	stop_force
+	build_server_musl
+	build_web
+	organize_out
+	make_standalone
+	print "Finished standalone binaries."
 }
-export def build_web [] {
-	load_env_prod
-	
-	rm -rf out/web
-	mkdir out/web
-	
-	print "Building webc."
-	# Build webapp
-	enter web
-		# Remove cache/build dirs
-		rm -rf dist #.parcel-cache
-		# Build optimized
-		yarn parcel build --public-url /web --no-source-maps
-	exit
-
-	# Copy webapp to output
-	cp -r web/dist/* out/web/
-	
-	print "Finished building web."
-}
-
 
 export def build_all [] {
 	print "Building everying."
@@ -140,7 +156,7 @@ export def build_all [] {
 	# Just to make sure everything has stopped
 	stop_force
 	
-	build_server_musl
+	build_server
 	build_web
 	
 	organize_out
@@ -149,12 +165,20 @@ export def build_all [] {
 }
 
 export def create_musl_builder [] {
+	print "Creating image musl_builder on docker context default."
+	docker context use default
 	docker build -t musl_builder -f ./container/musl_builder.dockerfile ./container
+	
+	print "Done."
 }
 
 export def build_server_musl [] {
+	print "Executing build_server with musl_builder image on docker context default."
+	docker context use default
 	alias musl_builder = docker run --rm -it -v $"(pwd):/volume" -v cargo-registry:/root/.cargo/registry musl_builder
-	musl_builder nu -c "source scripts/source.nu; build_server"
+	musl_builder nu -c "source scripts/source.nu; build_server true"
+	
+	print "Done."
 }
 
 # Makes standalone (TESTING)

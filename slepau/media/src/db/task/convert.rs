@@ -33,7 +33,7 @@ pub fn do_convert(
 ) -> Result<(VersionReference, FileMeta, PathBuf), (VersionReference, DbError)> {
 	let out_folder = std::path::Path::new(CACHE_FOLDER.as_str());
 	if !out_folder.exists() {
-		std::fs::create_dir(out_folder).unwrap();
+		std::fs::create_dir(out_folder).expect("Should be able to mkdir?");
 	}
 	let path_in = std::path::Path::new(MEDIA_FOLDER.as_str()).join(_ref.filename_in());
 	let path_out = out_folder.join(_ref.filename_out());
@@ -52,10 +52,10 @@ pub fn do_convert(
 		})?;
 
 		let mut img = image::load(
-			std::io::BufReader::new(std::fs::File::open(path_in).ok().unwrap()),
+			std::io::BufReader::new(std::fs::File::open(path_in).map_err(|err| (_ref.clone(), err.to_string().into()))?),
 			format.clone(),
 		)
-		.unwrap();
+		.map_err(|err| (_ref.clone(), err.to_string().into()))?;
 
 		if let Some(orientation) = meta.exif.and_then(|v| {
 			v.to_exif()
@@ -109,7 +109,9 @@ pub fn do_convert(
 				.ok_or_else(|| (_ref.clone(), DbError::from(format!("Unknown image type '{}'.", _type))))?;
 		}
 
-		img.save_with_format(path_out.clone(), format).unwrap();
+		img
+			.save_with_format(path_out.clone(), format)
+			.map_err(|err| (_ref.clone(), err.to_string().into()))?;
 
 		let meta_out = FileMeta::from_path(&path_out);
 
@@ -118,7 +120,7 @@ pub fn do_convert(
 		info!("In {}, out {}", path_in.to_str().unwrap(), path_out.to_str().unwrap());
 
 		let mut command = std::process::Command::new("ffmpeg");
-		command.args(["-i", path_in.to_str().unwrap()]);
+		command.args(["-y", "-i", path_in.to_str().unwrap()]);
 
 		if version._type.clone().map(|t| t.starts_with("image")) == Some(true) {
 			// Export first frame as an image
@@ -181,7 +183,7 @@ pub fn do_convert(
 				}
 			}
 			Err(err) => {
-				return Err((_ref, format!("ffmpeg error: {}", err).into()));
+				return Err((_ref, format!("ffmpeg error: '{}'.", err).into()));
 			}
 		}
 

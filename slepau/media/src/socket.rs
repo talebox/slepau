@@ -52,7 +52,7 @@ async fn handle_socket(
 	let (mut tx_socket, mut rx_socket) = socket.split();
 
 	let get_all = || {
-		let mut chunks: MediaVec = db.read().unwrap().get_all().into();
+		let mut chunks: MediaVec = db.read().unwrap().get_all(user).into();
 		chunks.sort(SortType::Created);
 
 		json!(Vec::<crate::db::Media>::from(chunks))
@@ -149,7 +149,7 @@ async fn handle_socket(
 			}
 		}
 
-		info!("Triggered '{}' to '{}'", &message.message.resource, user);
+		// info!("Triggered '{}' to '{}'", &message.message.resource, user);
 
 		messages.push(serde_json::to_string(&message.message).unwrap());
 

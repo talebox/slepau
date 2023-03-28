@@ -99,15 +99,18 @@ pub async fn login(
 			// Generate the keys and sign the claims.
 			// let pub_token = private::sign(&KP.secret, &claims, None, None).unwrap();
 			let pub_token = local::encrypt(&KPR, &claims, None, None).unwrap();
-
-			[(
-				header::SET_COOKIE,
-				format!(
-					"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
-					&host,
-					if *SECURE { " Secure;" } else { "" }
-				),
-			)]
+			
+			// let user_claims = UserClaims::from(&claims);
+			// (
+				[(
+					header::SET_COOKIE,
+					format!(
+						"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
+						&host,
+						if *SECURE { " Secure;" } else { "" }
+					),
+				)]
+			// )
 		})
 		.map_err(|err| {
 			error!("Failed login for '{}' with pass '{}': {:?}.", &user, &pass, &err);

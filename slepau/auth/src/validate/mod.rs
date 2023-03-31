@@ -1,14 +1,13 @@
 use axum::{
 	extract::TypedHeader,
-	headers::{self, Cookie, Host},
+	headers::{Cookie, Host},
 	http::Request,
 	middleware::Next,
-	response::{IntoResponse, Response},
-	Extension, RequestPartsExt,
+	response::{Response}, RequestPartsExt,
 };
-use common::utils::{hostname_normalize, K_PRIVATE, K_PUBLIC, K_SECRET, WEB_DIST};
+use common::utils::{hostname_normalize, K_PRIVATE, K_PUBLIC, K_SECRET};
 use core::convert::TryFrom;
-use hyper::{header, StatusCode};
+use hyper::{StatusCode};
 use lazy_static::lazy_static;
 use pasetors::{
 	claims::ClaimsValidationRules,
@@ -18,7 +17,7 @@ use pasetors::{
 	version4::V4,
 	Local,
 };
-use std::path::PathBuf;
+
 
 lazy_static! {
 	pub static ref KPR: SymmetricKey::<V4> = private_key();

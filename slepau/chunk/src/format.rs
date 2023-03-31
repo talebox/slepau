@@ -42,9 +42,13 @@ pub fn value_transform(value: &str) -> String {
 			),
 			(
 				Regex::new(concat!(r"\(video/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
-				r#"<video controls> 
-<source src="/media/$1?type=video/webm" type="video/webm" />
-<source src="/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4" type="video/mp4" />Your browser doesn't support HTML video. Click to download <a href="/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4">$1</a> instead.</video>"#
+				"\
+<video controls> \
+<source src=\"/media/$1?type=video/webm\" type=\"video/webm\" /> \
+<source src=\"/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\" type=\"video/mp4\" /> \
+	Your browser doesn't support HTML video. Click to download \
+	<a href=\"/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\">$1</a> instead. \
+</video>"
 			),
 			(
 				Regex::new(concat!(r"\(chunks?/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),

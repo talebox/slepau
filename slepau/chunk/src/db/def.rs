@@ -229,7 +229,7 @@ impl DB {
 		}
 
 		let diff_users;
-		let diff_props;
+		// let diff_props;
 		if let Some(chunk_old) = self.chunks.get(&chunk.chunk().id).cloned() {
 			// Updating
 			let chunk_old = chunk_old.write().unwrap();
@@ -241,7 +241,7 @@ impl DB {
 
 			// Find diff, link and insert
 			diff_users = chunk_old.access_diff(Some(&chunk));
-			diff_props = chunk_old.props_diff(Some(&chunk));
+			// diff_props = chunk_old.props_diff(Some(&chunk));
 		} else {
 			// Creating
 			// If creating a chunk, user has to be same as Chunk owner
@@ -249,7 +249,7 @@ impl DB {
 
 			// Find diff, link and insert
 			diff_users = chunk.access_diff(None);
-			diff_props = chunk.props_diff(None);
+			// diff_props = chunk.props_diff(None);
 		}
 
 		let id = chunk.chunk().id.clone();

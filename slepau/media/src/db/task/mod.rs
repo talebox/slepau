@@ -4,7 +4,7 @@ use common::socket::{ResourceMessage, SocketMessage};
 use common::utils::{DbError, LockedAtomic};
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+
 use std::{
 	hash::{Hash, Hasher},
 	time::Instant,

@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 
 lazy_static! {
-	pub static ref MEDIA_FOLDER: String = std::env::var("MEDIA_FOLDER").unwrap_or_else(|_| "media".into());
+	pub static ref MEDIA_FOLDER: String = std::env::var("MEDIA_FOLDER").unwrap_or_else(|_| "media_".into());
 }
 
 use serde::{Deserialize, Serialize};

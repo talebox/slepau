@@ -8,9 +8,9 @@ use axum::{
 };
 
 use common::{
-	http::static_routes,
+	http::{index_service, static_routes},
 	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL},
+	utils::{log_env, SOCKET, URL, WEB_DIST},
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -26,7 +26,7 @@ use tokio::{
 	signal::unix::{signal, SignalKind},
 	sync::{broadcast, mpsc, watch},
 };
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{timeout::TimeoutLayer};
 
 pub mod db;
 pub mod ends;
@@ -76,6 +76,7 @@ pub async fn main() {
 		.route("/stream", get(socket::websocket_handler))
 		.route_layer(from_fn(auth::validate::flow::auth_required))
 		.route("/stats", get(ends::stats))
+		.route("/", post(ends::media_post).get(index_service(WEB_DIST.as_str(), Some("home.html"))))
 		.route("/media", post(ends::media_post))
 		.route(
 			"/media/:id",

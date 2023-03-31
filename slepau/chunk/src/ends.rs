@@ -66,7 +66,7 @@ pub async fn page_get_id(
 	};
 	if let Some(chunk) = db.read().unwrap().get_chunk(id, &user_claims.user) {
 		let mut title: String = "Page".into();
-		let mut html: String = "HTML".into();
+		let html;
 		{
 			let lock = chunk.read().unwrap();
 			if let Some(v) = lock.get_prop::<String>("title") {

@@ -15,7 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 log = { version = "0.4" }
 env_logger = "0.10"
-tower-http = { version = "0.3.4", features = ["full"] }
+tower-http = { version = "0.4.0", features = ["full"] }
 tower = { version = "0.4.13", features = [
 	"limit",
 	"buffer",

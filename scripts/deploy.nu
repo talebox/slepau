@@ -28,7 +28,7 @@ export def deploy_docker [name] {
 		"chunk": 4502,
 		"media": 4503,
 	}
-	docker run -d --restart unless-stopped -p $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" --name $"($name)_s" $name
+	docker run -d --restart unless-stopped -p $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" -e $"URL=https://($name).anty.dev" --name $"($name)_s" $name
 	
 	print "Done."
 }
@@ -38,10 +38,11 @@ export def deploy_static [name] {
 	print $"Deploying static site '($name)'."
 	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/"
 	if $name in ["talebox"] {
-		if ("out/standalone.tar.xz" | path exists) {
-			scp out/standalone.tar.xz $"anty.dev:/srv/http/($name)/"
-			scp standalone.sh $"anty.dev:/srv/http/($name)/"
-		}
+		scp out/*.tar.xz $"anty.dev:/srv/http/($name)/"
+		
+		# if ("out/standalone.tar.xz" | path exists) {
+		# 	# scp standalone.sh $"anty.dev:/srv/http/($name)/"
+		# }
 	}
 	print "Done."
 }

@@ -1,3 +1,3 @@
-# Standalone [Talebox](https://github.com/talebox)
+# Standalone [Talebox](https://github.com/talebox) Build
 
-Standalone slepau (lojban for "an indivisible unit") build.
+Execute `./run.sh` to go!!!

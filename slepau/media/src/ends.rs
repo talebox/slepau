@@ -1,6 +1,6 @@
 use auth::UserClaims;
 use axum::{
-	body::{HttpBody, StreamBody},
+	body::{StreamBody},
 	extract::{BodyStream, Path, Query},
 	http::header,
 	response::{IntoResponse, Response},
@@ -8,7 +8,7 @@ use axum::{
 };
 use common::{
 	socket::ResourceSender,
-	utils::{DbError, LockedAtomic, CACHE_FOLDER, WEB_DIST},
+	utils::{DbError, LockedAtomic, CACHE_FOLDER},
 };
 use futures::{future::join_all, join};
 use hyper::StatusCode;
@@ -23,7 +23,7 @@ use media::{MatcherType, MEDIA_FOLDER};
 
 use crate::db::{
 	task::Task,
-	version::{Version, VersionReference, VersionString},
+	version::{Version, VersionReference},
 	DBStats, Media, MediaId, DB,
 };
 

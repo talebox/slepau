@@ -66,4 +66,4 @@ For more information just read scripts on `scripts` folder.
 ## On Linux
 - Get build dependencies `apt install ffmpeg nginx`
 - Add this line to /etc/hosts `127.0.0.1 auth.local chunk.local media.local`
-- Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.anty.dev/standalone.sh | sh` which will download, extract, and run the standalone project for the first time. That's it!
+- Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.dev/standalone.sh | sh` which will download, extract, and run the standalone project for the first time. That's it!

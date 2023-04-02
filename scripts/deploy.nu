@@ -57,10 +57,12 @@ export def deploy_nginx [] {
 
 export def deploy_all [] {
 	print "Deploying slepau + nginx."
+	
 	deploy_docker auth
 	deploy_docker chunk
 	deploy_docker media
 	deploy_static talebox
+	deploy_static gibos
 	
 	deploy_nginx
 	

@@ -4,7 +4,6 @@ use lazy_static::lazy_static;
 use proquint::Quintable;
 use rand::prelude::*;
 use regex::Regex;
-use reqwest::Url;
 use serde::Serialize;
 
 pub type LockedAtomic<T> = Arc<RwLock<T>>;
@@ -66,8 +65,8 @@ lazy_static! {
 	/// The socket is we listen to requests from.
 	pub static ref SOCKET: SocketAddr = SocketAddr::from_str(env::var("SOCKET").unwrap_or_else(|_| "0.0.0.0:4000".into()).as_str()).expect("Socket address to be valid");
 	/// The URL is where users go to access this slepau.
-	pub static ref URL: Url = Url::parse(env::var("URL").unwrap_or_else(|_| "http://localhost:4000".into()).as_str()).expect("URL to be valid");
-	pub static ref SECURE: bool = URL.scheme() != "http";
+	pub static ref URL: String = env::var("URL").unwrap_or_else(|_| "http://localhost:4000".into());
+	pub static ref SECURE: bool = URL.starts_with("https");
 }
 
 /**

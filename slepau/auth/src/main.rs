@@ -150,9 +150,9 @@ async fn main() {
 				.layer(Extension(shutdown_rx.clone())), // .layer(Extension(resource_tx.clone())),
 		);
 	// If we're local, then allow cors
-	if URL.domain().and_then(|v| Some(v == "localhost")) == Some(true) {
-		app = app.layer(CorsLayer::permissive());
-	}
+	// if URL.domain().and_then(|v| Some(v == "localhost")) == Some(true) {	
+	// }
+	// app = app.layer(CorsLayer::permissive());
 
 	// Backup service
 	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));

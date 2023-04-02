@@ -1,5 +1,4 @@
 /// Common data management functionality for the Slepau, initialization, backups etc...
-use hyper::StatusCode;
 use log::{error, info, trace};
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
@@ -19,15 +18,16 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 	match DB_INIT.as_ref() {
 		Some(db_init) => {
 			trace!("Fetching {}", db_init);
-			match reqwest::get(format!("{db_init}/api/mirror/{}", magic_bean::MAGIC_BEAN)).await {
-				Ok(v) => {
-					if v.status() != StatusCode::OK {
-						return failover(db_init);
-					}
-					serde_json::from_slice::<T>(&v.bytes().await.unwrap()).unwrap()
-				}
-				_ => failover(db_init),
-			}
+			failover(db_init)
+			// match reqwest::get(format!("{db_init}/api/mirror/{}", magic_bean::MAGIC_BEAN)).await {
+			// 	Ok(v) => {
+			// 		if v.status() != StatusCode::OK {
+			// 			return failover(db_init);
+			// 		}
+			// 		serde_json::from_slice::<T>(&v.bytes().await.unwrap()).unwrap()
+			// 	}
+			// 	_ => failover(db_init),
+			// }
 		}
 		None => match DB_PATH.clone() {
 			Some(db_path) => match fs::read_to_string(&db_path) {

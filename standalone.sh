@@ -2,7 +2,7 @@
 hash nginx 2>/dev/null || { echo >&2 "I require 'nginx' but it's not installed. Install it before we keep going.  Aborting."; exit 1; }
 hash ffmpeg 2>/dev/null || { echo >&2 "I require 'ffmpeg' but it's not installed. Install it before we keep going.  Aborting."; exit 1; }
 
-wget -N https://talebox.anty.dev/standalone.tar.xz
+wget -N https://talebox.dev/standalone.tar.xz
 tar -xpaf standalone.tar.xz
 
 cd standalone

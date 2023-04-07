@@ -1,0 +1,20 @@
+# Locations for web resources
+#
+# login, auth, chunk, media, gibos
+# 
+# All server entries should implement this.
+
+# location /web/auth/ {
+# 	proxy_pass http://127.0.0.1:4001/web/;
+# }
+# location /web/chunk/ {
+# 	proxy_pass http://127.0.0.1:4002/web/;
+# }
+# location /web/media/ {
+# 	proxy_pass http://127.0.0.1:4003/web/;
+# }
+
+
+location /web/ {
+	alias /home/rubend/organized/projects/tale_builder/web/dist/;#WEB_MONO
+}

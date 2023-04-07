@@ -36,20 +36,21 @@ export def deploy_docker [name] {
 export def deploy_static [name] {
 	
 	print $"Deploying static site '($name)'."
-	scp $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/"
-	if $name in ["talebox"] {
-		scp out/*.tar.xz $"anty.dev:/srv/http/($name)/"
-		
-		# if ("out/standalone.tar.xz" | path exists) {
-		# 	# scp standalone.sh $"anty.dev:/srv/http/($name)/"
-		# }
+	if $name == "tale_web" {
+		rsync -av $"out/web/*" $"anty.dev:/srv/http/($name)/"
+	} else {
+		rsync -av $"out/web/($name)/*" $"anty.dev:/srv/http/($name)/"
+		if $name in ["talebox"] {
+			rsync -av out/*.tar.xz $"anty.dev:/srv/http/($name)/"
+		}
+		print "Done."
 	}
-	print "Done."
+	
 }
 
 export def deploy_nginx [] {
 	print "Deploying nginx to root@anty.dev"
-	scp out/nginx/sites/* root@anty.dev:/etc/nginx/sites-available/
+	rsync -av out/nginx/sites/* root@anty.dev:/etc/nginx/sites/
 	print "Restarting nginx."
 	ssh root@anty.dev systemctl restart nginx
 	print "Done."
@@ -61,6 +62,8 @@ export def deploy_all [] {
 	deploy_docker auth
 	deploy_docker chunk
 	deploy_docker media
+	
+	deploy_static tale_web
 	deploy_static talebox
 	deploy_static gibos
 	

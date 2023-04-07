@@ -32,6 +32,7 @@ impl DBAuth {
 			self
 				.hosts
 				.get(host)
+				.or_else(|| self.hosts.get("any"))
 				.and_then(|s| s.upgrade().map(|s| s.read().unwrap().id)),
 		)
 	}

@@ -8,7 +8,7 @@ sh -c "cd media; URL='http://media.talebox.local:8080' SOCKET='0.0.0.0:4003' ./m
 
 sleep 1s
 
-export TALEBOX_DIR="$(pwd)/talebox/web"
+export WEB_DIR="$(pwd)/web"
 export NGINX_AS_USER=$(whoami)
 
 sh -c "cd nginx; chmod +x nginx.sh; ./nginx.sh"

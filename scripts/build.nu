@@ -34,34 +34,34 @@ export def organize_out [bin_dir = "bin"] {
 				cp $"../container/($a).dockerfile" $"slepau/($a)/dockerfile"
 			}
 			# Don't for ...
-			if $a not-in ["gen_key"]  {
-				echo $"Web for ($a)."
-				mkdir $"slepau/($a)/web"
-				# Copy web
-				cp -r $"web/($a)/*" $"slepau/($a)/web/"
-			}
+			# if $a not-in ["gen_key"]  {
+			# 	echo $"Web for ($a)."
+			# 	mkdir $"slepau/($a)/web"
+			# 	# Copy web
+			# 	cp -r $"web/($a)/*" $"slepau/($a)/web/"
+			# }
 			
 			# Copy login project
-			if $a not-in ["talebox", "gen_key"]  {
-				cp -r web/login $"slepau/($a)/web/"
-			}
+			# if $a not-in ["talebox", "gen_key"]  {
+			# 	cp -r web/login $"slepau/($a)/web/"
+			# }
 		};
 		
 		cp -r ../config/nginx ./
 		enter nginx
 		
-			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
 			
-			# /bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's/\.\*/.anty.dev/g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
 			
-			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
 			
-			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
 			
-			/bin/find . -type f -name "*.conf" -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
-			
-			/bin/find . -type f -name "talebox.conf" -print0 | xargs -0 sed -i -E 's$root .*;$root /srv/http/talebox;$g'
-			/bin/find . -type f -name "gibos.conf" -print0 | xargs -0 sed -i -E 's$root .*;$root /srv/http/gibos;$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#TALEBOX$root /srv/http/talebox;#TALEBOX$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#GIBOS$root /srv/http/gibos;#GIBOS$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#WEB_MONO$root /srv/http/tale_web;#WEB_MONO$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$alias .*;#WEB_MONO$alias /srv/http/tale_web/;#WEB_MONO$g'
 		
 		exit
 		
@@ -84,12 +84,6 @@ export def build_server [bin_dir:string = "bin", options = []] {
 	['auth', 'chunk', 'media', 'gen_key'] | each {|a|
 		if $a not-in ["talebox"]  {
 			cargo build -Z unstable-options --out-dir $"out/($bin_dir)" $options --release --bin $a
-			
-			# if $is_musl {
-			# 	cp $"target/x86_64-unknown-linux-musl/release/($a)" out/bin/	
-			# } else {
-			# 	cp $"target/release/($a)" out/bin/
-			# }
 		}
 	};
 	print "Binaries built."
@@ -97,20 +91,40 @@ export def build_server [bin_dir:string = "bin", options = []] {
 export def build_web [] {
 	load_env_prod
 	
-	rm -rf out/web
-	mkdir out/web
-	
 	print "Building webc."
 	# Build webapp
 	enter web
-		# Remove cache/build dirs
-		rm -rf dist .parcel-cache
-		# Build optimized
+		# MODULAR BUILD --------
+		rm -rf ../out/web
+		mkdir ../out/web
+		rm -rf dist #.parcel-cache
+		
 		yarn parcel build --public-url /web --no-source-maps
+		
+		# ["login", "auth", "chunk", "media"] | each {|v| 
+		# 	# Build optimized
+		# 	yarn parcel build --public-url /web --no-source-maps --target $v
+		# };
+		
+		# Copy webapp to output
+		cp -r dist/* ../out/web/
+		
+		# # MONOLITHIC BUILD ---------
+		rm -rf ../out/web_mono
+		# mkdir ../out/web_mono
+		# rm -rf dist #.parcel-cache
+		
+		# ["login", "auth", "chunk", "media", "talebox", "gibos"] | each {|v| 
+		# 	let public = $"/web/($v)"
+			
+		# 	# Build optimized
+		# 	yarn parcel build --public-url $public --no-source-maps --target $v
+		# };
+		
+		# # Copy webapp to output
+		# cp -r dist/* ../out/web_mono/
+		
 	exit
-
-	# Copy webapp to output
-	cp -r web/dist/* out/web/
 	
 	# Copy talebox script to download & install standalone build.
 	["linux_x86_64", "musl_x86_64", "arm64", "armv7", "armv7hf"] | each {|a|
@@ -131,7 +145,7 @@ export def make_standalone [dir = "linux_x86_64"] {
 			mkdir keys
 			cp $"../bin_($dir)/gen_key" ./
 			
-			["auth","chunk","media","talebox"] | each {|a|
+			["auth","chunk","media"] | each {|a|
 				cp -r $"../slepau/($a)" ./
 				enter $a
 					ln -s ../keys keys
@@ -144,6 +158,8 @@ export def make_standalone [dir = "linux_x86_64"] {
 			# In case i want to copy/replace inline.
 			# cat ../../standalone_run.sh | sed -E $'s#standalone\.tar\.xz#standalone_($dir)\.tar\.xz#g' | save -f ./run.sh
 			cp ../../standalone_run.sh ./run.sh
+			
+			cp -r ../web ./
 			
 			# enter talebox/web
 			# 	ln -s $"../../../standalone_($dir).tar.xz" ./
@@ -177,13 +193,17 @@ export def build_all [] {
 	build_web
 	
 	
-	# build_server bin_linux_x86_64
-	# organize_out bin_linux_x86_64
-	# make_standalone linux_x86_64
+	build_server bin_linux_x86_64
+	organize_out bin_linux_x86_64
+	make_standalone linux_x86_64
 	
 	# build_server bin_arm64 ["--target", "aarch64-unknown-linux-gnu"]
 	# organize_out bin_arm64
 	# make_standalone arm64
+	
+	# build_server bin_armv7 ["--target", "armv7-unknown-linux-gnueabi"]
+	# organize_out bin_armv7
+	# make_standalone armv7
 	
 	build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf"]
 	organize_out bin_armv7hf
@@ -192,6 +212,8 @@ export def build_all [] {
 	# build_server_musl
 	# organize_out bin_musl_x86_64
 	# make_standalone musl_x86_64
+	
+	organize_out bin_linux_x86_64
 	
 	print "Build of everything finished. You can safely deploy now."
 }

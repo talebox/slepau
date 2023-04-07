@@ -35,7 +35,7 @@ impl DB {
 	pub fn version_path(&self, mut _ref: VersionReference) -> Result<PathBuf, Result<VersionReference, DbError>> {
 		let media = self
 			.get(_ref.id)
-			.expect(format!("The id {} to be valid", _ref.id).as_str());
+			.ok_or_else(|| Err(format!("Media {} not found", _ref.id).into()))?;
 
 		let media = media.read().unwrap();
 

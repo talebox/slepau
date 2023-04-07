@@ -9,6 +9,7 @@ expose 4000
 env CACHE_PATH=data/cache.json 
 env DB_PATH=data/db.json 
 env DB_BACKUP_FOLDER=backup
+env URL=https://chunk.talebox.dev
 
 copy ./chunk ./
-copy ./web ./web
+# copy ./web ./web

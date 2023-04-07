@@ -7,7 +7,7 @@ use axum::{
 use hyper::StatusCode;
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::utils::{WEB_DIST, WEB_DIST_LOGIN};
+// use crate::utils::{WEB_DIST, WEB_DIST_LOGIN};
 
 pub fn index_service(dir: &str, index: Option<&str>) -> MethodRouter {
 	let assets_dir = PathBuf::from(dir);
@@ -26,16 +26,16 @@ pub fn my_serve_dir(dir: &str, default_to_index: bool) -> ServeDir {
 }
 pub fn static_routes() -> Router {
 	Router::new()
-		.nest_service("/app", index_service(WEB_DIST.as_str(), Some("index.html")))
-		.nest_service(
-			"/login",
-			assets_service(WEB_DIST_LOGIN.as_str(), true)
-				.fallback_service(index_service(WEB_DIST_LOGIN.as_str(), Some("index.html"))),
-		)
-		.nest_service(
-			"/web",
-			get_service(my_serve_dir(WEB_DIST.as_str(), false).fallback(my_serve_dir(WEB_DIST_LOGIN.as_str(), false)))
-				.handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR)),
-		)
-		.fallback_service(index_service(WEB_DIST.as_str(), Some("home.html")))
+		// .nest_service("/app", index_service(WEB_DIST.as_str(), Some("index.html")))
+		// .nest_service(
+		// 	"/login",
+		// 	assets_service(WEB_DIST_LOGIN.as_str(), true)
+		// 		.fallback_service(index_service(WEB_DIST_LOGIN.as_str(), Some("index.html"))),
+		// )
+		// .nest_service(
+		// 	"/web",
+		// 	get_service(my_serve_dir(WEB_DIST.as_str(), false).fallback(my_serve_dir(WEB_DIST_LOGIN.as_str(), false)))
+		// 		.handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR)),
+		// )
+		// .fallback_service(index_service(WEB_DIST.as_str(), Some("home.html")))
 }

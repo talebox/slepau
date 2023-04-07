@@ -19,7 +19,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub mod admin;
 
-use crate::db::DBAuth;
+use crate::db::{DBAuth, site::SiteSet};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -126,8 +126,15 @@ pub async fn register(
 
 	if db.admins.is_empty() {
 		db.new_admin(&user, &pass)?;
-		info!("Super admin created '{}'.", &user);
-		return Ok("Super admin created.");
+		let site_id = db.new_site(&user)?;
+		db.mod_site(&user, site_id, SiteSet {
+			name: "Default Site".into(),
+			hosts: vec!["any".into()],
+			max_age: 60 * 60 * 24,
+			claims: Default::default(),
+		})?;
+		info!("Super admin created '{user}' + New Default site '{site_id}'.");
+		return Ok("Super admin created + New Default site.");
 	}
 
 	let (_, site_id) = db.host_to_site_id(host.hostname());

@@ -10,7 +10,7 @@ use axum::{
 use common::{
 	http::{index_service, static_routes},
 	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL, WEB_DIST},
+	utils::{log_env, SOCKET, URL},
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -76,7 +76,7 @@ pub async fn main() {
 		.route("/stream", get(socket::websocket_handler))
 		.route_layer(from_fn(auth::validate::flow::auth_required))
 		.route("/stats", get(ends::stats))
-		.route("/", post(ends::media_post).get(index_service(WEB_DIST.as_str(), Some("home.html"))))
+		.route("/", post(ends::media_post))
 		.route("/media", post(ends::media_post))
 		.route(
 			"/media/:id",

@@ -13,6 +13,7 @@ env CACHE_FOLDER=data/media_cache
 env MEDIA_FOLDER=data/media
 env DB_PATH=data/db.json 
 env DB_BACKUP_FOLDER=backup
+env URL=https://media.talebox.dev
 
 copy ./media ./
-copy ./web ./web
+# copy ./web ./web

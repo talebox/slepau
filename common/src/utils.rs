@@ -60,8 +60,8 @@ lazy_static! {
 	pub static ref DB_BACKUP_FOLDER: String = env::var("DB_BACKUP_FOLDER").unwrap_or_else(|_| "backups".into());
 	pub static ref CACHE_PATH: String = env::var("CACHE_PATH").unwrap_or_else(|_| "cache.json".into());
 	pub static ref CACHE_FOLDER: String = env::var("CACHE_FOLDER").unwrap_or_else(|_| "cache".into());
-	pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
-	pub static ref WEB_DIST_LOGIN: String = env::var("WEB_DIST_LOGIN").unwrap_or_else(|_| "web/login".into());
+	// pub static ref WEB_DIST: String = env::var("WEB_DIST").unwrap_or_else(|_| "web".into());
+	// pub static ref WEB_DIST_LOGIN: String = env::var("WEB_DIST_LOGIN").unwrap_or_else(|_| "web/login".into());
 	/// The socket is we listen to requests from.
 	pub static ref SOCKET: SocketAddr = SocketAddr::from_str(env::var("SOCKET").unwrap_or_else(|_| "0.0.0.0:4000".into()).as_str()).expect("Socket address to be valid");
 	/// The URL is where users go to access this slepau.
@@ -179,7 +179,11 @@ pub struct DataSlice<T> {
 }
 
 pub fn hostname_normalize<'a>(host: &'a str) -> &'a str {
-	psl::domain_str(host).unwrap_or(host)
+	if ["127.", "10.", "192.168."].iter().any(|v| host.starts_with(v)) {
+		host
+	} else {
+		psl::domain_str(host).unwrap_or(host)
+	}
 }
 
 pub fn get_hash<T: Hash>(v: &T) -> u64 {

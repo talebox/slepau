@@ -8,7 +8,7 @@ use axum::{
 use common::{
 	http::{index_service, static_routes},
 	init::backup::backup_service,
-	utils::{log_env, SOCKET, URL, WEB_DIST_LOGIN},
+	utils::{log_env, SOCKET, URL},
 	Cache,
 };
 use env_logger::Env;
@@ -127,7 +127,7 @@ async fn main() {
 		)
 		.route(
 			"/login",
-			post(crate::ends::login).get(index_service(WEB_DIST_LOGIN.as_str(), Some("index.html"))),
+			post(crate::ends::login),
 		)
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		// The request limiter :)

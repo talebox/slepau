@@ -205,14 +205,15 @@ export def build_all [] {
 	# organize_out bin_armv7
 	# make_standalone armv7
 	
-	build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf"]
-	organize_out bin_armv7hf
-	make_standalone armv7hf
+	# build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf"]
+	# organize_out bin_armv7hf
+	# make_standalone armv7hf
 	
 	# build_server_musl
 	# organize_out bin_musl_x86_64
 	# make_standalone musl_x86_64
 	
+	### Make slepau directory have all x86_64 stuff again.
 	organize_out bin_linux_x86_64
 	
 	print "Build of everything finished. You can safely deploy now."

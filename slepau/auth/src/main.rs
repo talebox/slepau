@@ -6,7 +6,7 @@ use axum::{
 };
 
 use common::{
-	http::{index_service, static_routes},
+	http::{static_routes},
 	init::backup::backup_service,
 	utils::{log_env, SOCKET, URL},
 	Cache,
@@ -27,7 +27,7 @@ use std::{
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::{cors::CorsLayer, timeout::TimeoutLayer};
+use tower_http::{timeout::TimeoutLayer};
 
 mod db;
 mod ends;
@@ -84,7 +84,7 @@ async fn main() {
 	);
 
 	// Build router
-	let mut app = Router::new()
+	let app = Router::new()
 		// Admin Actions V
 		.merge(
 			Router::new()

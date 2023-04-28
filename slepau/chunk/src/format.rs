@@ -24,18 +24,18 @@ pub fn value_transform(value: &str) -> String {
 			(REGEX_ACCESS.clone(), ""),
 			(
 				Regex::new(concat!(r"\(media/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
-				"(/media/$1)"
+				"(/media/media/$1)"
 			),
 			(
 				Regex::new(concat!(r"\(image/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
 				r#"<img
 	style="display: block"
-	src="/media/$1?max=800x"
+	src="/media/media/$1?max=800x"
 	srcset="
-		/media/$1?max=480x   480w,
-		/media/$1?max=800x   800w,
-		/media/$1?max=1200x 1200w,
-		/media/$1?max=x 1600w
+		/media/media/$1?max=480x   480w,
+		/media/media/$1?max=800x   800w,
+		/media/media/$1?max=1200x 1200w,
+		/media/media/$1?max=x 1600w
 	"
 	sizes="(min-width:800px) 800px, 100vw"
 />"#
@@ -43,11 +43,11 @@ pub fn value_transform(value: &str) -> String {
 			(
 				Regex::new(concat!(r"\(video/(", env!("REGEX_PROQUINT"), r")\)")).unwrap(),
 				"\
-<video controls> \
-<source src=\"/media/$1?type=video/webm\" type=\"video/webm\" /> \
-<source src=\"/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\" type=\"video/mp4\" /> \
+<video controls poster=\"/media/media/$1?type=image/webp\"> \
+<source src=\"/media/media/$1?type=video/webm\" type=\"video/webm\" /> \
+<source src=\"/media/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\" type=\"video/mp4\" /> \
 	Your browser doesn't support HTML video. Click to download \
-	<a href=\"/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\">$1</a> instead. \
+	<a href=\"/media/media/$1?c_v=libx264&c_a=aac&b_v=2M&b_a=90k&type=video/mp4\">$1</a> instead. \
 </video>"
 			),
 			(

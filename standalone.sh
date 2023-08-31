@@ -11,7 +11,7 @@ cd standalone
 cd ..
 
 
-HOSTS_CONFIG="127.0.0.1 auth.talebox.local chunk.talebox.local media.talebox.local"
+HOSTS_CONFIG="127.0.0.1 auth.talebox.local chunk.talebox.local media.talebox.local talebox.local"
 
 echo "We're using domain '*.talebox.local', you should have this in your /etc/hosts file already '($HOSTS_CONFIG)' so those domains are resolved to the loopback ip 127.0.0.1"
 

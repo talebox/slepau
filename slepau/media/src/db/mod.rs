@@ -41,7 +41,7 @@ pub struct Media {
 #[derive(Default, Serialize)]
 pub struct MediaStats {
 	/// The size, in bytes
-	pub size: usize,
+	pub size: u64,
 }
 impl std::ops::Add<Self> for MediaStats {
 	type Output = Self;

@@ -49,7 +49,7 @@ pub async fn login(
 			// Create token
 			let mut claims = Claims::new().unwrap();
 			// Set Issuer
-			claims.issuer("slepau:auth").unwrap();
+			claims.issuer("talebox").unwrap();
 			// Set Audience
 			claims.audience(&host).unwrap();
 
@@ -217,7 +217,7 @@ pub async fn logout(TypedHeader(host): TypedHeader<headers::Host>, headers: Head
 			// 		if *SECURE { " Secure;" } else { "" }
 			// 	),
 			// ),
-			(header::LOCATION, format!("{referer}")),
+			(header::LOCATION, referer.to_string()),
 		],
 	)
 }

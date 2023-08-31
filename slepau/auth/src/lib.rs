@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 fn is_false(v: &bool) -> bool {
 	*v == false
 }
-fn is_zero(v: &usize) -> bool {
+fn is_zero(v: &u64) -> bool {
 	*v == 0
 }
 
@@ -22,7 +22,9 @@ pub struct UserClaims {
 
 	/// Media limit, in bytes
 	#[serde(skip_serializing_if = "is_zero")]
-	pub media_limit: usize,
+	pub media_limit: u64,
+	
+	pub exp: u64,
 }
 impl From<&Claims> for UserClaims {
 	fn from(claims: &Claims) -> Self {

@@ -101,7 +101,7 @@ async fn handle_socket(
 			} else if piece == Some("media") {
 				let root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
 				if let Some(id) = root_id {
-					return reply((&db.read().unwrap().get(id).map(|v| crate::db::Media::from(v))).into());
+					return reply((&db.read().unwrap().get(id).map(crate::db::Media::from)).into());
 				} else {
 					error!("Media request needs an id");
 					return None;

@@ -11,6 +11,43 @@ since the project began and all the ideas that have come up since then.
 Based on the idea of slepau (atoms). We've made a cargo virtual (because it has no binary of itself) workspace as a top level. And all slepau are inside the `slepau` folder.
 
 ---
+# Get started
+
+Our scripts can be run with [Nushell](https://nushell.sh/), which is multi-platform. So make sure it's installed.
+
+Development is currently happening on [Arch Linux](https://wiki.archlinux.org/), so that's the only platform these steps have been tested at.
+
+## Always bring scripts into scope `source scripts/source.nu` for each terminal.
+
+The way this works requests reach Nginx, then get routed to either the static files, or the running rust services.
+
+So for the development environment to work, <b>Nginx</b> has to be running, there have to be some <b>web static files</b> built, and the <b>rust service</b> you're using has to be running.
+
+<b>Web Static Files</b>
+
+- Build and watch for changes: `run_web watch`
+
+<b>Nginx</b>
+
+- Run like so: `run_nginx`
+
+<b>Rust Services</b>
+
+- Run auth like so: `run_auth`
+- Run chunk like so: `run_chunk`
+- Run media like so: `run_media`
+
+
+For more information just read scripts on `scripts` folder.
+
+# To build:
+
+## On Linux
+- Get build dependencies `apt install ffmpeg nginx`
+- (Optional, the script will add it automatically) Add this line to /etc/hosts `127.0.0.1 auth.local chunk.local media.local`
+- Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.dev/standalone.sh | sh` which will download, extract, and run the standalone project for the first time. That's it!
+
+---
 # Folder overview
 
 ## Slepau 🔩
@@ -46,24 +83,5 @@ All production files generated after `build_all` is executed.
 Dockerfiles.
 
 ---
-# Get started
 
-Our scripts can be run with [Nushell](https://nushell.sh/), which is multi-platform. So make sure it's installed.
-
-Development is currently happening on [Arch Linux](https://wiki.archlinux.org/), so that's the only platform these steps have been tested at.
-
-## Always bring scripts into scope `source scripts/source.nu` for each terminal.
-
-- To build web projects and watch for changes: `cd web; yarn watch`
-- Run auth like so: `run_auth`
-- Run chunk like so: `run_chunk`
-- Run media like so: `run_media`
-
-For more information just read scripts on `scripts` folder.
-
-# To build:
-
-## On Linux
-- Get build dependencies `apt install ffmpeg nginx`
-- Add this line to /etc/hosts `127.0.0.1 auth.local chunk.local media.local`
-- Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.dev/standalone.sh | sh` which will download, extract, and run the standalone project for the first time. That's it!
+For the svg icons. I've heavily relied on [Bootstrap Icons](https://icons.getbootstrap.com/). Credit goes to them for these.

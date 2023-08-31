@@ -97,7 +97,7 @@ pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response,
 		.and_then(|cookies| cookies.get("auth").map(|v| v.to_owned()))
 	{
 		let mut validation_rules = ClaimsValidationRules::new();
-		validation_rules.validate_issuer_with("slepau:auth");
+		validation_rules.validate_issuer_with("talebox");
 		validation_rules.validate_audience_with(host);
 
 		if let Ok(token) = UntrustedToken::<

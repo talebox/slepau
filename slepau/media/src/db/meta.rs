@@ -38,7 +38,7 @@ impl Exif {
 #[serde(default)]
 pub struct FileMeta {
 	hash: Proquint<u64>,
-	pub size: usize,
+	pub size: u64,
 	/// Mime type
 	#[serde(rename = "type")]
 	pub _type: String,
@@ -55,7 +55,7 @@ impl From<&Vec<u8>> for FileMeta {
 
 		Self {
 			hash: get_hash(value).into(),
-			size: value.len(),
+			size: value.len().try_into().unwrap(),
 			_type: mime_type.into(),
 			exif: extra,
 		}
@@ -70,7 +70,7 @@ impl FileMeta {
 
 		Self {
 			hash: get_hash(path).into(),
-			size: std::fs::metadata(path).map(|v| v.len() as usize).unwrap_or_default(),
+			size: std::fs::metadata(path).map(|v| v.len()).unwrap_or_default(),
 			_type: mime_type.into(),
 			exif: extra,
 		}

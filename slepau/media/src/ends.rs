@@ -206,8 +206,8 @@ pub async fn media_post(
 		info!("Created media folder at '{}'.", path.to_string_lossy());
 	}
 
-	const MB: usize = 1024 * 1024;
-	const MAX_ALLOWED_MEDIA_SIZE: usize = 100 * MB;
+	const MB: u64 = 1024 * 1024;
+	const MAX_ALLOWED_MEDIA_SIZE: u64 = 100 * MB;
 
 	let stats = db.read().unwrap().user_stats(&user_claims.user);
 	// info!(
@@ -238,10 +238,10 @@ pub async fn media_post(
 	{
 		let mut file = tokio::fs::File::create(path.clone()).await.unwrap();
 
-		let mut size = 0;
+		let mut size: u64 = 0;
 		while let Some(Ok(mut chunk)) = body.next().await {
 			// info!("write chunk {}", chunk.len());
-			size += chunk.len();
+			size += chunk.len() as u64;
 			if size >= MAX_ALLOWED_MEDIA_SIZE {
 				return Err((
 					StatusCode::PAYLOAD_TOO_LARGE,

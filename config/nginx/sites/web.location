@@ -16,5 +16,5 @@
 
 
 location /web/ {
-	alias /home/rubend/organized/projects/tale_builder/web/dist/;#WEB_MONO
+	alias /home/rubend/p/slepau/web/dist/;#WEB_MONO
 }

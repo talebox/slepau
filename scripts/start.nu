@@ -14,6 +14,12 @@ export def run [] {
 	
 	cargo run
 }
+export def run_web [script] {
+	load_env_dev
+	
+	enter web
+		yarn $script
+}
 export def run_auth [] {
 	load_env_dev
 	open "config/auth/dev.toml" | load-env
@@ -44,9 +50,10 @@ export def run_gen_key [] {
 	cargo run --bin gen_key
 }
 export def run_nginx [] {
+	$env.WEB_DIR = $"(pwd)/web/dist"
+
 	enter config/nginx
-		sudo ./nginx.sh
-	exit
+		sudo -E ./nginx.sh
 }
 
 export def test [] {

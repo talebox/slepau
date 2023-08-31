@@ -1,9 +1,6 @@
 # Making slepau definitions
 
-A project's code and it's behaviour are inextricably linked. 
-
-The aim of this reordering is putting things in the right places 
-and hopefully set myself up for better encapsulation.
+Code on chunk was getting too big. So I restructured things into smaller `slepau` (atoms).
 
 This was the right step given the **explosion** of functionality 
 since the project began and all the ideas that have come up since then.
@@ -19,26 +16,26 @@ Development is currently happening on [Arch Linux](https://wiki.archlinux.org/),
 
 ## Always bring scripts into scope `source scripts/source.nu` for each terminal.
 
-The way this works requests reach Nginx, then get routed to either the static files, or the running rust services.
+The way this works requests reach Nginx, then get routed to either the static files (web apps), or the running rust services (backend).
 
-So for the development environment to work, <b>Nginx</b> has to be running, there have to be some <b>web static files</b> built, and the <b>rust service</b> you're using has to be running.
+So for things to work, <b>Nginx</b> has to be running, there have to be some <b>web static files</b> built, and the <b>rust service</b> you're using has to be running.
 
-<b>Web Static Files</b>
+<b>Web Apps</b>
 
 - Build and watch for changes: `run_web watch`
 
 <b>Nginx</b>
 
-- Run like so: `run_nginx`
+- `run_nginx`
 
 <b>Rust Services</b>
 
-- Run auth like so: `run_auth`
-- Run chunk like so: `run_chunk`
-- Run media like so: `run_media`
+- `run_auth`
+- `run_chunk`
+- `run_media`
 
 
-For more information just read scripts on `scripts` folder.
+For more information, just read the scripts on `scripts` folder.
 
 # To build:
 

@@ -75,7 +75,7 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 		};
 		if user == "public" {
 			Self {
-				id: db_chunk.chunk().id.clone(),
+				id: db_chunk.chunk().id,
 				props: Some(Value::Object(Map::from_iter(db_chunk.props()))),
 				value: Some(db_chunk.chunk().value.clone()),
 				..Default::default()
@@ -83,7 +83,7 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 		} else {
 			match view_type {
 				ViewType::Well => Self {
-					id: db_chunk.chunk().id.clone(),
+					id: db_chunk.chunk().id,
 
 					props: Some(Value::Object(Map::from_iter(db_chunk.props()))),
 					props_dynamic: Some(Value::Object(Map::from_iter(db_chunk.props_dynamic(&user.into())))),
@@ -103,7 +103,7 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 					// ..Default::default()
 				},
 				ViewType::Graph => Self {
-					id: db_chunk.chunk().id.clone(),
+					id: db_chunk.chunk().id,
 					created: Some(db_chunk.chunk().created),
 
 					props: Some(Value::Object(Map::from_iter(db_chunk.props()))),
@@ -114,7 +114,7 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 					..Default::default()
 				},
 				ViewType::Notes => Self {
-					id: db_chunk.chunk().id.clone(),
+					id: db_chunk.chunk().id,
 					modified: Some(db_chunk.chunk().modified),
 
 					// props: Some(Value::Object(Map::from_iter(db_chunk.props()))),
@@ -128,7 +128,7 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 					..Default::default()
 				},
 				ViewType::Edit => Self {
-					id: db_chunk.chunk().id.clone(),
+					id: db_chunk.chunk().id,
 					props: Some(Value::Object(Map::from_iter(db_chunk.props()))),
 					props_dynamic: Some(Value::Object(Map::from_iter(db_chunk.props_dynamic(&user.into())))),
 					// value: Some(db_chunk.chunk().value.clone()),
@@ -165,7 +165,7 @@ impl From<LockedAtomic<DBChunk>> for ChunkId {
 }
 impl From<&LockedAtomic<DBChunk>> for ChunkId {
 	fn from(rc: &LockedAtomic<DBChunk>) -> Self {
-		Self(rc.read().unwrap().chunk().id.clone())
+		Self(rc.read().unwrap().chunk().id)
 	}
 }
 /**

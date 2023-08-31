@@ -252,7 +252,7 @@ impl DB {
 			// diff_props = chunk.props_diff(None);
 		}
 
-		let id = chunk.chunk().id.clone();
+		let id = chunk.chunk().id;
 		let chunk = Arc::new(RwLock::new(chunk));
 		self.link_chunk(&chunk, None)?;
 		{
@@ -275,7 +275,7 @@ impl DB {
 			.map(|v| v.read().unwrap().chunk().value.to_owned())
 		{
 			let value = chunk.chunk().value.clone();
-			let id = chunk.chunk().id.clone();
+			let id = chunk.chunk().id;
 			let users_to_notify = self.set_chunk(chunk, user)?;
 			let diff = diff_calc(&last_value, &value);
 			let db_chunk = self.get_chunk(id, user).unwrap();
@@ -373,7 +373,7 @@ impl From<DBData> for DB {
 			.map(|c| {
 				let c = DBChunk::from(c);
 				let users = c.access_users();
-				let id = c.chunk().id.clone();
+				let id = c.chunk().id;
 				let arc = Arc::new(RwLock::new(c));
 				let weak = Arc::downgrade(&arc);
 				users.iter().for_each(|u| {

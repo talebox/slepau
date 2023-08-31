@@ -43,7 +43,7 @@ impl DBAuth {
 				(
 					k.to_owned(),
 					if let Value::String(s) = &v {
-						serde_json::from_str(&s).unwrap_or(v)
+						serde_json::from_str(s).unwrap_or(v)
 					} else {
 						v
 					},
@@ -134,7 +134,7 @@ impl DBAuth {
 				(
 					k.to_owned(),
 					if let Value::String(s) = &v {
-						serde_json::from_str(&s).unwrap_or(v)
+						serde_json::from_str(s).unwrap_or(v)
 					} else {
 						v
 					},
@@ -145,7 +145,7 @@ impl DBAuth {
 		// Modify user
 		{
 			let mut site = site.write().unwrap();
-			let mut user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
+			let user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
 			user.active = v.active;
 			user.claims = claims;
 		}
@@ -160,7 +160,7 @@ impl DBAuth {
 		let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
 		user
 			.claims
-			.extend(json!(claims).as_object().unwrap().clone().into_iter());
+			.extend(json!(claims).as_object().unwrap().clone());
 		Ok(())
 	}
 }

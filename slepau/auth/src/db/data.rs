@@ -62,7 +62,7 @@ impl From<DBAuthData> for DBAuth {
 						sites: u
 							.sites
 							.into_iter()
-							.filter_map(|id| sites.get(&id).map(|site| Arc::downgrade(site)))
+							.filter_map(|id| sites.get(&id).map(Arc::downgrade))
 							.collect(),
 						_super: u._super,
 					})),

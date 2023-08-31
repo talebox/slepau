@@ -53,7 +53,7 @@ pub fn do_convert(
 
 		let mut img = image::load(
 			std::io::BufReader::new(std::fs::File::open(path_in).map_err(|err| (_ref.clone(), err.to_string().into()))?),
-			format.clone(),
+			format,
 		)
 		.map_err(|err| (_ref.clone(), err.to_string().into()))?;
 
@@ -96,8 +96,8 @@ pub fn do_convert(
 					let max_area = area as f32;
 					let max_to_current = (max_area / (width * height)).sqrt();
 					if max_to_current < 1. {
-						width = width * max_to_current;
-						height = height * max_to_current;
+						width *= max_to_current;
+						height *= max_to_current;
 					}
 				}
 			}
@@ -115,7 +115,7 @@ pub fn do_convert(
 
 		let meta_out = FileMeta::from_path(&path_out);
 
-		return Ok((_ref, meta_out, path_out));
+		Ok((_ref, meta_out, path_out))
 	} else if meta._type.clone().starts_with("video") {
 		info!("In {}, out {}", path_in.to_str().unwrap(), path_out.to_str().unwrap());
 
@@ -132,7 +132,7 @@ pub fn do_convert(
 				"-c:v",
 				version
 					._type
-					.and_then(|t| t.split("/").last().map(|t| t.to_string()))
+					.and_then(|t| t.split('/').last().map(|t| t.to_string()))
 					.or(version.c_v)
 					.unwrap_or_else(|| "webp".into())
 					.as_str(),
@@ -166,7 +166,7 @@ pub fn do_convert(
 
 			let _type = Some("video/mp4".to_string())// version._type.or(Some(meta._type))
 			;
-			if let Some(_type) = _type.and_then(|t| t.split("/").last().map(|t| t.to_string())) {
+			if let Some(_type) = _type.and_then(|t| t.split('/').last().map(|t| t.to_string())) {
 				command.args(["-f", _type.as_str()]);
 			}
 		}

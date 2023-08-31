@@ -517,16 +517,16 @@ mod tests {
 	fn test() {
 		let chunk = DBChunk::from((None, "# Testing\n", "john"));
 		assert!(chunk.has_access(&"john".into()));
-		assert_eq!(chunk.has_access(&"nina".into()), false);
+		assert!(!chunk.has_access(&"nina".into()));
 		let chunk = DBChunk::from((None, "# Testing\naccess:nina r", "john"));
-		assert_eq!(chunk.has_access(&"nina".into()), true);
+		assert!(chunk.has_access(&"nina".into()));
 		let chunk = DBChunk::from((None, "# Testing\naccess:nina w", "john"));
-		assert_eq!(chunk.has_access(&"nina".into()), true);
-		assert_eq!(chunk.has_access(&("nina", Access::Write).into()), true);
+		assert!(chunk.has_access(&"nina".into()));
+		assert!(chunk.has_access(&("nina", Access::Write).into()));
 		let chunk = DBChunk::from((None, "# Testing\naccess:nina a", "john"));
-		assert_eq!(chunk.has_access(&"nina".into()), true);
-		assert_eq!(chunk.has_access(&("nina", Access::Write).into()), true);
-		assert_eq!(chunk.has_access(&("nina", Access::Admin).into()), true);
-		assert_eq!(chunk.has_access(&("john", Access::Owner).into()), true);
+		assert!(chunk.has_access(&"nina".into()));
+		assert!(chunk.has_access(&("nina", Access::Write).into()));
+		assert!(chunk.has_access(&("nina", Access::Admin).into()));
+		assert!(chunk.has_access(&("john", Access::Owner).into()));
 	}
 }

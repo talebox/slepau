@@ -110,13 +110,10 @@ impl IntoResponse for DbError {
 				DbError::Custom(_) => StatusCode::INTERNAL_SERVER_ERROR,
 				_ => StatusCode::FORBIDDEN,
 			},
-			format!(
-				"{}",
-				match self {
-					DbError::Custom(v) => v.into(),
+			(match self {
+					DbError::Custom(v) => v,
 					v => serde_json::to_string(&v).unwrap(),
-				}
-			),
+				}).to_string(),
 		)
 			.into_response()
 	}
@@ -178,7 +175,7 @@ pub struct DataSlice<T> {
 	pub total: usize,
 }
 
-pub fn hostname_normalize<'a>(host: &'a str) -> &'a str {
+pub fn hostname_normalize(host: &str) -> &str {
 	if ["127.", "10.", "192.168."].iter().any(|v| host.starts_with(v)) {
 		host
 	} else {
@@ -189,5 +186,5 @@ pub fn hostname_normalize<'a>(host: &'a str) -> &'a str {
 pub fn get_hash<T: Hash>(v: &T) -> u64 {
 	let mut hasher = DefaultHasher::new();
 	v.hash(&mut hasher);
-	hasher.finish().into()
+	hasher.finish()
 }

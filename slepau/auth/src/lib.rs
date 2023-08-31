@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 // use serde_json::json;
 
 fn is_false(v: &bool) -> bool {
-	*v == false
+	!(*v)
 }
 fn is_zero(v: &u64) -> bool {
 	*v == 0

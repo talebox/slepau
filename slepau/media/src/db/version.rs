@@ -15,7 +15,7 @@ impl<'de> Deserialize<'de> for Max {
 		D::Error: serde::de::Error,
 	{
 		let s = String::deserialize(deserializer)?;
-		let split_x = s.split("x").collect::<Vec<_>>();
+		let split_x = s.split('x').collect::<Vec<_>>();
 
 		if split_x.len() == 2 {
 			Ok(Self::Absolute(split_x[0].parse().ok(), split_x[1].parse().ok()))
@@ -169,7 +169,7 @@ impl VersionString {
 			return Ok(Default::default());
 		}
 
-		let value = self.0.split("&").map(|v| v.split("=").collect::<Vec<_>>());
+		let value = self.0.split('&').map(|v| v.split('=').collect::<Vec<_>>());
 
 		if value.clone().any(|v| v.len() != 2) {
 			return Err("All records (separated by '&') to have exactly 1 key and 1 value separated by an '='.".into());
@@ -182,10 +182,8 @@ impl VersionString {
 			})
 			.collect::<HashMap<_, _>>();
 
-		Ok(
-			serde_json::from_value(json!(value))
-				.map_err(|err| DbError::from(format!("Serde parsing Error: {err}").as_str()))?,
-		)
+		serde_json::from_value(json!(value))
+				.map_err(|err| DbError::from(format!("Serde parsing Error: {err}").as_str()))
 	}
 }
 

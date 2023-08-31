@@ -51,7 +51,7 @@ pub async fn media_get(
 		Any::Options(opts) => wants_raw = opts.raw == "true",
 		Any::Version(_version) => version = _version,
 	};
-	let version_empty = json!(version).as_object().unwrap().len() == 0;
+	let version_empty = json!(version).as_object().unwrap().is_empty();
 
 	if wants_raw {
 		// if cfg!(debug_assertions) {

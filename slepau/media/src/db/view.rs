@@ -53,7 +53,7 @@ impl From<LockedAtomic<Media>> for MediaId {
 }
 impl From<&LockedAtomic<Media>> for MediaId {
 	fn from(rc: &LockedAtomic<Media>) -> Self {
-		Self(rc.read().unwrap().id.clone())
+		Self(rc.read().unwrap().id)
 	}
 }
 

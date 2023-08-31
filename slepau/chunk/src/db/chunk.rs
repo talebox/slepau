@@ -48,7 +48,7 @@ impl From<&str> for Chunk {
 impl From<(ChunkId, &str)> for Chunk {
 	fn from((id, value): (ChunkId, &str)) -> Self {
 		Self {
-			id: id,
+			id,
 			value: value.to_owned(),
 			..Default::default()
 		}

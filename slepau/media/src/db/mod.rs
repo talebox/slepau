@@ -68,7 +68,7 @@ impl<'a> FromIterator<&'a LockedWeak<Media>> for MediaStats {
 	fn from_iter<T: IntoIterator<Item = &'a LockedWeak<Media>>>(iter: T) -> Self {
 		iter
 			.into_iter()
-			.map(|v| Self::from(v))
+			.map(Self::from)
 			.fold(Default::default(), |a, v| a + v)
 	}
 }

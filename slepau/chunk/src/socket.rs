@@ -127,7 +127,7 @@ async fn handle_socket(
 					if piece == Some("value") {
 						if let Some(value) = m.value {
 							// User wants to change a value
-							let db_chunk: DBChunk = (id.into(), value.as_str()).into();
+							let db_chunk: DBChunk = (id, value.as_str()).into();
 							match db.write().unwrap().update_chunk(db_chunk, user) {
 								Ok((users_to_notify, diff, db_chunk)) => {
 									let users = db_chunk.read().unwrap().access_users();

@@ -22,7 +22,7 @@ impl TaskCriteria {
 }
 
 fn is_false(b: &bool) -> bool {
-	*b == false
+	!(*b)
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
@@ -112,7 +112,7 @@ pub async fn conversion_service(
 			_ = shutdown_rx.changed() => {
 				break;
 			}
-			r = handles.join_next(), if handles.len() > 0 => {
+			r = handles.join_next(), if !handles.is_empty() => {
 				match r.unwrap().flatten() {
 					Ok(v) => {
 
@@ -186,7 +186,7 @@ pub async fn conversion_service(
 				}
 			}
 			Some(task) = task_rx.recv() => {
-				let _db = db.write().unwrap().queue(task);
+				db.write().unwrap().queue(task);
 			}
 			_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}
 		}

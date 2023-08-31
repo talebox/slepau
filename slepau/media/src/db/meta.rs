@@ -21,7 +21,7 @@ impl Exif {
 		let reader = exif::Reader::new();
 		reader
 			.read_from_container(value)
-			.map(|v| Self(base64::engine::general_purpose::STANDARD_NO_PAD.encode(v.buf().to_owned())))
+			.map(|v| Self(base64::engine::general_purpose::STANDARD_NO_PAD.encode(v.buf())))
 			.ok()
 	}
 	pub fn from_img(value: &Vec<u8>) -> Option<Self> {

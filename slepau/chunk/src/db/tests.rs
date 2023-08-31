@@ -14,7 +14,7 @@ fn delete() {
 	let mut db = DB::default();
 
 	let c_notes: DBChunk = "# Notes\n".into();
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 	assert_eq!(
 		db.del_chunk([id_notes].into(), "john"),
@@ -27,7 +27,7 @@ fn sharing() {
 
 	let c_notes: DBChunk = "# Notes\nshare: poca w, nina a".into();
 	println!("{:?}", c_notes.props());
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 
 	assert_eq!(
@@ -60,7 +60,7 @@ fn visibility() {
 
 	// John creates a chunk
 	let c_notes: DBChunk = "# Notes\nshare: public a, public r".into();
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 	{
 		// Test visibility
@@ -88,7 +88,7 @@ fn visibility() {
 	assert!(db.set_chunk(c_notes, "public").is_err());
 	// Nina creates a chunk, giving john admin access
 	let c_notes: DBChunk = "# Notes 2\nshare: public a, john a".into();
-	let id_notes2 = c_notes.chunk().id.clone();
+	let id_notes2 = c_notes.chunk().id;
 	assert!(db.set_chunk(c_notes, "nina").is_ok());
 
 	{
@@ -120,7 +120,7 @@ fn visibility() {
 		.as_str()
 		.into();
 
-	let id_notes3 = c_notes.chunk().id.clone();
+	let id_notes3 = c_notes.chunk().id;
 	assert!(db.set_chunk(c_notes, "nina").is_ok());
 
 	{
@@ -167,7 +167,7 @@ fn created_modified() {
 	let c_notes: DBChunk = "# Notes\n".into();
 	let cre_notes = c_notes.chunk().created;
 
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	db.set_chunk(c_notes, "john").unwrap();
 
 	let mut c_notes: Chunk = (id_notes, "# Notes\n").into();
@@ -197,14 +197,14 @@ fn dynamic_modified() {
 	let mut db = DB::default();
 	let c_notes: DBChunk = "# Notes\n".into();
 	let mod_notes = c_notes.chunk().modified;
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	db.set_chunk(c_notes, "john").unwrap();
 
 	let mut chunk_note1: Chunk = format!("# Note 1 -> {}\n", &id_notes).as_str().into();
 	let mod_note1 = mod_notes + 10;
 	chunk_note1.modified = mod_note1;
 	let c_note1 = DBChunk::from(chunk_note1);
-	let _id_note1 = c_note1.chunk().id.clone();
+	let _id_note1 = c_note1.chunk().id;
 
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
@@ -223,7 +223,7 @@ fn well() {
 	let mut db = DB::default();
 
 	let c_notes: DBChunk = "# Notes\n".into();
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	assert_eq!(
 		db.set_chunk(c_notes, "john"),
 		Ok(HashSet::from(["john".into()])),
@@ -231,7 +231,7 @@ fn well() {
 	);
 
 	let c_note1 = DBChunk::from(format!("# Note 1 -> {id_notes}\n").as_str());
-	let _id_note1 = c_note1.chunk().id.clone();
+	let _id_note1 = c_note1.chunk().id;
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
 	let _all: Vec<ChunkView> = db
@@ -267,12 +267,12 @@ fn circular() {
 	let mut db = DB::default();
 
 	let c_notes: DBChunk = "# Notes\n".into();
-	let id_notes = c_notes.chunk().id.clone();
+	let id_notes = c_notes.chunk().id;
 	// Add '# Notes\n' john
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 
 	let c_note1 = DBChunk::from(format!("# Note 1 -> {id_notes}\n").as_str());
-	let id_note1 = c_note1.chunk().id.clone();
+	let id_note1 = c_note1.chunk().id;
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
 	assert!(
@@ -287,7 +287,7 @@ fn circular() {
 	);
 
 	let c_note2 = DBChunk::from(format!("# Note 2 -> {id_note1}\n").as_str());
-	let id_note2 = c_note2.chunk().id.clone();
+	let id_note2 = c_note2.chunk().id;
 	assert!(db.set_chunk(c_note2, "john").is_ok());
 
 	assert!(
@@ -300,7 +300,7 @@ fn circular() {
 fn init() -> DB {
 	let mut db = DB::default();
 	let chunk: DBChunk = ("# Todo \n").into();
-	let _id = chunk.chunk().id.clone();
+	let _id = chunk.chunk().id;
 	assert!(db.set_chunk(chunk, "nina").is_ok());
 	db
 }

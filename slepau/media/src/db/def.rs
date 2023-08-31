@@ -42,7 +42,7 @@ impl DB {
 		let mut version = _ref.version.to_version().unwrap();
 		version = version_mapping(&media.meta, version);
 
-		if json!(version).as_object().unwrap().len() == 0 {
+		if json!(version).as_object().unwrap().is_empty() {
 			return Ok(VersionReference::to_path_in(media.id));
 		}
 		let version_string: VersionString = (&version).into();
@@ -165,7 +165,7 @@ impl DB {
 		self
 			.by_owner
 			.get(user)
-			.map(|medias| MediaStats::from_iter(medias))
+			.map(MediaStats::from_iter)
 			.unwrap_or_default()
 	}
 	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
@@ -252,7 +252,7 @@ impl From<DBData> for DB {
 			.media
 			.into_iter()
 			.map(|c| {
-				let id = c.id.clone();
+				let id = c.id;
 				let arc = Arc::new(RwLock::new(c));
 				(id, arc)
 			})
@@ -265,7 +265,7 @@ impl From<DBData> for DB {
 					owner,
 					ids
 						.into_iter()
-						.filter_map(|id| media.get(&id).map(|v| Arc::downgrade(v)))
+						.filter_map(|id| media.get(&id).map(Arc::downgrade))
 						.collect(),
 				)
 			})
@@ -300,7 +300,7 @@ impl From<&DB> for DBData {
 						owner.to_owned(),
 						medias
 							.iter()
-							.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id.clone()))
+							.filter_map(|v| v.upgrade().map(|v| v.read().unwrap().id))
 							.collect(),
 					)
 				})

@@ -10,7 +10,7 @@ use common::{
 };
 use headers::ContentType;
 
-use lazy_static::lazy_static;
+
 use log::{info, trace};
 use serde::Deserialize;
 use std::collections::HashSet;

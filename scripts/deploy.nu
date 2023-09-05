@@ -20,15 +20,15 @@ export def deploy_docker [name] {
 	do -i {docker stop $"($name)_s"}
 	do -i {docker rm $"($name)_s"}
 	docker build -t $name $"./out/slepau/($name)" 
-	docker volume create -d local talebox_keys
 	docker volume create -d local $"($name)_data"
 	docker volume create -d local $"($name)_backup"
 	let ports = {
 		"auth": 4501,
 		"chunk": 4502,
 		"media": 4503,
+		"vreji": 4504,
 	}
-	docker run -d --restart unless-stopped -p $"($ports | get $name):4000" -v talebox_keys:/server/keys -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" -e $"URL=https://($name).anty.dev" --name $"($name)_s" $name
+	docker run -d --restart unless-stopped -p $"($ports | get $name):4000" -v talebox_keys:/server/keys -v vreji_db:/server/vreji -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" -e $"URL=https://($name).anty.dev" --name $"($name)_s" $name
 	
 	print "Done."
 }
@@ -62,6 +62,7 @@ export def deploy_all [] {
 	deploy_docker auth
 	deploy_docker chunk
 	deploy_docker media
+	deploy_docker vreji
 	
 	deploy_static tale_web
 	deploy_static talebox

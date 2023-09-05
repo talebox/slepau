@@ -147,12 +147,15 @@ impl DB {
 			})
 			.collect()
 	}
-
+	/// Only used for when _supers want access
+	pub fn get_chunk_(&self, id: ChunkId) -> Option<LockedAtomic<DBChunk>> {
+		self.chunks.get(&id).cloned()
+	}
 	///  Gets a chunk by id
 	pub fn get_chunk(&self, id: ChunkId, user: &str) -> Option<LockedAtomic<DBChunk>> {
 		self.chunks.get(&id).and_then(|chunk_ref| {
 			let chunk = chunk_ref.write().unwrap();
-			if chunk.has_access(&user.into()) || chunk.is_public() {
+			if chunk.is_public() || chunk.has_access(&user.into()) {
 				Some(chunk_ref.clone())
 			} else {
 				None

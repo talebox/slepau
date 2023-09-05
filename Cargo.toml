@@ -1,5 +1,6 @@
 [workspace]
-members = ["slepau/auth", "slepau/chunk", "slepau/media"]
+members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/vreji"]
+resolver = "2"
 
 [workspace.package]
 version = "0.7.0"

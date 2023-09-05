@@ -38,6 +38,12 @@ export def run_media [] {
 	
 	cargo run --bin media
 }
+export def run_vreji [] {
+	load_env_dev
+	open "config/vreji/dev.toml" | load-env
+	
+	cargo run --bin vreji
+}
 export def build_media [] {
 	load_env_dev
 	open "config/media/dev.toml" | load-env

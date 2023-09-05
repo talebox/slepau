@@ -9,7 +9,7 @@ fn md_to_html(value: &str) -> String {
 	options.insert(Options::ENABLE_STRIKETHROUGH);
 	let parser = Parser::new_ext(value, options);
 
-	let mut html_output = String::new();
+	let mut html_output = String::with_capacity(value.len() * 3);
 	html::push_html(&mut html_output, parser);
 	html_output
 }

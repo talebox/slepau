@@ -10,7 +10,6 @@ use common::{
 };
 use headers::ContentType;
 
-
 use log::{info, trace};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -49,7 +48,11 @@ pub async fn chunks_get_id(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
-	if let Some(chunk) = db.read().unwrap().get_chunk(id, &user_claims.user) {
+	if let Some(chunk) = if user_claims._super {
+		db.read().unwrap().get_chunk_(id)
+	} else {
+		db.read().unwrap().get_chunk(id, &user_claims.user)
+	} {
 		Ok(Json(chunk.read().unwrap().chunk().clone()))
 	} else {
 		Err(DbError::NotFound)
@@ -60,11 +63,11 @@ pub async fn page_get_id(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
-	// lazy_static! {
-	// 	static ref PAGE: String =
-	// 		std::fs::read_to_string(std::env::var("WEB_DIST").unwrap_or_else(|_| "web".into()) + "/page.html").unwrap();
-	// };
-	if let Some(chunk) = db.read().unwrap().get_chunk(id, &user_claims.user) {
+	if let Some(chunk) = if user_claims._super {
+		db.read().unwrap().get_chunk_(id)
+	} else {
+		db.read().unwrap().get_chunk(id, &user_claims.user)
+	} {
 		let mut title: String = "Page".into();
 		let html;
 		{

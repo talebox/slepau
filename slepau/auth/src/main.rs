@@ -94,7 +94,7 @@ async fn main() {
 					"/admins/:id",
 					put(ends::admin::put_admin).delete(ends::admin::del_admin),
 				)
-				// Only Super ^
+				// Only Super ^as
 				.layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 				// Get/Modify Site
 				.route("/sites", get(ends::admin::get_sites).post(ends::admin::post_site))

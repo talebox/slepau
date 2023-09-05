@@ -24,7 +24,7 @@ pub struct UserClaims {
 	#[serde(skip_serializing_if = "is_zero")]
 	pub media_limit: u64,
 	
-	pub exp: u64,
+	pub exp: String,
 }
 impl From<&Claims> for UserClaims {
 	fn from(claims: &Claims) -> Self {

@@ -1,0 +1,7 @@
+WEB_DIST="web/dist/log"
+DB_BACKUP_FOLDER=".tmp/log_back"
+CACHE_PATH=".tmp/log.cache.json"
+
+
+SOCKET="0.0.0.0:4003"
+URL="http://localhost:4003"

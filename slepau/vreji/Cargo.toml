@@ -1,27 +1,27 @@
 [package]
-name = "common"
-description = "Code "
+name = "vreji"
 license = "MIT"
 version.workspace = true
 edition.workspace = true
 
-
 [dependencies]
+auth = { path = "../auth" }
+common.workspace = true
 hyper.workspace = true
-axum.workspace = true
-tower.workspace = true
+tower = { workspace = true, features = [] }
 tower-http.workspace = true
+lazy_static.workspace = true
 tower_governor.workspace = true
+time = "0.3.17"
+axum.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
-lazy_static.workspace = true
-rand.workspace = true
-proquint.workspace = true
-diff.workspace = true
 env_logger.workspace = true
-regex = "1.7.1"
-psl = "2.1.3"
+argon2 = "0.4.1"
+pasetors = "0.6.3"
+rand.workspace = true
+futures-util = "0.3.26"
 sonnerie = "0.8.4"
 chrono = "0.4.28"

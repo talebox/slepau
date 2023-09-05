@@ -14,7 +14,7 @@
 # 	proxy_pass http://127.0.0.1:4003/web/;
 # }
 
-
 location /web/ {
 	alias /home/rubend/p/slepau/web/dist/;#WEB_MONO
+	add_header Content-Security-Policy "default-src 'self';";
 }

@@ -1,13 +1,15 @@
+use std::net::SocketAddr;
+
 use auth::{validate::KPR, UserClaims};
 use axum::{
-	extract::{Extension, Query},
+	extract::{Extension, Query, ConnectInfo},
 	headers,
 	http::header,
 	http::HeaderMap,
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE};
+use common::{utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE}, vreji::{auth_log, auth_log_ip}};
 use hyper::StatusCode;
 
 use log::{error, info};
@@ -31,6 +33,7 @@ pub async fn login(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Query(query): Query<LoginQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
@@ -73,7 +76,7 @@ pub async fn login(
 					claims.add_additional(&k, v).ok();
 				});
 
-			claims.add_additional("user", user.user).unwrap();
+			claims.add_additional("user", user.user.clone()).unwrap();
 
 			if is_admin {
 				claims.add_additional("admin", is_admin).unwrap();
@@ -100,6 +103,7 @@ pub async fn login(
 			// let pub_token = private::sign(&KP.secret, &claims, None, None).unwrap();
 			let pub_token = local::encrypt(&KPR, &claims, None, None).unwrap();
 			
+			auth_log("login", &user.user, addr.ip().to_string().as_str());
 			// let user_claims = UserClaims::from(&claims);
 			// (
 				[(
@@ -114,13 +118,15 @@ pub async fn login(
 		})
 		.map_err(|err| {
 			error!("Failed login for '{}' with pass '{}': {:?}.", &user, &pass, &err);
+			auth_log("login_error", user.as_str(), addr.ip().to_string().as_str());
 			err
 		})
 }
 pub async fn register(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
-	Json((user, pass)): Json<(String, String)>,
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
+	Json((user, pass)): Json<(String, String)>
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
 
@@ -143,10 +149,12 @@ pub async fn register(
 	db.new_user(&user, &pass, site_id)
 		.map(|_| {
 			info!("User created '{}'.", &user);
+			auth_log("register", &user, addr.ip().to_string().as_str());
 			"User created."
 		})
 		.map_err(|err| {
 			error!("Failed register for '{}' with pass '{}': {:?}.", &user, &pass, &err);
+			auth_log("register_error", &user, addr.ip().to_string().as_str());
 			err
 		})
 }
@@ -154,6 +162,7 @@ pub async fn register(
 pub async fn reset(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
 	Json((user, old_pass, pass)): Json<(String, String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
@@ -164,10 +173,12 @@ pub async fn reset(
 	db.reset(&user, &pass, &old_pass, Some(site_id))
 		.map(|_| {
 			info!("User password reset '{user}'.");
+			auth_log("reset", &user, addr.ip().to_string().as_str());
 			"User pass reset."
 		})
 		.map_err(|err| {
-			error!("Failed password reset for '{user}' with old_pass '{old_pass}': {err:?}.");
+			error!("Failed password reset for '{user}' with using old_pass '{old_pass}': {err:?}.");
+			auth_log("reset_error", &user, addr.ip().to_string().as_str());
 			err
 		})
 }
@@ -175,7 +186,9 @@ pub async fn reset(
 pub async fn user(
 	Extension(_db): Extension<LockedAtomic<DBAuth>>,
 	Extension(user_claims): Extension<UserClaims>,
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
+	auth_log("get_user", user_claims.user.as_str(), addr.ip().to_string().as_str());
 	Json(user_claims)
 }
 
@@ -193,9 +206,14 @@ pub async fn user_patch(
 	Ok(())
 }
 
-pub async fn logout(TypedHeader(host): TypedHeader<headers::Host>, headers: HeaderMap) -> impl IntoResponse {
+pub async fn logout(
+	TypedHeader(host): TypedHeader<headers::Host>, 
+	ConnectInfo(addr): ConnectInfo<SocketAddr>,
+	headers: HeaderMap
+) -> impl IntoResponse {
 	// let host_full = host.hostname();
 	let host = hostname_normalize(host.hostname());
+	auth_log_ip("logout", addr.ip().to_string().as_str());
 
 	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();
 	(

@@ -11,7 +11,7 @@ export def clean [] {
 	
 	enter web
 		rm -rf dist .parcel-cache
-	exit 
+	dexit 
 }
 
 export def organize_out [bin_dir = "bin"] {
@@ -20,7 +20,7 @@ export def organize_out [bin_dir = "bin"] {
 	enter out
 		rm -rf slepau
 		
-		['auth', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
+		['auth','vreji', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
 			echo $"Doing ($a)."
 			# Make slepau dir
 			mkdir $"slepau/($a)"
@@ -63,10 +63,10 @@ export def organize_out [bin_dir = "bin"] {
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#WEB_MONO$root /srv/http/tale_web;#WEB_MONO$g'
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$alias .*;#WEB_MONO$alias /srv/http/tale_web/;#WEB_MONO$g'
 		
-		exit
+		dexit
 		
 		
-	exit
+	dexit
 	
 	
 	
@@ -81,7 +81,7 @@ export def build_server [bin_dir:string = "bin", options = []] {
 	
 	print $"Building binaries to out/($bin_dir)."
 	# Build server
-	['auth', 'chunk', 'media', 'gen_key'] | each {|a|
+	['auth','vreji', 'chunk', 'media', 'gen_key'] | each {|a|
 		if $a not-in ["talebox"]  {
 			cargo build -Z unstable-options --out-dir $"out/($bin_dir)" $options --release --bin $a
 		}
@@ -101,7 +101,7 @@ export def build_web [] {
 		
 		yarn parcel build --public-url /web --no-source-maps
 		
-		# ["login", "auth", "chunk", "media"] | each {|v| 
+		# ["login", "auth",'vreji', "chunk", "media"] | each {|v| 
 		# 	# Build optimized
 		# 	yarn parcel build --public-url /web --no-source-maps --target $v
 		# };
@@ -114,7 +114,7 @@ export def build_web [] {
 		# mkdir ../out/web_mono
 		# rm -rf dist #.parcel-cache
 		
-		# ["login", "auth", "chunk", "media", "talebox", "gibos"] | each {|v| 
+		# ["login", "auth",'vreji', "chunk", "media", "talebox", "gibos"] | each {|v| 
 		# 	let public = $"/web/($v)"
 			
 		# 	# Build optimized
@@ -124,7 +124,7 @@ export def build_web [] {
 		# # Copy webapp to output
 		# cp -r dist/* ../out/web_mono/
 		
-	exit
+	dexit
 	
 	# Copy talebox script to download & install standalone build.
 	["linux_x86_64", "musl_x86_64", "arm64", "armv7", "armv7hf"] | each {|a|
@@ -145,11 +145,11 @@ export def make_standalone [dir = "linux_x86_64"] {
 			mkdir keys
 			cp $"../bin_($dir)/gen_key" ./
 			
-			["auth","chunk","media"] | each {|a|
+			["auth",'vreji',"chunk","media"] | each {|a|
 				cp -r $"../slepau/($a)" ./
 				enter $a
 					ln -s ../keys keys
-				exit
+				dexit
 			};
 			
 			cp -r ../../config/nginx ./
@@ -163,12 +163,12 @@ export def make_standalone [dir = "linux_x86_64"] {
 			
 			# enter talebox/web
 			# 	ln -s $"../../../standalone_($dir).tar.xz" ./
-			# exit
-		exit
+			# dexit
+		dexit
 		
 		print $"Compressing standalone_($dir)"
 		tar -cavf $"standalone_($dir).tar.xz" $"standalone_($dir)"
-	exit
+	dexit
 }
 
 # export def build_standalone [] {
@@ -251,7 +251,7 @@ export def build_server_musl [bin_dir = "bin_musl_x86_64"] {
 # 	enter $out
 # 		mkdir keys
 # 		./gen_key
-# 	exit
+# 	dexit
 	
 # 	# Copy files
 # 	['auth'] | each {|a|
@@ -261,7 +261,7 @@ export def build_server_musl [bin_dir = "bin_musl_x86_64"] {
 		
 # 		enter $"($out)/($a)"
 # 			ln -s ../keys keys
-# 		exit
+# 		dexit
 # 	};
 	
 # 	tar -cavf $"($out).tar.xz" $out

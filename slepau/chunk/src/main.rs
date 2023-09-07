@@ -1,5 +1,5 @@
 use auth::validate::KPR;
-use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::get, BoxError, Extension, Router};
+use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::{get, put}, BoxError, Extension, Router};
 
 use common::{
 	http::{static_routes},
@@ -12,7 +12,7 @@ use env_logger::Env;
 use hyper::StatusCode;
 use log::{error, info};
 use tower::ServiceBuilder;
-use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer, key_extractor::SmartIpKeyExtractor};
 
 use std::{
 	net::SocketAddr,
@@ -69,6 +69,7 @@ async fn main() {
 
 	let governor_conf = Box::new(
 		GovernorConfigBuilder::default()
+			.key_extractor(SmartIpKeyExtractor)
 			.per_second(2)
 			.burst_size(5)
 			.finish()
@@ -79,7 +80,7 @@ async fn main() {
 	let app = Router::new()
 		.route(
 			"/chunks",
-			get(ends::chunks_get).put(ends::chunks_put).delete(ends::chunks_del),
+			put(ends::chunks_put).delete(ends::chunks_del),
 		)
 		// ONLY if NOT public ^
 		.route_layer(from_fn(auth::validate::flow::auth_required))

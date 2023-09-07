@@ -6,9 +6,12 @@ use axum::{
 };
 use common::{
 	socket::{ResourceMessage, ResourceSender},
-	utils::{DbError, LockedAtomic},
+	utils::{DbError, LockedAtomic}, vreji::log_ip_user_id,
 };
 use headers::ContentType;
+
+use axum_client_ip::InsecureClientIp;
+type ClientIp = InsecureClientIp;
 
 use log::{info, trace};
 use serde::Deserialize;
@@ -24,35 +27,37 @@ use crate::{
 	format::value_to_html,
 };
 
-pub async fn chunks_get(
-	Extension(db): Extension<LockedAtomic<DB>>,
-	Extension(user_claims): Extension<UserClaims>,
-) -> Result<impl IntoResponse, DbError> {
-	info!("User is {}.", &user_claims.user);
+// pub async fn chunks_get(
+// 	Extension(db): Extension<LockedAtomic<DB>>,
+// 	Extension(user_claims): Extension<UserClaims>,
+// ) -> Result<impl IntoResponse, DbError> {
+// 	info!("User is {}.", &user_claims.user);
 
-	let mut chunks: Vec<Chunk> = db
-		.write()
-		.unwrap()
-		.get_chunks(&user_claims.user)
-		.into_iter()
-		.map(|v| v.read().unwrap().chunk().clone())
-		.collect();
-	chunks.sort_by_key(|v| -(v.modified as i64));
+// 	let mut chunks: Vec<Chunk> = db
+// 		.write()
+// 		.unwrap()
+// 		.get_chunks(&user_claims.user)
+// 		.into_iter()
+// 		.map(|v| v.read().unwrap().chunk().clone())
+// 		.collect();
+// 	chunks.sort_by_key(|v| -(v.modified as i64));
 
-	trace!("GET /chunks len {}", chunks.len());
+// 	trace!("GET /chunks len {}", chunks.len());
 
-	Ok(Json(chunks))
-}
+// 	Ok(Json(chunks))
+// }
 pub async fn chunks_get_id(
 	Path(id): Path<ChunkId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
+	ip: ClientIp,
 ) -> Result<impl IntoResponse, DbError> {
 	if let Some(chunk) = if user_claims._super {
 		db.read().unwrap().get_chunk_(id)
 	} else {
 		db.read().unwrap().get_chunk(id, &user_claims.user)
 	} {
+		log_ip_user_id("chunk_get_id", ip.0, &user_claims.user, id.inner().into());
 		Ok(Json(chunk.read().unwrap().chunk().clone()))
 	} else {
 		Err(DbError::NotFound)
@@ -62,6 +67,7 @@ pub async fn page_get_id(
 	Path(id): Path<ChunkId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
+	ip: ClientIp,
 ) -> Result<impl IntoResponse, DbError> {
 	if let Some(chunk) = if user_claims._super {
 		db.read().unwrap().get_chunk_(id)
@@ -80,6 +86,7 @@ pub async fn page_get_id(
 		let page = include_str!(env!("CHUNK_PAGE_PATH"));
 		let page = page.replace("PAGE_TITLE", &title);
 		let page = page.replace("PAGE_BODY", &html);
+		log_ip_user_id("chunk_get_page", ip.0, &user_claims.user, id.inner().into());
 		Ok((TypedHeader(ContentType::html()), page))
 	} else {
 		Err(DbError::NotFound)
@@ -96,17 +103,19 @@ pub async fn chunks_put(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 	Extension(tx_r): Extension<ResourceSender>,
+	ip: ClientIp,
 	Json(body): Json<ChunkIn>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db_chunk = DBChunk::from((body.id, body.value.as_str(), user_claims.user.as_str()));
 	let users = db_chunk.access_users();
+	let id = db_chunk.chunk().id;
 	let users_to_notify = db.write().unwrap().set_chunk(db_chunk, &user_claims.user)?;
 
 	// Notifies users for which access has changed
 	// They should request an update of their active view that uses chunks
 	// upon this request
 	tx_r.send(ResourceMessage::from(("chunks", users_to_notify))).unwrap();
-
+	log_ip_user_id("chunk_put", ip.0, &user_claims.user, id.inner().into());
 	// Notifies users which already have access, of the note's new content
 	//
 	// Only do so if modifying a chunk, because a new one won't have an id.
@@ -134,9 +143,14 @@ pub async fn chunks_del(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,
 	Extension(tx_r): Extension<ResourceSender>,
+	ip: ClientIp,
 	Json(input): Json<HashSet<ChunkId>>,
 ) -> Result<impl IntoResponse, DbError> {
-	let users_to_notify = db.write().unwrap().del_chunk(input, &user_claims.user)?;
+	let users_to_notify = db.write().unwrap().del_chunk(input.to_owned(), &user_claims.user)?;
+
+	input.into_iter().for_each(|id| {
+		log_ip_user_id("chunk_del", ip.0, &user_claims.user, id.inner().into());
+	});
 
 	tx_r.send(ResourceMessage::from(("chunks", users_to_notify))).unwrap();
 

@@ -1,6 +1,6 @@
 use std::{
 	collections::{BTreeMap, HashMap, HashSet},
-	time::SystemTime,
+	time::SystemTime, net::Ipv4Addr,
 };
 
 use auth::UserClaims;
@@ -9,7 +9,8 @@ use axum::{
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use sonnerie::{record, DatabaseReader};
+use serde_json::{json, Value};
+use sonnerie::{record, DatabaseReader, Record};
 
 use common::{
 	socket::{ResourceMessage, ResourceSender},
@@ -24,12 +25,31 @@ fn db() -> DatabaseReader {
 	sonnerie::DatabaseReader::new(common::vreji::DB_PATH_LOG.as_path()).unwrap()
 }
 
+fn record_json(r: Record) -> Value {
+	let mut v = vec![];
+	v.push(json!(r.time().timestamp_nanos()));
+	for (idx, c) in r.format().chars().enumerate() {
+		v.push(match c {
+			'f' => json!(r.get::<f32>(idx)),
+			'F' =>  json!(r.get::<f64>(idx)),
+			'i' =>  json!(r.get::<i32>(idx)),
+			'I' =>  json!(r.get::<i64>(idx)),
+			'u' =>  json!(r.get::<u32>(idx)),
+			'U' =>  json!(r.get::<u64>(idx)),
+			's' => json!(r.get::<&str>(idx).escape_default().to_string()),
+			a => panic!("unknown format column '{a}'"),
+		});
+	}
+	json!(v)
+}
+
 /// Gets logs
 pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbError> {
 	let db = db();
 	let reader = db.get(key.as_str()).into_iter();
-	let records_str = reader.map(|v| format!("{v:?}")).collect::<Vec<_>>().join("\n");
-	Ok(records_str)
+	let records_json = reader.map(record_json).collect::<Vec<_>>();
+
+	Ok(Json(records_json))
 }
 
 pub async fn ips() -> impl IntoResponse {
@@ -38,11 +58,7 @@ pub async fn ips() -> impl IntoResponse {
 		db.get_range("auth"..="b")
 			.into_iter()
 			.fold(HashMap::new(), |mut acc, r| {
-				let key = if r.key() == "auth_logout" {
-					r.get::<String>(0)
-				} else {
-					r.get::<String>(1)
-				};
+				let key = Ipv4Addr::from(r.get::<u32>(0)).to_string();
 				let time = r.timestamp_nanos();
 				acc
 					.entry(key)
@@ -57,16 +73,3 @@ pub async fn ips() -> impl IntoResponse {
 			}),
 	)
 }
-
-// /// Pushes a new log entry
-// pub async fn log_post(
-//     Path(key): Path<String>,
-//     Path(format): Path<String>,
-//     Path(data): Path<String>,
-// ) -> Result<impl IntoResponse, DbError> {
-//     let mut transaction = sonnerie::CreateTx::new(DB_PATH.as_path()).unwrap();
-//     // transaction.add_record(key.as_str(), chrono::Utc::now().naive_utc(), record("Hello World!")).unwrap();
-//     transaction.add_record_raw(key.as_str(), format.as_str(), data.as_ref()).unwrap();
-//     transaction.commit().unwrap();
-//     Ok(())
-// }

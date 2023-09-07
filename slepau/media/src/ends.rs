@@ -8,7 +8,7 @@ use axum::{
 };
 use common::{
 	socket::ResourceSender,
-	utils::{DbError, LockedAtomic, CACHE_FOLDER},
+	utils::{DbError, LockedAtomic, CACHE_FOLDER}, vreji::log_ip_user_id,
 };
 use futures::{future::join_all, join};
 use hyper::StatusCode;
@@ -20,6 +20,9 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 
 use media::{MatcherType, MEDIA_FOLDER};
+
+use axum_client_ip::InsecureClientIp;
+type ClientIp = InsecureClientIp;
 
 use crate::db::{
 	task::Task,
@@ -40,9 +43,10 @@ pub enum Any {
 
 pub async fn media_get(
 	Path(id): Path<MediaId>,
+	ip: ClientIp,
 	Query(any): Query<Any>,
 	Extension(db): Extension<LockedAtomic<DB>>,
-	// Extension(tx_task): Extension<tokio::sync::mpsc::Sender<Task>>,
+	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, Response> {
 	let path;
 	let mut version = Default::default();
@@ -52,6 +56,8 @@ pub async fn media_get(
 		Any::Version(_version) => version = _version,
 	};
 	let version_empty = json!(version).as_object().unwrap().is_empty();
+
+	log_ip_user_id("media_get", ip.0, &user_claims.user, id.inner());
 
 	if wants_raw {
 		// if cfg!(debug_assertions) {
@@ -129,6 +135,7 @@ pub async fn media_get(
 
 pub async fn media_delete(
 	Path(id): Path<MediaId>,
+	ip: ClientIp,
 	Extension(user_claims): Extension<UserClaims>,
 	Extension(db): Extension<LockedAtomic<DB>>,
 ) -> Result<impl IntoResponse, DbError> {
@@ -151,6 +158,8 @@ pub async fn media_delete(
 	let (_removes, original) = join!(removes, original);
 
 	original.map_err(|_| DbError::from("File not found"))?;
+
+	log_ip_user_id("media_del", ip.0, &user_claims.user, id.inner());
 
 	Ok(Json(media))
 }
@@ -193,6 +202,7 @@ pub async fn media_post(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(tx_resource): Extension<ResourceSender>,
 	Extension(user_claims): Extension<UserClaims>,
+	ip: ClientIp,
 	mut body: BodyStream,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	if user_claims.user == "public" && !db.read().unwrap().allow_public_post {
@@ -218,6 +228,7 @@ pub async fn media_post(
 
 	if user_claims.media_limit > 0 && stats.size >= user_claims.media_limit {
 		// body.count().await;
+		log_ip_user_id("media_post_error", ip.0, &user_claims.user, 0);
 		log::error!(
 			"{} reached his limit of {}MB",
 			user_claims.user,
@@ -243,6 +254,7 @@ pub async fn media_post(
 			// info!("write chunk {}", chunk.len());
 			size += chunk.len() as u64;
 			if size >= MAX_ALLOWED_MEDIA_SIZE {
+				log_ip_user_id("media_post_error", ip.0, &user_claims.user, 1);
 				return Err((
 					StatusCode::PAYLOAD_TOO_LARGE,
 					format!("Body > {}MB", MAX_ALLOWED_MEDIA_SIZE / MB),
@@ -258,7 +270,9 @@ pub async fn media_post(
 	let media = media.read().unwrap().clone();
 
 	// Notify
-	tx_resource.send(("media", [user_claims.user].into()).into()).ok();
+	tx_resource.send(("media", [user_claims.user.to_owned()].into()).into()).ok();
+
+	log_ip_user_id("media_post", ip.0, &user_claims.user, id.inner());
 
 	Ok(Json(media))
 }

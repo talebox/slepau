@@ -54,7 +54,7 @@ impl DBAuth {
 			let admin = admin.read().unwrap();
 			let user = &admin.user;
 			user.verify_login(pass)?;
-			Ok((user.clone(), None, true, admin._super, 60 * 60))
+			Ok((user.clone(), None, true, admin._super, 60 * 60 * 24))
 		}
 	}
 	pub fn reset(&mut self, user: &str, pass: &str, old_pass: &str, site: Option<SiteId>) -> Result<(), DbError> {

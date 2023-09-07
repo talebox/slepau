@@ -63,12 +63,7 @@ async fn main() {
 	// Build router
 	let app = Router::new()
 		// .route("/:key", method_router)
-		.route(
-			"/:key",
-			get(ends::log_get)
-				
-				,
-		)
+		.route("/:key", get(ends::log_get))
 		.route("/ips", get(ends::ips))
 		.layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))

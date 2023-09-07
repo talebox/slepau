@@ -21,9 +21,11 @@ But, before we get ahead of ourselves defining things, what actions/events do I 
     - `auth_login_error <user> <ip_v4>`
     - `auth_register <user> <ip_v4>`
     - `auth_register_error <user> <ip_v4>`
+    - ... almost all actions
 - Chunk 
     - `chunk_new <chunk_id_u32> <user>`
     - `chunk_edit <chunk_id_u32> <user> <delta_change_string>`
+    - 
 - Media
     - `media_post <media_id_u64> <user>`
     - `media_get <media_id_u64> <user>`

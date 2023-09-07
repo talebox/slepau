@@ -6,28 +6,30 @@ use axum::{
 };
 
 use common::{
-	http::{static_routes},
+	http::static_routes,
 	init::backup::backup_service,
 	utils::{log_env, SOCKET, URL},
 	Cache,
 };
 use env_logger::Env;
-use hyper::StatusCode;
+use hyper::{StatusCode, header::AUTHORIZATION};
 use log::{error, info};
 use tower::ServiceBuilder;
-use tower_governor::{errors::display_error, governor::GovernorConfigBuilder, GovernorLayer};
+use tower_governor::{
+	errors::display_error, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 
 use std::{
 	net::SocketAddr,
 	sync::{Arc, RwLock},
-	time::Duration,
+	time::Duration, iter::once,
 };
 
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::{timeout::TimeoutLayer};
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer, sensitive_headers::SetSensitiveRequestHeadersLayer};
 
 mod db;
 mod ends;
@@ -77,6 +79,7 @@ async fn main() {
 
 	let governor_conf = Box::new(
 		GovernorConfigBuilder::default()
+			.key_extractor(SmartIpKeyExtractor)
 			.per_second(2)
 			.burst_size(5)
 			.finish()
@@ -125,10 +128,7 @@ async fn main() {
 				.route("/user", get(crate::ends::user).patch(crate::ends::user_patch))
 				.route("/logout", get(crate::ends::logout)), // .layer(security_limit(1, 1)),
 		)
-		.route(
-			"/login",
-			post(crate::ends::login),
-		)
+		.route("/login", post(crate::ends::login))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		// The request limiter :)
 		.layer(
@@ -150,7 +150,7 @@ async fn main() {
 				.layer(Extension(shutdown_rx.clone())), // .layer(Extension(resource_tx.clone())),
 		);
 	// If we're local, then allow cors
-	// if URL.domain().and_then(|v| Some(v == "localhost")) == Some(true) {	
+	// if URL.domain().and_then(|v| Some(v == "localhost")) == Some(true) {
 	// }
 	// app = app.layer(CorsLayer::permissive());
 

@@ -22,12 +22,16 @@ tower.workspace = true
 tower-http.workspace = true
 tower_governor.workspace = true
 lazy_static.workspace = true
+axum-client-ip.workspace = true
 infer = "0.12.0"
 tokio-util = {version = "0.7.4", features = ["io"]}
-image = {version= "0.24.5", features = ["avif-encoder", "webp-encoder"]}
+image = {version= "0.24.7", features = ["avif-encoder", "webp-encoder"]}
 num_cpus = "1.15.0"
 mime = "0.3.16"
 futures = "0.3.26"
 kamadak-exif = "0.5.5"
 base64 = "0.21.0"
+
+[profile.release]
+lto = "off"
 

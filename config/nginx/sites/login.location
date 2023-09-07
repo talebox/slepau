@@ -1,7 +1,5 @@
 location /login {
-	proxy_set_header  Host	$host;
-	proxy_pass_header Set-Cookie;
-	proxy_pass_header Cookie;
+	include sites/slepau.part;
 	
 	if ($request_method = POST ) {
 		proxy_pass http://127.0.0.1:4001;

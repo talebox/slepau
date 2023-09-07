@@ -2,14 +2,17 @@ use std::net::SocketAddr;
 
 use auth::{validate::KPR, UserClaims};
 use axum::{
-	extract::{Extension, Query, ConnectInfo},
+	extract::{ConnectInfo, Extension, Query},
 	headers,
 	http::header,
 	http::HeaderMap,
 	response::IntoResponse,
 	Json, TypedHeader,
 };
-use common::{utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE}, vreji::{auth_log, auth_log_ip}};
+use common::{
+	utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE},
+	vreji::{log_ip, log_ip_user},
+};
 use hyper::StatusCode;
 
 use log::{error, info};
@@ -17,11 +20,14 @@ use pasetors::{claims::Claims, local};
 use serde::Deserialize;
 use serde_json::Value;
 
+use axum_client_ip::InsecureClientIp;
+type ClientIp = InsecureClientIp;
+
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub mod admin;
 
-use crate::db::{DBAuth, site::SiteSet};
+use crate::db::{site::SiteSet, DBAuth};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -33,7 +39,7 @@ pub async fn login(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Query(query): Query<LoginQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
-	ConnectInfo(addr): ConnectInfo<SocketAddr>,
+	ip: ClientIp,
 	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
@@ -102,43 +108,47 @@ pub async fn login(
 			// Generate the keys and sign the claims.
 			// let pub_token = private::sign(&KP.secret, &claims, None, None).unwrap();
 			let pub_token = local::encrypt(&KPR, &claims, None, None).unwrap();
-			
-			auth_log("login", &user.user, addr.ip().to_string().as_str());
+
+			log_ip_user("auth_login", ip.0, &user.user);
 			// let user_claims = UserClaims::from(&claims);
 			// (
-				[(
-					header::SET_COOKIE,
-					format!(
-						"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
-						&host,
-						if *SECURE { " Secure;" } else { "" }
-					),
-				)]
+			[(
+				header::SET_COOKIE,
+				format!(
+					"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
+					&host,
+					if *SECURE { " Secure;" } else { "" }
+				),
+			)]
 			// )
 		})
 		.map_err(|err| {
 			error!("Failed login for '{}' with pass '{}': {:?}.", &user, &pass, &err);
-			auth_log("login_error", user.as_str(), addr.ip().to_string().as_str());
+			log_ip_user("auth_login_error", ip.0, &user);
 			err
 		})
 }
 pub async fn register(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
-	ConnectInfo(addr): ConnectInfo<SocketAddr>,
-	Json((user, pass)): Json<(String, String)>
+	ip: ClientIp,
+	Json((user, pass)): Json<(String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
 
 	if db.admins.is_empty() {
 		db.new_admin(&user, &pass)?;
 		let site_id = db.new_site(&user)?;
-		db.mod_site(&user, site_id, SiteSet {
-			name: "Default Site".into(),
-			hosts: vec!["any".into()],
-			max_age: 60 * 60 * 24,
-			claims: Default::default(),
-		})?;
+		db.mod_site(
+			&user,
+			site_id,
+			SiteSet {
+				name: "Default Site".into(),
+				hosts: vec!["any".into()],
+				max_age: 60 * 60 * 24,
+				claims: Default::default(),
+			},
+		)?;
 		info!("Super admin created '{user}' + New Default site '{site_id}'.");
 		return Ok("Super admin created + New Default site.");
 	}
@@ -149,12 +159,12 @@ pub async fn register(
 	db.new_user(&user, &pass, site_id)
 		.map(|_| {
 			info!("User created '{}'.", &user);
-			auth_log("register", &user, addr.ip().to_string().as_str());
+			log_ip_user("auth_register", ip.0, &user);
 			"User created."
 		})
 		.map_err(|err| {
 			error!("Failed register for '{}' with pass '{}': {:?}.", &user, &pass, &err);
-			auth_log("register_error", &user, addr.ip().to_string().as_str());
+			log_ip_user("auth_register_error", ip.0, &user);
 			err
 		})
 }
@@ -162,7 +172,7 @@ pub async fn register(
 pub async fn reset(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
-	ConnectInfo(addr): ConnectInfo<SocketAddr>,
+	ip: ClientIp,
 	Json((user, old_pass, pass)): Json<(String, String, String)>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
@@ -173,12 +183,12 @@ pub async fn reset(
 	db.reset(&user, &pass, &old_pass, Some(site_id))
 		.map(|_| {
 			info!("User password reset '{user}'.");
-			auth_log("reset", &user, addr.ip().to_string().as_str());
+			log_ip_user("auth_reset", ip.0, &user);
 			"User pass reset."
 		})
 		.map_err(|err| {
 			error!("Failed password reset for '{user}' with using old_pass '{old_pass}': {err:?}.");
-			auth_log("reset_error", &user, addr.ip().to_string().as_str());
+			log_ip_user("auth_reset_error", ip.0, &user);
 			err
 		})
 }
@@ -186,9 +196,9 @@ pub async fn reset(
 pub async fn user(
 	Extension(_db): Extension<LockedAtomic<DBAuth>>,
 	Extension(user_claims): Extension<UserClaims>,
-	ConnectInfo(addr): ConnectInfo<SocketAddr>,
+	ip: ClientIp,
 ) -> impl IntoResponse {
-	auth_log("get_user", user_claims.user.as_str(), addr.ip().to_string().as_str());
+	log_ip_user("auth_get_user", ip.0, &user_claims.user);
 	Json(user_claims)
 }
 
@@ -207,13 +217,14 @@ pub async fn user_patch(
 }
 
 pub async fn logout(
-	TypedHeader(host): TypedHeader<headers::Host>, 
-	ConnectInfo(addr): ConnectInfo<SocketAddr>,
-	headers: HeaderMap
+	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(user_claims): Extension<UserClaims>,
+	ip: ClientIp,
+	headers: HeaderMap,
 ) -> impl IntoResponse {
 	// let host_full = host.hostname();
 	let host = hostname_normalize(host.hostname());
-	auth_log_ip("logout", addr.ip().to_string().as_str());
+	log_ip_user("auth_logout", ip.0, &user_claims.user);
 
 	let referer = headers.get("Referer").map(|v| v.to_str().unwrap()).unwrap_or_default();
 	(

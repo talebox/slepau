@@ -5,6 +5,11 @@ use serde::{de::Visitor, Deserialize, Serialize};
 /// Gets serialized/deserialized to/from a proquint -> `lusab_lomad`
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct Proquint<T>(T);
+impl<T : Copy> Proquint<T> {
+	pub fn inner(&self) -> T {
+		return self.0
+	}
+}
 impl<T: Quintable> Serialize for Proquint<T> {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where

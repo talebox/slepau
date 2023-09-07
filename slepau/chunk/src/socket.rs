@@ -11,12 +11,15 @@ use axum::{
 
 use common::{
 	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
-	utils::LockedAtomic,
+	utils::LockedAtomic, vreji::log_ip_user_id,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use serde_json::{json, Value};
 use tokio::{sync::watch, time};
+
+use axum_client_ip::InsecureClientIp;
+type ClientIp = InsecureClientIp;
 
 use auth::UserClaims;
 
@@ -33,13 +36,15 @@ pub async fn websocket_handler(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(tx_r): Extension<ResourceSender>,
 	Extension(shutdown_rx): Extension<watch::Receiver<()>>,
+	ip: ClientIp,
 	ConnectInfo(address): ConnectInfo<SocketAddr>,
 ) -> Response {
 	info!("Opening Websocket with {} on {}.", &_user.user, address);
-	ws.on_upgrade(move |socket| handle_socket(socket, _user, db, tx_r, shutdown_rx, address))
+	ws.on_upgrade(move |socket| handle_socket(ip, socket, _user, db, tx_r, shutdown_rx, address))
 }
 
 async fn handle_socket(
+	ip: ClientIp,
 	socket: WebSocket,
 	user_claims: UserClaims,
 	db: LockedAtomic<DB>,
@@ -152,9 +157,13 @@ async fn handle_socket(
 											.unwrap();
 									}
 
+									log_ip_user_id("chunk_edit", ip.0, &user_claims.user, id.inner().into());
 									return reply(MessageType::Ok.into());
 								}
-								Err(err) => return reply((MessageType::Error, &format!("{err:?}")).into()),
+								Err(err) => {
+									log_ip_user_id("chunk_edit_error", ip.0, &user_claims.user, id.inner().into());
+									return reply((MessageType::Error, &format!("{err:?}")).into())
+								},
 							}
 						} else {
 							// Request for "chunks/<id>/value"

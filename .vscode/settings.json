@@ -2,7 +2,7 @@
 	"rust-analyzer.checkOnSave.overrideCommand": [
 		"/bin/nu",
 		"-c",
-		"use scripts/env.nu *; load_env; cargo check --workspace --all-targets --message-format=json"
+		"use scripts/env.nu *; load_env; cargo check --quiet --workspace --message-format=json --all-targets"
 	],
 	"editor.foldingImportsByDefault": false
 }

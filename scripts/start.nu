@@ -18,7 +18,11 @@ export def run_web [script] {
 	load_env_dev
 	
 	enter web
-		yarn $script
+		if $script == 'clean' {
+			rm -rf .parcel-cache dist
+		} else {
+			yarn $script
+		}
 }
 export def run_auth [] {
 	load_env_dev

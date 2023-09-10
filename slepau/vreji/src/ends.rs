@@ -1,47 +1,27 @@
 use std::{
 	collections::{BTreeMap, HashMap, HashSet},
-	time::SystemTime, net::Ipv4Addr,
+	net::Ipv4Addr,
+	time::SystemTime,
 };
 
 use auth::UserClaims;
 use axum::{
-	extract::{Extension, Path},
+	extract::{Extension, Path, Query},
 	response::IntoResponse,
 	Json, TypedHeader,
 };
 use serde_json::{json, Value};
-use sonnerie::{record, DatabaseReader, Record};
+use sonnerie::{record, DatabaseReader, Record, Wildcard};
 
 use common::{
 	socket::{ResourceMessage, ResourceSender},
 	utils::{DbError, LockedAtomic},
+	vreji::{db, record_json, RecordValues},
 };
 
 // use common::vreji::DB_PATH_LOG;
 use lazy_static::lazy_static;
-use serde::Deserialize;
-
-fn db() -> DatabaseReader {
-	sonnerie::DatabaseReader::new(common::vreji::DB_PATH_LOG.as_path()).unwrap()
-}
-
-fn record_json(r: Record) -> Value {
-	let mut v = vec![];
-	v.push(json!(r.time().timestamp_nanos()));
-	for (idx, c) in r.format().chars().enumerate() {
-		v.push(match c {
-			'f' => json!(r.get::<f32>(idx)),
-			'F' =>  json!(r.get::<f64>(idx)),
-			'i' =>  json!(r.get::<i32>(idx)),
-			'I' =>  json!(r.get::<i64>(idx)),
-			'u' =>  json!(r.get::<u32>(idx)),
-			'U' =>  json!(r.get::<u64>(idx)),
-			's' => json!(r.get::<&str>(idx).escape_default().to_string()),
-			a => panic!("unknown format column '{a}'"),
-		});
-	}
-	json!(v)
-}
+use serde::{Deserialize, Serialize};
 
 /// Gets logs
 pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbError> {
@@ -52,24 +32,150 @@ pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbErr
 	Ok(Json(records_json))
 }
 
-pub async fn ips() -> impl IntoResponse {
+pub async fn by_ip() -> impl IntoResponse {
 	let db = db();
 	Json(
-		db.get_range("auth"..="b")
+		db.get_filter(&Wildcard::new("%"))
 			.into_iter()
 			.fold(HashMap::new(), |mut acc, r| {
-				let key = Ipv4Addr::from(r.get::<u32>(0)).to_string();
-				let time = r.timestamp_nanos();
-				acc
-					.entry(key)
-					.and_modify(|v: &mut Vec<u64>| {
-						if v[0] < time {
-							v[0] = time
-						};
-						v[1] += 1;
-					})
-					.or_insert(vec![time, 1]);
+				let r = RecordValues::from(&r);
+				let ip_entry = acc
+					.entry(r.ip)
+					.or_insert((r.time, 0 as u64, HashMap::new(), HashMap::new()));
+				if ip_entry.0 < r.time {
+					ip_entry.0 = r.time
+				};
+				ip_entry.1 += 1;
+
+				let action_entry = ip_entry.2.entry(r.key).or_insert(0);
+				*action_entry += 1;
+
+				if let Some(user) = r.user {
+					let user_entry = ip_entry.3.entry(user).or_insert(0);
+					*user_entry += 1;
+				}
+
 				acc
 			}),
 	)
+}
+pub async fn by_user() -> impl IntoResponse {
+	let db = db();
+	Json(
+		db.get_filter(&Wildcard::new("%"))
+			.into_iter()
+			.fold(HashMap::new(), |mut acc, r| {
+				let r = RecordValues::from(&r);
+				if let Some(user) = r.user {
+					let user_entry = acc
+						.entry(user)
+						.or_insert((r.time, 0 as u64, HashMap::new(), HashMap::new()));
+					if user_entry.0 < r.time {
+						user_entry.0 = r.time
+					};
+					user_entry.1 += 1;
+					let key_entry = user_entry.2.entry(r.key).or_insert(0);
+					let ip_entry = user_entry.3.entry(r.ip).or_insert(0);
+					*key_entry += 1;
+					*ip_entry += 1;
+				}
+				acc
+			}),
+	)
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct RecordFilter {
+	ip: Option<String>,
+	user: Option<String>,
+	id: Option<String>,
+}
+impl RecordFilter {
+	fn matches(&self, r: &RecordValues) -> bool {
+		self.ip.as_deref().map(|ip| ip == &r.ip).unwrap_or(true)
+			&& self
+				.user
+				.as_deref()
+				.map(|user| Some(user) == r.user.as_deref())
+				.unwrap_or(true)
+			&& self.id.as_deref().map(|id| Some(id) == r.id.as_deref()).unwrap_or(true)
+	}
+}
+impl From<&StatQuery> for RecordFilter {
+	fn from(q: &StatQuery) -> Self {
+		Self {
+			ip: q.ip.to_owned(),
+			user: q.user.to_owned(),
+			id: q.id.to_owned(),
+		}
+	}
+}
+impl Default for RecordFilter {
+	fn default() -> Self {
+		Self {
+			ip: None,
+			user: None,
+			id: None,
+		}
+	}
+}
+
+pub async fn by_anything(Query(query): Query<RecordFilter>) -> impl IntoResponse {
+	Json(query.user)
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(default)]
+pub struct StatQuery {
+	ip: Option<String>,
+	user: Option<String>,
+	id: Option<String>,
+
+	key: String,
+	period: usize, // in sec
+	limit: usize,  // in # of periods
+	total: bool,   // total instead of grouped by actions
+}
+impl Default for StatQuery {
+	fn default() -> Self {
+		Self {
+			ip: None,
+			user: None,
+			id: None,
+
+			key: "%".into(),
+			period: 3600, // an hour
+			limit: 24,    // 24 periods (hours, 1 day)
+			total: false,
+		}
+	}
+}
+
+/// Get chunk's stats page
+pub async fn stats(Query(query): Query<StatQuery>) -> impl IntoResponse {
+	let db = db();
+	let now = SystemTime::now()
+		.duration_since(SystemTime::UNIX_EPOCH)
+		.unwrap()
+		.as_secs();
+
+	let wildcard = Wildcard::new(&query.key);
+
+	Json(db.get_filter(&wildcard).into_iter().fold(HashMap::new(), |mut acc, r| {
+		let r = RecordValues::from(&r);
+		if !RecordFilter::from(&query).matches(&r) {
+			return acc;
+		}
+
+		let key = if query.total { "Total".into() } else { r.key };
+		let time = r.time / 1_000_000_000; // Seconds
+		let time_diff = now - time;
+		let values = acc.entry(key).or_insert(vec![0; query.limit]);
+		if time_diff as usize >= query.limit * query.period {
+			return acc;
+		}
+		values[time_diff as usize / query.period] += 1;
+		return acc;
+	}))
 }

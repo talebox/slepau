@@ -64,7 +64,7 @@ impl From<&Record> for RecordValues {
 		let id = f.chars().nth(2).and_then(|c| {
 			if c == 'U' {
 				let v = r.get::<u64>(2);
-				Some(if (v <= u32::MAX.into()) {
+				Some(if v <= u32::MAX.into() {
 					Proquint::<u32>::from(v as u32).to_quint()
 				} else {
 					Proquint::<u64>::from(v).to_quint()

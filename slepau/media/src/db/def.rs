@@ -88,12 +88,8 @@ impl DB {
 						return path;
 					}
 					Err(_ref) => {
-						match _ref {
-							Ok(_ref) => {
-								// Version doesn't exist, just quee a task for it
-								self.queue((0, _ref).into());
-							}
-							_ => {}
+						if let Ok(_ref) = _ref {
+							self.queue((0, _ref).into());
 						}
 					}
 				}
@@ -162,11 +158,7 @@ impl DB {
 			.unwrap_or_default()
 	}
 	pub fn user_stats(&self, user: &str) -> MediaStats {
-		self
-			.by_owner
-			.get(user)
-			.map(MediaStats::from_iter)
-			.unwrap_or_default()
+		self.by_owner.get(user).map(MediaStats::from_iter).unwrap_or_default()
 	}
 	pub fn add(&mut self, mut media: Media, owner: String) -> LockedAtomic<Media> {
 		let _media;
@@ -216,14 +208,12 @@ impl DB {
 pub fn load_existing(db: LockedAtomic<DB>) {
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
 	if let Ok(entries) = std::fs::read_dir(path) {
-		for entry in entries {
-			if let Ok(entry) = entry {
-				let id = MediaId::from_quint(entry.file_name().to_str().unwrap()).unwrap();
-				// Only add if we can't find it in the DB;
-				if db.read().unwrap().get(id).is_none() {
-					if let Ok(value) = std::fs::read(entry.path()) {
-						db.write().unwrap().add((id, &value).into(), "rubend".into());
-					}
+		for entry in entries.flatten() {
+			let id = MediaId::from_quint(entry.file_name().to_str().unwrap()).unwrap();
+			// Only add if we can't find it in the DB;
+			if db.read().unwrap().get(id).is_none() {
+				if let Ok(value) = std::fs::read(entry.path()) {
+					db.write().unwrap().add((id, &value).into(), "rubend".into());
 				}
 			}
 		}

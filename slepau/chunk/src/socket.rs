@@ -197,7 +197,7 @@ async fn handle_socket(
 			} else if piece == Some("user") {
 				let mut user = json!(&user_claims);
 				if let Value::Object(mut user_o) = user {
-					let mut db = db.write().unwrap();
+					let db = db.write().unwrap();
 					let chunks = db.get_chunks(&user_claims.user);
 					user_o.insert("notes_visible".into(), chunks.len().into());
 					user_o.insert(

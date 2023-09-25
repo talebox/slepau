@@ -1,8 +1,8 @@
-use std::net::SocketAddr;
+
 
 use auth::{validate::KPR, UserClaims};
 use axum::{
-	extract::{ConnectInfo, Extension, Query},
+	extract::{Extension, Query},
 	headers,
 	http::header,
 	http::HeaderMap,
@@ -11,7 +11,7 @@ use axum::{
 };
 use common::{
 	utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE},
-	vreji::{log_ip, log_ip_user},
+	vreji::{log_ip_user},
 };
 use hyper::StatusCode;
 

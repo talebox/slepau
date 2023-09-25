@@ -32,7 +32,7 @@ pub async fn by_ip() -> impl IntoResponse {
 				let r = RecordValues::from(&r);
 				let ip_entry = acc
 					.entry(r.ip)
-					.or_insert((r.time, 0 as u64, HashMap::new(), HashMap::new()));
+					.or_insert((r.time, 0_u64, HashMap::new(), HashMap::new()));
 				if ip_entry.0 < r.time {
 					ip_entry.0 = r.time
 				};
@@ -60,7 +60,7 @@ pub async fn by_user() -> impl IntoResponse {
 				if let Some(user) = r.user {
 					let user_entry = acc
 						.entry(user)
-						.or_insert((r.time, 0 as u64, HashMap::new(), HashMap::new()));
+						.or_insert((r.time, 0_u64, HashMap::new(), HashMap::new()));
 					if user_entry.0 < r.time {
 						user_entry.0 = r.time
 					};
@@ -77,6 +77,7 @@ pub async fn by_user() -> impl IntoResponse {
 
 #[derive(Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct RecordFilter {
 	ip: Option<String>,
 	user: Option<String>,
@@ -84,7 +85,7 @@ pub struct RecordFilter {
 }
 impl RecordFilter {
 	fn matches(&self, r: &RecordValues) -> bool {
-		self.ip.as_deref().map(|ip| ip == &r.ip).unwrap_or(true)
+		self.ip.as_deref().map(|ip| ip == r.ip).unwrap_or(true)
 			&& self
 				.user
 				.as_deref()
@@ -102,15 +103,7 @@ impl From<&StatQuery> for RecordFilter {
 		}
 	}
 }
-impl Default for RecordFilter {
-	fn default() -> Self {
-		Self {
-			ip: None,
-			user: None,
-			id: None,
-		}
-	}
-}
+
 
 pub async fn by_anything(Query(query): Query<RecordFilter>) -> impl IntoResponse {
 	Json(query.user)
@@ -167,6 +160,6 @@ pub async fn stats(Query(query): Query<StatQuery>) -> impl IntoResponse {
 			return acc;
 		}
 		values[time_diff as usize / query.period] += 1;
-		return acc;
+		acc
 	}))
 }

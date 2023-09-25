@@ -12,7 +12,7 @@ use common::{
 	Cache,
 };
 use env_logger::Env;
-use hyper::{StatusCode, header::AUTHORIZATION};
+use hyper::{StatusCode};
 use log::{error, info};
 use tower::ServiceBuilder;
 use tower_governor::{
@@ -22,14 +22,14 @@ use tower_governor::{
 use std::{
 	net::SocketAddr,
 	sync::{Arc, RwLock},
-	time::Duration, iter::once,
+	time::Duration,
 };
 
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer, sensitive_headers::SetSensitiveRequestHeadersLayer};
+use tower_http::{timeout::TimeoutLayer};
 
 mod db;
 mod ends;

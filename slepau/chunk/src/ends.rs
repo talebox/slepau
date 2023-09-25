@@ -14,13 +14,13 @@ use headers::ContentType;
 use axum_client_ip::InsecureClientIp;
 type ClientIp = InsecureClientIp;
 
-use log::{info, trace};
+
 use serde::Deserialize;
 use std::collections::HashSet;
 
 use crate::{
 	db::{
-		chunk::{Chunk, ChunkId},
+		chunk::{ChunkId},
 		dbchunk::DBChunk,
 		view::{ChunkView, ViewType},
 		DB,
@@ -98,7 +98,7 @@ pub async fn page_get_id(
 async fn search_(db: LockedAtomic<DB>, user_claims: UserClaims, term: String) ->Result<impl IntoResponse, DbError> {
 	let db = db.read().unwrap();
 
-	if term.len() < 1 {
+	if term.is_empty() {
 		return Err(DbError::Custom("Search term has to be at least 1 character.".into()));
 	}
 

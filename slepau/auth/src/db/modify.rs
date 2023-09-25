@@ -86,7 +86,7 @@ impl DBAuth {
 		// Last minute checks
 		{
 			let admin = admin.read().unwrap();
-			let changing_themselves = super_admin == &admin.user.user;
+			let changing_themselves = super_admin == admin.user.user;
 			let turning_off_super = admin._super && !v._super;
 			let making_inactive = admin.user.active && !v.active;
 			if changing_themselves {

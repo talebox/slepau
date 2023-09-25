@@ -7,7 +7,7 @@ use serde::{de::Visitor, Deserialize, Serialize};
 pub struct Proquint<T>(T);
 impl<T : Copy> Proquint<T> {
 	pub fn inner(&self) -> T {
-		return self.0
+		self.0
 	}
 }
 impl<T: Quintable> Serialize for Proquint<T> {

@@ -69,17 +69,17 @@ async fn handle_socket(
 				Cursor::Before(id) => iter
 					.rev()
 					.skip_while(|v| v.read().unwrap().id != id)
-					.take(limit as usize)
+					.take(limit)
 					.map(|f| f.read().unwrap().clone())
 					.collect::<Vec<_>>(),
 				Cursor::After(id) => iter
 					.skip_while(|v| v.read().unwrap().id != id)
-					.take(limit as usize)
+					.take(limit)
 					.map(|f| f.read().unwrap().clone())
 					.collect::<Vec<_>>(),
 			},
 			None => iter
-				.take(limit as usize)
+				.take(limit)
 				.map(|f| f.read().unwrap().clone())
 				.collect::<Vec<_>>(),
 		};

@@ -144,7 +144,7 @@ impl DBAuth {
 				.clone()
 				.skip_while(|u| after.as_ref().map(|after| &u.user <= after).unwrap_or(false))
 				.take(10)
-				.map(|v| UserView::from(v))
+				.map(UserView::from)
 				.collect(),
 			total: users.clone().count(),
 		})

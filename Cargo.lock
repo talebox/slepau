@@ -147,6 +147,7 @@ dependencies = [
  "log",
  "pasetors",
  "rand",
+ "regex",
  "serde",
  "serde_json",
  "time 0.3.28",

@@ -101,3 +101,9 @@ pub fn log_ip_user_id(name: &str, ip: IpAddr, user: &str, id: u64) {
 		.unwrap();
 	commit(t);
 }
+pub fn log_ip_user_id_bytes(name: &str, ip: IpAddr, user: &str, id: u64, size: u32) {
+	let mut t = transaction();
+	t.add_record(name, Utc::now().naive_utc(), record(ip_to_u32(ip)).add(user).add(id).add(size))
+		.unwrap();
+	commit(t);
+}

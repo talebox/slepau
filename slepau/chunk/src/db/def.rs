@@ -127,8 +127,8 @@ impl DB {
 			)
 		}
 	}
-
-	pub fn get_chunks(&mut self, user: &str) -> Vec<LockedAtomic<DBChunk>> {
+	/// Get all chunks for a particular user
+	pub fn get_chunks(&self, user: &str) -> Vec<LockedAtomic<DBChunk>> {
 		// public assertion
 		if user == "public" {
 			return vec![];
@@ -138,7 +138,7 @@ impl DB {
 			.chunks
 			.values()
 			.filter_map(|v| {
-				if let Ok(chunk) = v.write() {
+				if let Ok(chunk) = v.read() {
 					if chunk.has_access(&user.into()) {
 						return Some(v.clone());
 					}

@@ -22,8 +22,9 @@ pub struct UserView {
 }
 #[derive(Deserialize)]
 pub struct UserSet {
-	pub active: bool,
-	pub claims: BTreeMap<String, Value>,
+	pub active: Option<bool>,
+	pub claims: Option<BTreeMap<String, Value>>,
+	pub pass: Option<String>
 }
 
 impl From<&User> for UserView {

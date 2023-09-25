@@ -22,7 +22,7 @@ pub mod version;
 pub mod view;
 
 /// MediaId uses u64 for a max of 2^64 combinations for less collisions.
-/// As many as the neurons as 200 million humans combined.
+/// As many as the neurons of 200 million humans combined.
 pub type MediaId = Proquint<u64>;
 
 #[derive(Serialize, Default, Deserialize, Clone, Debug)]
@@ -33,7 +33,7 @@ pub struct Media {
 	pub meta: meta::FileMeta,
 	pub versions: HashMap<version::VersionString, VersionInfo>,
 
-	/// Media record creation time
+	/// Media record creation time (in seconds since epoch)
 	///
 	/// Note: this is not the image's metadata creation time
 	pub created: u64,

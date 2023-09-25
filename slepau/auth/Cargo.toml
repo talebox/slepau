@@ -26,3 +26,4 @@ pasetors = "0.6.3"
 rand.workspace = true
 axum-client-ip.workspace = true
 futures-util = "0.3.26"
+regex = "1.7.1"

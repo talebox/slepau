@@ -35,14 +35,24 @@ pub struct LoginQuery {
 	admin: bool,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct AuthBody {
+	user: String,
+	pass: String,
+	old_pass: Option<String>
+}
+
 pub async fn login(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Query(query): Query<LoginQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	ip: ClientIp,
-	Json((user, pass)): Json<(String, String)>,
+	Json(body): Json<AuthBody>,
 ) -> Result<impl IntoResponse, DbError> {
 	let db = db.write().unwrap();
+	let user = body.user;
+	let pass = body.pass;
 
 	let (host, mut site_id) = db.host_to_site_id(host.hostname());
 	// Throw error if no site found and user doesn't wanna login as admin.
@@ -128,13 +138,16 @@ pub async fn login(
 			err
 		})
 }
+
 pub async fn register(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	ip: ClientIp,
-	Json((user, pass)): Json<(String, String)>,
+	Json(body): Json<AuthBody>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
+	let user = body.user;
+	let pass = body.pass;
 
 	if db.admins.is_empty() {
 		db.new_admin(&user, &pass)?;
@@ -169,25 +182,34 @@ pub async fn register(
 		})
 }
 
+
 pub async fn reset(
 	TypedHeader(host): TypedHeader<headers::Host>,
+	Extension(user_claims): Extension<UserClaims>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	ip: ClientIp,
-	Json((user, old_pass, pass)): Json<(String, String, String)>,
+	Json(body): Json<AuthBody>,
 ) -> Result<impl IntoResponse, DbError> {
 	let mut db = db.write().unwrap();
+	let user = body.user;
+	let pass = body.pass;
+	let old_pass = body.old_pass;
+	// Make sure only supers can reset with a None old_pass.
+	if old_pass.is_none() && !user_claims._super {
+		return Err(DbError::AuthError)
+	}
 
 	let (_, site_id) = db.host_to_site_id(host.hostname());
 	let site_id = site_id.ok_or(DbError::NotFound)?;
 
-	db.reset(&user, &pass, &old_pass, Some(site_id))
+	db.reset(&user, &pass, old_pass.as_deref(), Some(site_id))
 		.map(|_| {
 			info!("User password reset '{user}'.");
 			log_ip_user("auth_reset", ip.0, &user);
 			"User pass reset."
 		})
 		.map_err(|err| {
-			error!("Failed password reset for '{user}' with using old_pass '{old_pass}': {err:?}.");
+			error!("Failed password reset for '{user}': {err:?}.");
 			log_ip_user("auth_reset_error", ip.0, &user);
 			err
 		})

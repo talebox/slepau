@@ -126,28 +126,32 @@ impl DBAuth {
 			.find(|v| v.read().unwrap().id == site_id)
 			.ok_or(DbError::NotFound)?;
 
-		// Try parsing the claims as strings
-		let claims = v
-			.claims
-			.into_iter()
-			.map(|(k, v)| {
-				(
-					k.to_owned(),
-					if let Value::String(s) = &v {
-						serde_json::from_str(s).unwrap_or(v)
-					} else {
-						v
-					},
-				)
-			})
-			.collect();
-
 		// Modify user
 		{
 			let mut site = site.write().unwrap();
 			let user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
-			user.active = v.active;
-			user.claims = claims;
+			if let Some(active) = v.active {user.active = active;}
+			if let Some(claims) = v.claims {
+				// Try parsing the claims as strings
+				let claims = claims
+					.into_iter()
+					.map(|(k, v)| {
+						(
+							k.to_owned(),
+							if let Value::String(s) = &v {
+								serde_json::from_str(s).unwrap_or(v)
+							} else {
+								v
+							},
+						)
+					})
+					.collect();
+
+				user.claims = claims;
+			}
+			if let Some(pass) = v.pass {
+				user.reset_pass(None, &pass)?;
+			}
 		}
 
 		Ok(())
@@ -158,9 +162,7 @@ impl DBAuth {
 		let site = self.sites.get(&site_id).ok_or(DbError::AuthError)?;
 		let mut site = site.write().unwrap();
 		let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
-		user
-			.claims
-			.extend(json!(claims).as_object().unwrap().clone());
+		user.claims.extend(json!(claims).as_object().unwrap().clone());
 		Ok(())
 	}
 }

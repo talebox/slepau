@@ -49,8 +49,10 @@ impl User {
 		})
 	}
 
-	pub fn reset_pass(&mut self, old_pass: &str, pass: &str) -> Result<(), DbError> {
-		self.verify_login(old_pass)?;
+	pub fn reset_pass(&mut self, old_pass: Option<&str>, pass: &str) -> Result<(), DbError> {
+		if let Some(old_pass) = old_pass {
+			self.verify_login(old_pass)?;
+		}
 		self.pass = Self::hash(pass)?;
 
 		Ok(())

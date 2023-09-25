@@ -57,14 +57,15 @@ impl DBAuth {
 			Ok((user.clone(), None, true, admin._super, 60 * 60 * 24))
 		}
 	}
-	pub fn reset(&mut self, user: &str, pass: &str, old_pass: &str, site: Option<SiteId>) -> Result<(), DbError> {
+	/// Reset a user password
+	/// Admins should call with no old_pass to skip password check.
+	pub fn reset(&mut self, user: &str, pass: &str, old_pass: Option<&str>, site: Option<SiteId>) -> Result<(), DbError> {
 		if let Some(site) = site {
 			let mut site = self.sites.get(&site).ok_or(DbError::NotFound)?.write().unwrap();
 			let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
 			user.reset_pass(old_pass, pass)
 		} else {
 			let admin = self.admins.get(user).ok_or(DbError::AuthError)?;
-
 			admin.write().unwrap().user.reset_pass(old_pass, pass)
 		}
 	}

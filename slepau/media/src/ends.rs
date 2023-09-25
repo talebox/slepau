@@ -230,14 +230,14 @@ pub async fn media_post(
 		// body.count().await;
 		log_ip_user_id("media_post_error", ip.0, &user_claims.user, 0);
 		log::error!(
-			"{} reached his limit of {}MB",
+			"{} reached his limit of {} MB",
 			user_claims.user,
 			user_claims.media_limit / MB
 		);
 		return Err((
 			StatusCode::FORBIDDEN,
 			format!(
-				"You've reached your limit of {}MB.
+				"You've reached your limit of {} MB.
 				\nContact your admin for a limit upgrade or optimize some of your media.",
 				user_claims.media_limit / MB
 			),
@@ -257,7 +257,7 @@ pub async fn media_post(
 				log_ip_user_id("media_post_error", ip.0, &user_claims.user, 1);
 				return Err((
 					StatusCode::PAYLOAD_TOO_LARGE,
-					format!("Body > {}MB", MAX_ALLOWED_MEDIA_SIZE / MB),
+					format!("Body > {} MB", MAX_ALLOWED_MEDIA_SIZE / MB),
 				));
 			}
 			file.write_buf(&mut chunk).await.unwrap();

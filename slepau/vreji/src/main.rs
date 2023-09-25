@@ -1,12 +1,11 @@
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
-	routing::{get, post, put},
-	BoxError, Extension, Router,
+	routing::{get},
+	Extension, Router,
 };
 
 use common::{
-	init::backup::backup_service,
 	utils::{log_env, SOCKET, URL},
 };
 use env_logger::Env;

@@ -1,7 +1,7 @@
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
-	routing::{get, post, put},
+	routing::{get, post, put, patch},
 	BoxError, Extension, Router,
 };
 
@@ -112,7 +112,7 @@ async fn main() {
 				)
 				.route(
 					"/sites/:site_id/users/:id",
-					put(ends::admin::put_user).delete(ends::admin::del_user),
+					patch(ends::admin::put_user).delete(ends::admin::del_user),
 				)
 				// Only Admins ^
 				.layer(axum::middleware::from_fn(auth::validate::flow::only_admins)),

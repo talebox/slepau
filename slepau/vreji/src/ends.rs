@@ -1,27 +1,18 @@
 use std::{
-	collections::{BTreeMap, HashMap, HashSet},
-	net::Ipv4Addr,
+	collections::HashMap,
 	time::SystemTime,
 };
-
-use auth::UserClaims;
 use axum::{
-	extract::{Extension, Path, Query},
+	extract::{Path, Query},
 	response::IntoResponse,
-	Json, TypedHeader,
+	Json,
 };
-use serde_json::{json, Value};
-use sonnerie::{record, DatabaseReader, Record, Wildcard};
-
+use sonnerie::Wildcard;
 use common::{
-	socket::{ResourceMessage, ResourceSender},
-	utils::{DbError, LockedAtomic},
+	utils::DbError,
 	vreji::{db, record_json, RecordValues},
 };
-
-// use common::vreji::DB_PATH_LOG;
-use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// Gets logs
 pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbError> {

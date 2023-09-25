@@ -1,5 +1,5 @@
 use auth::validate::KPR;
-use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::{get, put}, BoxError, Extension, Router};
+use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::{get, put, post}, BoxError, Extension, Router};
 
 use common::{
 	http::{static_routes},
@@ -82,12 +82,14 @@ async fn main() {
 			"/chunks",
 			put(ends::chunks_put).delete(ends::chunks_del),
 		)
+		.route("/search/:term", get(ends::search_get))
+		.route("/search", post(ends::search_post))
 		// ONLY if NOT public ^
 		.route_layer(from_fn(auth::validate::flow::auth_required))
 		.route("/chunks/:id", get(ends::chunks_get_id))
 		.route("/stream", get(socket::websocket_handler))
-		// ONLY GET if public ^
-		.route_layer(from_fn(auth::validate::flow::public_only_get))
+		// // ONLY GET if public ^
+		// .route_layer(from_fn(auth::validate::flow::public_only_get))
 		.route("/page/:id", get(ends::page_get_id))
 		// .nest_service("/preview", index_service(WEB_DIST.as_str(), Some("preview.html")))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))

@@ -15,22 +15,26 @@ export def deploy_keys [] {
 }
 
 export def deploy_docker [name] {
-	print $"Deploying docker container '($name)', with anty context."
-	docker context use anty
-	docker build -t $name $"./out/slepau/($name)" 
-	docker volume create -d local $"($name)_data"
-	docker volume create -d local $"($name)_backup"
 	let ports = {
 		"auth": 4501,
 		"chunk": 4502,
 		"media": 4503,
 		"vreji": 4504,
 	}
-	do -i {docker stop $"($name)_s"}
-	do -i {docker rm $"($name)_s"}
-	docker run -d --restart unless-stopped -p $"127.0.0.1:($ports | get $name):4000" -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" -e $"URL=https://($name).anty.dev" --env-file=container/env.config --name $"($name)_s" $name
-	
-	print "Done."
+	if $name not-in $ports {
+		print $"'($name)' doesn't exist in deploy_docker.";
+	} else {
+		print $"Deploying docker container '($name)', with anty context."
+		docker context use anty
+		docker build -t $name $"./out/slepau/($name)" 
+		docker volume create -d local $"($name)_data"
+		docker volume create -d local $"($name)_backup"
+		do -i {docker stop $"($name)_s"}
+		do -i {docker rm $"($name)_s"}
+		docker run -d --restart unless-stopped -p $"127.0.0.1:($ports | get $name):4000" -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db -v  $"($name)_data:/server/data" -v $"($name)_backup:/server/backup" -e $"URL=https://($name).anty.dev" --env-file=container/env.config --name $"($name)_s" $name
+		
+		print "Done."
+	}
 }
 
 export def deploy_static [name] {

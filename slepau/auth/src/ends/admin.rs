@@ -6,10 +6,11 @@ use axum::{
 };
 use common::utils::{DbError, LockedAtomic};
 use log::info;
+use serde::{Deserialize, Serialize};
 
 use crate::{
 	db::{
-		get::Filter,
+		get::AnyFilter,
 		site::{AdminSet, SiteId, SiteSet},
 		DBAuth,
 	},
@@ -45,23 +46,50 @@ pub async fn post_user(
 	Ok(())
 }
 
+#[derive(Deserialize, Default)]
+pub struct FilterQuery {
+	any: Option<AnyFilter>,
+	after: Option<String>,
+}
+
 // GET
 pub async fn get_admins(
-	Query(filter): Query<Filter>,
+	Query(filter): Query<FilterQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
-	Ok(Json(db.read().unwrap().get_admins(&user_claims.user, filter)?))
+	Ok(Json(db.read().unwrap().get_admins(&user_claims.user, filter.any)?))
 }
 pub async fn get_sites(
-	Query(filter): Query<Filter>,
+	Query(filter): Query<FilterQuery>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Extension(user_claims): Extension<UserClaims>,
 ) -> Result<impl IntoResponse, DbError> {
-	Ok(Json(db.read().unwrap().get_sites(&user_claims.user, filter)?))
+	Ok(Json(db.read().unwrap().get_sites(&user_claims.user, filter.any)?))
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum Cursor {
+	Before(String),
+	After(String),
+}
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct CursorQuery {
+	pub cursor: Option<Cursor>,
+	pub limit: usize,
+}
+impl Default for CursorQuery {
+	fn default() -> Self {
+		Self {
+			cursor: None,
+			limit: 10,
+		}
+	}
 }
 pub async fn get_users(
-	Query(filter): Query<Filter>,
+	Query(filter): Query<FilterQuery>,
 	Path(site_id): Path<SiteId>,
 	Extension(db): Extension<LockedAtomic<DBAuth>>,
 	Extension(user_claims): Extension<UserClaims>,
@@ -69,7 +97,8 @@ pub async fn get_users(
 	Ok(Json(db.read().unwrap().get_users(
 		&user_claims.user,
 		site_id,
-		filter,
+		filter.any,
+		filter.after,
 	)?))
 }
 

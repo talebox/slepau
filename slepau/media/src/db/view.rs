@@ -1,5 +1,5 @@
 use common::utils::LockedAtomic;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 use super::Media;
 
@@ -59,13 +59,37 @@ impl From<&LockedAtomic<Media>> for MediaId {
 
 pub enum SortType {
 	Created,
+	Size,
 }
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum Cursor {
+	Before(super::MediaId),
+	After(super::MediaId)
+}
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+pub struct CursorQuery {
+	pub cursor: Option<Cursor>, 
+	pub limit: usize
+}
+impl Default for CursorQuery {
+	fn default() -> Self {
+		Self {
+			cursor: None,
+			limit: 10
+		}
+	}
+}
+
 pub struct MediaVec(pub Vec<LockedAtomic<Media>>);
 impl MediaVec {
 	pub fn sort(&mut self, t: SortType) {
 		self.0.sort_by_cached_key(|v| {
 			-(match &t {
 				SortType::Created => v.read().unwrap().created,
+				SortType::Size => v.read().unwrap().meta.size,
 			} as i64)
 		})
 	}

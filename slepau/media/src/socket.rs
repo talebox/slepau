@@ -21,7 +21,7 @@ use tokio::{sync::watch, time};
 use auth::UserClaims;
 
 use crate::db::{
-	view::{MediaVec, SortType},
+	view::{Cursor, CursorQuery, MediaVec, SortType},
 	MediaId, DB,
 };
 
@@ -56,6 +56,34 @@ async fn handle_socket(
 		chunks.sort(SortType::Created);
 
 		json!(Vec::<crate::db::Media>::from(chunks))
+	};
+	// Like get_all, but paged
+	let get_paged = |query: CursorQuery| {
+		let mut chunks: MediaVec = db.read().unwrap().get_all(user).into();
+		chunks.sort(SortType::Created);
+		let iter = chunks.0.iter();
+		let limit = query.limit;
+		let cursor = query.cursor;
+		let data = match cursor {
+			Some(cursor) => match cursor {
+				Cursor::Before(id) => iter
+					.rev()
+					.skip_while(|v| v.read().unwrap().id != id)
+					.take(limit as usize)
+					.map(|f| f.read().unwrap().clone())
+					.collect::<Vec<_>>(),
+				Cursor::After(id) => iter
+					.skip_while(|v| v.read().unwrap().id != id)
+					.take(limit as usize)
+					.map(|f| f.read().unwrap().clone())
+					.collect::<Vec<_>>(),
+			},
+			None => iter
+				.take(limit as usize)
+				.map(|f| f.read().unwrap().clone())
+				.collect::<Vec<_>>(),
+		};
+		json!({"query": query,"data":data})
 	};
 
 	// Keep last resource id so when we're sending
@@ -108,13 +136,22 @@ async fn handle_socket(
 				}
 			} else if piece == Some("views") {
 				piece = res.pop_front();
-				let _root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
+				// let _root_id = res.pop_front().map(|id| MediaId::from_quint(id).expect("a ChunkId."));
 
 				if piece == Some("all") {
+					piece = res.pop_front();
+					if piece == Some("paged") {
+						let cursor_query = m.value.and_then( |value|
+							serde_json::from_str::<CursorQuery>(&value).ok()).unwrap_or_default();
+						return reply((&get_paged(cursor_query)).into());
+					}
+
 					return reply((&get_all()).into());
 				}
 				error!("View '{piece:?}' not recognized");
 				return None;
+			} else if piece == Some("paged") {
+				
 			} else if piece == Some("user") {
 				let stats = db.read().unwrap().user_stats(&user_claims.user);
 

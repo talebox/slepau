@@ -6,7 +6,8 @@ use axum::{
 };
 use common::{
 	socket::{ResourceMessage, ResourceSender},
-	utils::{DbError, LockedAtomic}, vreji::log_ip_user_id,
+	utils::{DbError, LockedAtomic},
+	vreji::log_ip_user_id,
 };
 use headers::ContentType;
 
@@ -21,7 +22,7 @@ use crate::{
 	db::{
 		chunk::{Chunk, ChunkId},
 		dbchunk::DBChunk,
-		view::ChunkView,
+		view::{ChunkView, ViewType},
 		DB,
 	},
 	format::value_to_html,
@@ -91,6 +92,51 @@ pub async fn page_get_id(
 	} else {
 		Err(DbError::NotFound)
 	}
+}
+
+
+async fn search_(db: LockedAtomic<DB>, user_claims: UserClaims, term: String) ->Result<impl IntoResponse, DbError> {
+	let db = db.read().unwrap();
+
+	if term.len() < 1 {
+		return Err(DbError::Custom("Search term has to be at least 1 character.".into()));
+	}
+
+	let regex = regex::Regex::new(format!("(?im){}",term).as_str());
+
+	Ok(Json(
+		db.get_chunks(&user_claims.user)
+			.into_iter()
+			.filter_map(|chunk| {
+				let contains = if let Ok(regex) = regex.as_ref()  {
+					regex.is_match(&chunk.read().unwrap().chunk().value)
+				} else {
+					chunk.read().unwrap().chunk().value.contains(&term)
+				};
+				if contains {
+					Some(ChunkView::from((chunk, user_claims.user.as_str(), ViewType::Well)))
+				} else {
+					None
+				}
+			})
+			.take(10)
+			.collect::<Vec<_>>(),
+	))
+}
+pub async fn search_get(
+	Extension(db): Extension<LockedAtomic<DB>>,
+	Extension(user_claims): Extension<UserClaims>,
+	Path(term): Path<String>
+) -> Result<impl IntoResponse, DbError> {
+	search_(db, user_claims, term).await
+}
+
+pub async fn search_post(
+	Extension(db): Extension<LockedAtomic<DB>>,
+	Extension(user_claims): Extension<UserClaims>,
+	term: String
+) -> Result<impl IntoResponse, DbError> {
+	search_(db, user_claims, term).await
 }
 
 #[derive(Debug, Deserialize, Default)]

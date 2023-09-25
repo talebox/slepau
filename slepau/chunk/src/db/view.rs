@@ -47,6 +47,7 @@ pub enum ViewType {
 	Notes,
 	Well,
 	Graph,
+	// Search,
 }
 impl From<(LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 	fn from((rc, user, view_type): (LockedAtomic<DBChunk>, &str, ViewType)) -> Self {
@@ -57,18 +58,20 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 	fn from((rc, user, view_type): (&LockedAtomic<DBChunk>, &str, ViewType)) -> Self {
 		let mut db_chunk = rc.write().unwrap();
 		let value_short = |db_chunk: &RwLockWriteGuard<DBChunk>| {
-			let mut v = 0;
+			let mut line = 0;
+			let mut chars = 0;
 			db_chunk
 				.chunk()
 				.value
 				.chars()
 				.take_while(|c| {
-					if v == 10 {
+					if line >= 10 || chars >= 200 {
 						return false;
 					};
 					if *c == '\n' {
-						v += 1;
+						line += 1;
 					};
+					chars += 1;
 					true
 				})
 				.collect::<String>()
@@ -142,6 +145,11 @@ impl From<(&LockedAtomic<DBChunk>, &str, ViewType)> for ChunkView {
 					// 	.and_then(|a| if a == Access::Owner { None } else { Some(a) }),
 					..Default::default()
 				},
+				// ViewType::Search => Self {
+				// 	id: db_chunk.chunk().id,
+				// 	value: Some(value_short(&db_chunk)),
+				// 	..Default::default()
+				// },
 			}
 		}
 	}

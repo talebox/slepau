@@ -175,6 +175,7 @@ pub struct DataSlice<T> {
 	pub total: usize,
 }
 
+
 pub fn hostname_normalize(host: &str) -> &str {
 	if ["127.", "10.", "192.168."].iter().any(|v| host.starts_with(v)) {
 		host

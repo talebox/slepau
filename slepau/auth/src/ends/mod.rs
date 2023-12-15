@@ -2,7 +2,7 @@
 
 use auth::{validate::KPR, UserClaims};
 use axum::{
-	extract::{Extension, Query},
+	extract::{Extension, Query, Path},
 	headers,
 	http::header,
 	http::HeaderMap,
@@ -222,6 +222,13 @@ pub async fn user(
 ) -> impl IntoResponse {
 	log_ip_user("auth_get_user", ip.0, &user_claims.user);
 	Json(user_claims)
+}
+
+pub async fn user_photo(
+	Path(user): Path<String>,
+	Extension(_db): Extension<LockedAtomic<DBAuth>>,
+) -> impl IntoResponse {
+	_db.read().unwrap().user_photo(&user)
 }
 
 /// Allows users to modify certain whitelisted claims.

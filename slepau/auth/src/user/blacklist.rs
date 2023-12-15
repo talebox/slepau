@@ -1,4 +1,7 @@
-pub static BLACKLIST: [&str; 1011] = [
+pub static BLACKLIST: [&str; 1014] = [
+	"exp",
+	"expires",
+	"expiration",
 	// Bad keywords
 	"git",
 	"htaccess",

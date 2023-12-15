@@ -119,7 +119,9 @@ pub struct DB {
 	pub allow_public_post: bool,
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
 	///
-	/// Makes sure entry has X version/s.
+	/// Makes sure entry has X version/s. 
+	/// Executed when doing a _tick on the media.
+	/// tick_all() ticks all media.
 	initial_versions: HashMap<TaskCriteria, Vec<TaskQuery>>,
 	/// Key is matcher, gets applied to whoever's mime type begins with this.
 	///

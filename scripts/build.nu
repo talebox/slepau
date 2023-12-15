@@ -15,7 +15,7 @@ export def clean [] {
 }
 
 export def organize_out [bin_dir = "bin"] {
-	print "Organizing all built files."
+	print $"Organizing all built files. bin_dir=($bin_dir)"
 	
 	enter out
 		rm -rf slepau
@@ -24,7 +24,7 @@ export def organize_out [bin_dir = "bin"] {
 			echo $"Doing ($a)."
 			# Make slepau dir
 			mkdir $"slepau/($a)"
-				
+			
 			# Don't for ...
 			if $a not-in ["talebox"]  {
 				echo $"Bin/docker for ($a)."

@@ -69,6 +69,11 @@ impl DBAuth {
 			admin.write().unwrap().user.reset_pass(old_pass, pass)
 		}
 	}
+	pub fn user_photo(&self, user: &str) -> Result<String, DbError> {
+		self.sites.iter().find_map(|(_, s)| {
+			Some(s.read().unwrap().users.get(user)?.claims.get("photo")?.as_str()?.to_string())
+		}).ok_or(DbError::NotFound)
+	}
 }
 
 #[cfg(test)]

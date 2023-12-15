@@ -96,7 +96,7 @@ impl DB {
 			}
 		}
 
-		VersionReference::from((id, "".into())).path_in()
+		VersionReference::to_path_in(id)
 	}
 
 	pub fn queue(&mut self, task: Task) {

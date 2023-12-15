@@ -60,25 +60,13 @@ pub async fn media_get(
 	log_ip_user_id("media_get", ip.0, &user_claims.user, id.inner());
 
 	if wants_raw {
-		// if cfg!(debug_assertions) {
-		// 	info!("User wants raw for {id}");
-		// }
+		// Return original path
 		path = VersionReference::to_path_in(id);
 	} else if version_empty {
-		// if cfg!(debug_assertions) {
-		// 	info!("User wants default for {id}");
-		// }
+		// If default_version path exists, return that path, 
+		// or schedule a default_version task and return original path
 		path = db.write().unwrap().default_version_path(id);
-		// if cfg!(debug_assertions) {
-		// 	info!("Deafult is {path:?}");
-		// }
-	// Schedule the task and don't wait for it
-	// let task = Task::from((0, version_ref.clone()));
-	// tx_task.send(task).await.unwrap();
 	} else {
-		// if cfg!(debug_assertions) {
-		// 	info!("User wants {id} version {}", VersionString::from(&version));
-		// }
 		// Wait for task, someone wants something specific
 		let _ref: VersionReference = (id, (&version).into()).into();
 		let _path = db.read().unwrap().version_path(_ref);

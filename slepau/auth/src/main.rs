@@ -1,7 +1,7 @@
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
-	routing::{get, post, put, patch},
+	routing::{get, patch, post, put},
 	BoxError, Extension, Router,
 };
 
@@ -12,7 +12,7 @@ use common::{
 	Cache,
 };
 use env_logger::Env;
-use hyper::{StatusCode};
+use hyper::StatusCode;
 use log::{error, info};
 use tower::ServiceBuilder;
 use tower_governor::{
@@ -29,7 +29,7 @@ use std::{
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
-use tower_http::{timeout::TimeoutLayer};
+use tower_http::timeout::TimeoutLayer;
 
 mod db;
 mod ends;
@@ -85,6 +85,14 @@ async fn main() {
 			.finish()
 			.unwrap(),
 	);
+	let governor_conf_relaxed = Box::new(
+		GovernorConfigBuilder::default()
+			.key_extractor(SmartIpKeyExtractor)
+			.per_second(5)
+			.burst_size(30)
+			.finish()
+			.unwrap(),
+	);
 
 	// Build router
 	let app = Router::new()
@@ -137,6 +145,17 @@ async fn main() {
 				.layer(GovernorLayer {
 					config: Box::leak(governor_conf),
 				}),
+		)
+		.merge(
+			Router::new()
+				.route("/user/:user/photo", get(crate::ends::user_photo))
+				.layer(
+					ServiceBuilder::new()
+						.layer(HandleErrorLayer::new(|e: BoxError| async move { display_error(e) }))
+						.layer(GovernorLayer {
+							config: Box::leak(governor_conf_relaxed),
+						}),
+				),
 		)
 		// Serves static assets
 		.fallback_service(static_routes())

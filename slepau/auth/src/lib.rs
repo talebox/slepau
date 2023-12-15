@@ -14,6 +14,9 @@ fn is_zero(v: &u64) -> bool {
 #[serde(default)]
 pub struct UserClaims {
 	pub user: String,
+	
+	#[serde(skip_serializing_if = "String::is_empty")]
+	pub photo: String,
 
 	#[serde(skip_serializing_if = "is_false")]
 	pub admin: bool,

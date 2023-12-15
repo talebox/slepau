@@ -74,5 +74,5 @@ export def deploy_all [] {
 	
 	deploy_nginx
 	
-	print "Done."
+	print "Deploy finished!"
 }

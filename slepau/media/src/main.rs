@@ -8,7 +8,7 @@ use axum::{
 };
 
 use common::{
-	http::{ static_routes},
+	http::static_routes,
 	socket::ResourceMessage,
 	utils::{log_env, SOCKET, URL},
 };
@@ -26,7 +26,7 @@ use tokio::{
 	signal::unix::{signal, SignalKind},
 	sync::{broadcast, mpsc, watch},
 };
-use tower_http::{timeout::TimeoutLayer};
+use tower_http::timeout::TimeoutLayer;
 
 pub mod db;
 pub mod ends;
@@ -73,17 +73,22 @@ pub async fn main() {
 
 	// Build router
 	let app = Router::new()
-		.route("/stream", get(socket::websocket_handler))
-		.route_layer(from_fn(auth::validate::flow::auth_required))
-		.route("/stats", get(ends::stats))
+		.route(
+			"/:id",
+			get(ends::media_get).patch(ends::media_patch).delete(ends::media_delete),
+		)
 		.route("/", post(ends::media_post))
-		.route("/media", post(ends::media_post))
 		.route(
 			"/media/:id",
 			get(ends::media_get).patch(ends::media_patch).delete(ends::media_delete),
 		)
+		.route(
+			"/stream",
+			get(socket::websocket_handler).layer(from_fn(auth::validate::flow::auth_required)),
+		)
+		.route("/stats", get(ends::stats))
+		.route("/media", post(ends::media_post))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
-		.fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()
@@ -93,9 +98,7 @@ pub async fn main() {
 				.layer(Extension(resource_tx.clone()))
 				.layer(Extension(task_tx.clone()))
 				.layer(Extension(db.clone())),
-		)
-		// .layer(TraceLayer::new_for_http())
-		;
+		);
 
 	let conversion_service = tokio::spawn(db::task::conversion_service(
 		db.clone(),

@@ -130,7 +130,9 @@ impl DBAuth {
 		{
 			let mut site = site.write().unwrap();
 			let user = site.users.get_mut(user).ok_or(DbError::NotFound)?;
-			if let Some(active) = v.active {user.active = active;}
+			if let Some(active) = v.active {
+				user.active = active;
+			}
 			if let Some(claims) = v.claims {
 				// Try parsing the claims as strings
 				let claims = claims
@@ -157,12 +159,20 @@ impl DBAuth {
 		Ok(())
 	}
 	/// Allows a user to modify certain fields of themselves
-	pub fn mod_user_self(&mut self, site_id: SiteId, user: &str, v: Value) -> Result<(), DbError> {
+	pub fn mod_user_self(&mut self, site_id: Option<SiteId>, user: &str, v: Value) -> Result<(), DbError> {
 		let claims: ClaimPatch = serde_json::from_value(v).map_err(|_| DbError::AuthError)?;
-		let site = self.sites.get(&site_id).ok_or(DbError::AuthError)?;
-		let mut site = site.write().unwrap();
-		let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
-		user.claims.extend(json!(claims).as_object().unwrap().clone());
+		
+		if let Some(site_id) = site_id {
+			let site = self.sites.get(&site_id).ok_or(DbError::AuthError)?;
+			let mut site = site.write().unwrap();
+			let user = site.users.get_mut(user).ok_or(DbError::AuthError)?;
+			user.claims.extend(json!(claims).as_object().unwrap().clone());
+		} else {
+			let admin = self.admins.get_mut(user).ok_or(DbError::AuthError)?;
+			let user = &mut admin.write().unwrap().user;
+			user.claims.extend(json!(claims).as_object().unwrap().clone());
+		}
+		
 		Ok(())
 	}
 }

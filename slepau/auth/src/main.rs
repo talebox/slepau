@@ -137,7 +137,7 @@ async fn main() {
 				.route("/logout", get(crate::ends::logout)), // .layer(security_limit(1, 1)),
 		)
 		.route("/login", post(crate::ends::login))
-		.layer(axum::middleware::from_fn(auth::validate::authenticate))
+		
 		// The request limiter :)
 		.layer(
 			ServiceBuilder::new()
@@ -157,6 +157,7 @@ async fn main() {
 						}),
 				),
 		)
+		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		// Serves static assets
 		.fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))

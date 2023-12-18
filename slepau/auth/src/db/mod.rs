@@ -69,10 +69,17 @@ impl DBAuth {
 			admin.write().unwrap().user.reset_pass(old_pass, pass)
 		}
 	}
-	pub fn user_photo(&self, user: &str) -> Result<String, DbError> {
-		self.sites.iter().find_map(|(_, s)| {
-			Some(s.read().unwrap().users.get(user)?.claims.get("photo")?.as_str()?.to_string())
-		}).ok_or(DbError::NotFound)
+	/**
+	 * Try finding user photo in users from provided site
+	 * if none are found, search admin users instead
+	 */
+	pub fn user_photo(&self, user: &str, site: Option<SiteId>) -> Result<String, DbError> {
+		site
+			.and_then(|s| self.sites.get(&s))
+			.and_then(|s| s.read().unwrap().users.get(user).map(|u| u.claims.clone()))
+			.or_else(|| self.admins.get(user).map(|a| a.read().unwrap().user.claims.clone()))
+			.and_then(|c| Some(c.get("photo")?.as_str()?.to_string()))
+			.ok_or(DbError::NotFound)
 	}
 }
 

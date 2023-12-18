@@ -1,8 +1,6 @@
-
-
 use auth::{validate::KPR, UserClaims};
 use axum::{
-	extract::{Extension, Query, Path},
+	extract::{Extension, Path, Query},
 	headers,
 	http::header,
 	http::HeaderMap,
@@ -11,7 +9,7 @@ use axum::{
 };
 use common::{
 	utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE},
-	vreji::{log_ip_user},
+	vreji::log_ip_user,
 };
 use hyper::StatusCode;
 
@@ -40,7 +38,7 @@ pub struct LoginQuery {
 pub struct AuthBody {
 	user: String,
 	pass: String,
-	old_pass: Option<String>
+	old_pass: Option<String>,
 }
 
 pub async fn login(
@@ -182,7 +180,6 @@ pub async fn register(
 		})
 }
 
-
 pub async fn reset(
 	TypedHeader(host): TypedHeader<headers::Host>,
 	Extension(user_claims): Extension<UserClaims>,
@@ -196,7 +193,7 @@ pub async fn reset(
 	let old_pass = body.old_pass;
 	// Make sure only supers can reset with a None old_pass.
 	if old_pass.is_none() && !user_claims._super {
-		return Err(DbError::AuthError)
+		return Err(DbError::AuthError);
 	}
 
 	let (_, site_id) = db.host_to_site_id(host.hostname());
@@ -225,10 +222,20 @@ pub async fn user(
 }
 
 pub async fn user_photo(
+	TypedHeader(host): TypedHeader<headers::Host>,
 	Path(user): Path<String>,
+	Extension(user_claims): Extension<UserClaims>,
 	Extension(_db): Extension<LockedAtomic<DBAuth>>,
 ) -> impl IntoResponse {
-	_db.read().unwrap().user_photo(&user)
+	let db = _db.read().unwrap();
+
+	let (_, site_id) = db.host_to_site_id(host.hostname());
+	// let site_id = site_id;
+	if site_id.is_none() && !user_claims.admin {
+		return Err(DbError::NotFound);
+	}
+
+	db.user_photo(&user, site_id)
 }
 
 /// Allows users to modify certain whitelisted claims.
@@ -238,8 +245,14 @@ pub async fn user_patch(
 	Extension(user_claims): Extension<UserClaims>,
 	Json(patch): Json<Value>,
 ) -> Result<impl IntoResponse, DbError> {
-	let (_, site_id) = db.read().unwrap().host_to_site_id(host.hostname());
-	let site_id = site_id.ok_or(DbError::NotFound)?;
+	let (_, mut site_id) = db.read().unwrap().host_to_site_id(host.hostname());
+	
+	if site_id.is_none() && !user_claims.admin {
+		return Err(DbError::NotFound);
+	}
+	if user_claims.admin {
+		site_id = None;
+	}
 	db.write().unwrap().mod_user_self(site_id, &user_claims.user, patch)?;
 
 	Ok(())

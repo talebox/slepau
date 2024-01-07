@@ -29,5 +29,5 @@ lazy_static = "1.4.0"
 proquint = { git = "https://github.com/rubend056/proquint-rs" }
 rand = "0.8.5"
 diff = "0.1.13"
-axum-client-ip = "*"
+axum-client-ip = "0.4"
 

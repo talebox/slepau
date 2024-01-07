@@ -15,6 +15,6 @@
 # }
 
 location /web/ {
+	brotli_static on;
 	alias /home/rubend/p/slepau/web/dist/;#WEB_MONO
-	add_header Content-Security-Policy "default-src 'self';";
 }

@@ -1,5 +1,6 @@
 location /login {
 	include sites/slepau.part;
+	brotli_static on;
 	
 	if ($request_method = POST ) {
 		proxy_pass http://127.0.0.1:4001;

@@ -1,4 +1,10 @@
-use std::{collections::VecDeque, net::SocketAddr, sync::RwLock, time::Duration};
+use std::{
+	collections::VecDeque,
+	io::{BufRead, BufReader, BufWriter},
+	net::SocketAddr,
+	sync::RwLock,
+	time::Duration,
+};
 
 use axum::{
 	extract::{
@@ -9,13 +15,17 @@ use axum::{
 	Extension,
 };
 
+use brotli::enc::BrotliEncoderParams;
 use common::{
 	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
-	utils::LockedAtomic, vreji::log_ip_user_id,
+	utils::LockedAtomic,
+	vreji::log_ip_user_id,
 };
+
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use serde_json::{json, Value};
+use std::io::Read;
 use tokio::{sync::watch, time};
 
 use axum_client_ip::InsecureClientIp;
@@ -97,134 +107,150 @@ async fn handle_socket(
 	// let access_list = Mutex::new(HashSet::default());
 
 	let handle_incoming = |m| {
-		if let Message::Text(m) = m {
-			let m = serde_json::from_str::<SocketMessage>(&m);
-			if m.is_err() {
-				return None;
+		let text;
+		if let Message::Binary(m) = m {
+			// Decode the binary stream data
+			let mut r = &m[..];
+			let mut w = BufWriter::new(Vec::new());
+			brotli::BrotliDecompress(&mut r, &mut w).unwrap();
+			let bytes = w.into_inner().unwrap();
+			text = String::from_utf8(bytes).unwrap();
+		} else if let Message::Text(m) = m {
+			// Set the text data
+			text = m;
+		} else {
+			return None;
+		}
+
+		let m = serde_json::from_str::<SocketMessage>(&text);
+		if m.is_err() {
+			return None;
+		}
+		let m = m.unwrap();
+		// let page_query = m.value.as_ref().and_then(|v| serde_json::from_str::<PageQuery>(v.as_str()).ok()).unwrap_or_default();
+		let reply = |mut v: SocketMessage| {
+			v.resource = m.resource.to_owned();
+			v.id = m.id;
+			// Send ok if id exists but message doesn't have any, and remove status if id doesn't exist
+			match v.id {
+				Some(_) => {
+					if v._type.is_none() {
+						v._type = Some(MessageType::Ok)
+					}
+				}
+				None => {
+					if v._type == Some(MessageType::Ok) {
+						v._type = None;
+					};
+				}
 			}
-			let m = m.unwrap();
-			// let page_query = m.value.as_ref().and_then(|v| serde_json::from_str::<PageQuery>(v.as_str()).ok()).unwrap_or_default();
-			let reply = |mut v: SocketMessage| {
-				v.resource = m.resource.to_owned();
-				v.id = m.id;
-				// Send ok if id exists but message doesn't have any, and remove status if id doesn't exist
-				match v.id {
-					Some(_) => {
-						if v._type.is_none() {
-							v._type = Some(MessageType::Ok)
-						}
-					}
-					None => {
-						if v._type == Some(MessageType::Ok) {
-							v._type = None;
-						};
-					}
-				}
-				Some(Message::Text(serde_json::to_string(&v).unwrap()))
-			};
-			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
-			let mut piece = res.pop_front();
+			// Compress and send message
+			let text = serde_json::to_string(&v).unwrap();
+			let mut r = text.as_bytes();
+			let mut w = Vec::new();
+			brotli::BrotliCompress(&mut r, &mut w, &BrotliEncoderParams::default()).unwrap();
+			Some(Message::Binary(w))
+		};
+		let mut res = m.resource.split('/').collect::<VecDeque<_>>();
+		let mut piece = res.pop_front();
 
-			if piece == Some("chunks") {
-				if let Some(id) = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId.")) {
-					piece = res.pop_front();
-
-					if piece == Some("value") {
-						if let Some(value) = m.value {
-							// User wants to change a value
-							let db_chunk: DBChunk = (id, value.as_str()).into();
-							match db.write().unwrap().update_chunk(db_chunk, user) {
-								Ok((users_to_notify, diff, db_chunk)) => {
-									let users = db_chunk.read().unwrap().access_users();
-									let m = ResourceMessage::from((format!("chunks/{}/value/diff", id).as_str(), users.clone(), &diff));
-									{
-										// Update our resource_id_last so we don't send the same data back when sending a signal to tx_resource
-										let mut resource_id_last = resource_id_last.write().unwrap();
-										*resource_id_last = m.id;
-									}
-									tx_resource.send(m).unwrap();
-									tx_resource
-										.send(ResourceMessage::from((
-											format!("chunks/{}", id).as_str(),
-											users,
-											&ChunkView::from((db_chunk, user.as_str(), ViewType::Edit)),
-										)))
-										.unwrap();
-
-									if !users_to_notify.is_empty() {
-										tx_resource
-											.send(ResourceMessage::from(("chunks", users_to_notify)))
-											.unwrap();
-									}
-
-									log_ip_user_id("chunk_edit", ip.0, &user_claims.user, id.inner().into());
-									return reply(MessageType::Ok.into());
-								}
-								Err(err) => {
-									log_ip_user_id("chunk_edit_error", ip.0, &user_claims.user, id.inner().into());
-									return reply((MessageType::Error, &format!("{err:?}")).into())
-								},
-							}
-						} else {
-							// Request for "chunks/<id>/value"
-							if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-								return reply((&ChunkValue::from(v)).into());
-							}
-						}
-					} else if piece.is_none() {
-						if let Some(v) = db.read().unwrap().get_chunk(id, user) {
-							return reply((&ChunkView::from((v, user.as_str(), ViewType::Edit))).into());
-						}
-					}
-
-					return reply((MessageType::Error, &"NotFound".to_string()).into());
-				} else {
-					// Request for "chunks"
-					// return reply((&get_notes()).into());
-				}
-			} else if piece == Some("views") {
+		if piece == Some("chunks") {
+			if let Some(id) = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId.")) {
 				piece = res.pop_front();
-				let root_id = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId."));
-				if piece == Some("notes") {
-					return reply((&get_notes()).into());
-				} else if piece == Some("well") {
-					return reply((&get_subtree(root_id, ViewType::Well)).into());
-				} else if piece == Some("graph") {
-					return reply((&get_subtree(root_id, ViewType::Graph)).into());
-				}
-				error!("View needs name");
-				return None;
-			} else if piece == Some("user") {
-				let mut user = json!(&user_claims);
-				if let Value::Object(mut user_o) = user {
-					let db = db.write().unwrap();
-					let chunks = db.get_chunks(&user_claims.user);
-					user_o.insert("notes_visible".into(), chunks.len().into());
-					user_o.insert(
-						"notes_owned".into(),
-						chunks
-							.iter()
-							.filter(|chunk| chunk.read().unwrap().chunk().owner == user_claims.user)
-							.count()
-							.into(),
-					);
-					user_o.insert(
-						"notes_owned_public".into(),
-						chunks
-							.iter()
-							.filter(|chunk| {
-								let chunk = chunk.read().unwrap();
-								chunk.chunk().owner == user_claims.user && chunk.has_access(&"public".into())
-							})
-							.count()
-							.into(),
-					);
-					user = json!(user_o);
-				}
-				return reply((&user).into());
-			}
 
-			error!("Message {m:?} unknown");
+				if piece == Some("value") {
+					if let Some(value) = m.value {
+						// User wants to change a value
+						let db_chunk: DBChunk = (id, value.as_str()).into();
+						match db.write().unwrap().update_chunk(db_chunk, user) {
+							Ok((users_to_notify, diff, db_chunk)) => {
+								let users = db_chunk.read().unwrap().access_users();
+								let m = ResourceMessage::from((format!("chunks/{}/value/diff", id).as_str(), users.clone(), &diff));
+								{
+									// Update our resource_id_last so we don't send the same data back when sending a signal to tx_resource
+									let mut resource_id_last = resource_id_last.write().unwrap();
+									*resource_id_last = m.id;
+								}
+								tx_resource.send(m).unwrap();
+								tx_resource
+									.send(ResourceMessage::from((
+										format!("chunks/{}", id).as_str(),
+										users,
+										&ChunkView::from((db_chunk, user.as_str(), ViewType::Edit)),
+									)))
+									.unwrap();
+
+								if !users_to_notify.is_empty() {
+									tx_resource
+										.send(ResourceMessage::from(("chunks", users_to_notify)))
+										.unwrap();
+								}
+
+								log_ip_user_id("chunk_edit", ip.0, &user_claims.user, id.inner().into());
+								return reply(MessageType::Ok.into());
+							}
+							Err(err) => {
+								log_ip_user_id("chunk_edit_error", ip.0, &user_claims.user, id.inner().into());
+								return reply((MessageType::Error, &format!("{err:?}")).into());
+							}
+						}
+					} else {
+						// Request for "chunks/<id>/value"
+						if let Some(v) = db.read().unwrap().get_chunk(id, user) {
+							return reply((&ChunkValue::from(v)).into());
+						}
+					}
+				} else if piece.is_none() {
+					if let Some(v) = db.read().unwrap().get_chunk(id, user) {
+						return reply((&ChunkView::from((v, user.as_str(), ViewType::Edit))).into());
+					}
+				}
+
+				return reply((MessageType::Error, &"NotFound".to_string()).into());
+			} else {
+				// Request for "chunks"
+				// return reply((&get_notes()).into());
+			}
+		} else if piece == Some("views") {
+			piece = res.pop_front();
+			let root_id = res.pop_front().map(|id| ChunkId::from_quint(id).expect("a ChunkId."));
+			if piece == Some("notes") {
+				return reply((&get_notes()).into());
+			} else if piece == Some("well") {
+				return reply((&get_subtree(root_id, ViewType::Well)).into());
+			} else if piece == Some("graph") {
+				return reply((&get_subtree(root_id, ViewType::Graph)).into());
+			}
+			error!("View needs name");
+			return None;
+		} else if piece == Some("user") {
+			let mut user = json!(&user_claims);
+			if let Value::Object(mut user_o) = user {
+				let db = db.write().unwrap();
+				let chunks = db.get_chunks(&user_claims.user);
+				user_o.insert("notes_visible".into(), chunks.len().into());
+				user_o.insert(
+					"notes_owned".into(),
+					chunks
+						.iter()
+						.filter(|chunk| chunk.read().unwrap().chunk().owner == user_claims.user)
+						.count()
+						.into(),
+				);
+				user_o.insert(
+					"notes_owned_public".into(),
+					chunks
+						.iter()
+						.filter(|chunk| {
+							let chunk = chunk.read().unwrap();
+							chunk.chunk().owner == user_claims.user && chunk.has_access(&"public".into())
+						})
+						.count()
+						.into(),
+				);
+				user = json!(user_o);
+			}
+			return reply((&user).into());
 		}
 
 		None

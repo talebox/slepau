@@ -26,7 +26,6 @@ pub struct ChunkView {
 	pub created: Option<u64>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub modified: Option<u64>,
-
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub props: Option<Value>,
 	#[serde(skip_serializing_if = "Option::is_none")]

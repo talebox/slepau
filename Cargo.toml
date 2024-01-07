@@ -9,25 +9,25 @@ license = "MIT"
 
 [workspace.dependencies]
 common = { path = "common" }
-axum = { version = "0.6.6", features = ["ws", "macros", "headers"] }
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 axum-macros = "0.3.4"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 log = { version = "0.4" }
 env_logger = "0.10"
-tower-http = { version = "0.4.0", features = ["full"] }
+tower-http = { version = "0.5", features = ["full"] }
 tower = { version = "0.4.13", features = [
 	"limit",
 	"buffer",
 	'timeout',
 	'load-shed',
 ] }
-tower_governor = "0.0.4"
-hyper = { version = "0.14.20", features = ["full"] }
+tower_governor = "0.2"
+hyper = { version = "1.1", features = ["full"] }
 lazy_static = "1.4.0"
 proquint = { git = "https://github.com/rubend056/proquint-rs" }
 rand = "0.8.5"
 diff = "0.1.13"
-axum-client-ip = "*"
-
+axum-client-ip = "0.5"

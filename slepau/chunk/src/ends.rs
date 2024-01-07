@@ -2,8 +2,9 @@ use auth::UserClaims;
 use axum::{
 	extract::{Extension, Path},
 	response::IntoResponse,
-	Json, TypedHeader,
+	Json,
 };
+use axum_extra::TypedHeader;
 use common::{
 	socket::{ResourceMessage, ResourceSender},
 	utils::{DbError, LockedAtomic},
@@ -148,7 +149,9 @@ pub struct ChunkIn {
 	id: Option<ChunkId>,
 	value: String,
 }
+use axum::debug_handler;
 
+#[debug_handler]
 pub async fn chunks_put(
 	Extension(db): Extension<LockedAtomic<DB>>,
 	Extension(user_claims): Extension<UserClaims>,

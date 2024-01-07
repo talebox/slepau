@@ -23,7 +23,7 @@ tower-http.workspace = true
 tower_governor.workspace = true
 lazy_static.workspace = true
 axum-client-ip.workspace = true
-infer = "0.12.0"
+infer = "0.15.0"
 tokio-util = {version = "0.7.4", features = ["io"]}
 image = {version= "0.24.7", features = ["avif-encoder", "webp-encoder"]}
 num_cpus = "1.15.0"

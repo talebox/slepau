@@ -1,12 +1,12 @@
 use auth::{validate::KPR, UserClaims};
 use axum::{
 	extract::{Extension, Path, Query},
-	headers,
 	http::header,
 	http::HeaderMap,
 	response::IntoResponse,
-	Json, TypedHeader,
+	Json,
 };
+use axum_extra::TypedHeader;
 use common::{
 	utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE},
 	vreji::log_ip_user,

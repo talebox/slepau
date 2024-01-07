@@ -1,5 +1,5 @@
 use axum::{
-	http::Request,
+	extract::Request,
 	middleware::Next,
 	response::{IntoResponse, Response},
 };
@@ -10,7 +10,7 @@ use pasetors::token::TrustedToken;
 use crate::UserClaims;
 
 /// Checks user_claim to see if user is super admin, else throw AuthError
-pub async fn only_supers<B>(req: Request<B>, next: Next<B>) -> Result<Response, impl IntoResponse> {
+pub async fn only_supers(req: Request, next: Next) -> Result<Response, impl IntoResponse> {
 	if !req
 		.extensions()
 		.get::<UserClaims>()
@@ -24,7 +24,7 @@ pub async fn only_supers<B>(req: Request<B>, next: Next<B>) -> Result<Response, 
 }
 
 /// Checks user_claim to see if user is admin, else throw AuthError
-pub async fn only_admins<B>(req: Request<B>, next: Next<B>) -> Result<Response, impl IntoResponse> {
+pub async fn only_admins(req: Request, next: Next) -> Result<Response, impl IntoResponse> {
 	if !req
 		.extensions()
 		.get::<UserClaims>()
@@ -38,7 +38,7 @@ pub async fn only_admins<B>(req: Request<B>, next: Next<B>) -> Result<Response, 
 }
 
 /// Checks if a user is logged in, else throw AuthError
-pub async fn auth_required<B>(req: Request<B>, next: Next<B>) -> Result<Response, impl IntoResponse> {
+pub async fn auth_required(req: Request, next: Next) -> Result<Response, impl IntoResponse> {
 	if req.extensions().get::<TrustedToken>().is_none() {
 		Err(DbError::AuthError)
 	} else {
@@ -47,7 +47,7 @@ pub async fn auth_required<B>(req: Request<B>, next: Next<B>) -> Result<Response
 }
 
 /// Only allow public (non-logged) users to use GET requests, else throw AuthError
-pub async fn public_only_get<B>(req: Request<B>, next: Next<B>) -> Result<Response, impl IntoResponse> {
+pub async fn public_only_get(req: Request, next: Next) -> Result<Response, impl IntoResponse> {
 	if req.extensions().get::<TrustedToken>().is_none() && *req.method() != Method::GET {
 		Err(DbError::AuthError)
 	} else {

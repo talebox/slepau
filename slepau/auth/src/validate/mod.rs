@@ -1,10 +1,10 @@
 use axum::{
-	extract::TypedHeader,
-	headers::{Cookie, Host},
-	http::Request,
+	extract::{Request},
+	
 	middleware::Next,
 	response::{Response}, RequestPartsExt,
 };
+use axum_extra::{typed_header::TypedHeader, headers::{Cookie, Host}};
 use common::utils::{hostname_normalize, K_PRIVATE, K_PUBLIC, K_SECRET};
 use core::convert::TryFrom;
 use hyper::{StatusCode};
@@ -78,7 +78,7 @@ fn public_key() -> AsymmetricKeyPair<V4> {
 }
 
 /// Function used to authenticate.
-pub async fn authenticate<B>(req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
+pub async fn authenticate(req: Request, next: Next) -> Result<Response, StatusCode> {
 	let mut user_claims = UserClaims {
 		user: "public".into(),
 		..Default::default()

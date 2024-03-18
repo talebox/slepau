@@ -20,7 +20,7 @@ export def organize_out [bin_dir = "bin"] {
 	enter out
 		rm -rf slepau
 		
-		['auth','vreji', 'chunk', 'media', 'gen_key', 'talebox'] | each {|a|
+		['auth','vreji', 'chunk', 'samn', 'media', 'gen_key', 'talebox'] | each {|a|
 			echo $"Doing ($a)."
 			# Make slepau dir
 			mkdir $"slepau/($a)"
@@ -31,7 +31,9 @@ export def organize_out [bin_dir = "bin"] {
 				# Copy bin
 				cp $"($bin_dir)/($a)" $"slepau/($a)/"
 				# Copy dockerfile
-				cp $"../container/($a).dockerfile" $"slepau/($a)/dockerfile"
+				mut dockerfile = 'x86.dockerfile'
+				if $bin_dir == 'bin_armv7hf' {$dockerfile = 'armv7hf.dockerfile'}
+				open $"../container/($dockerfile)" | str replace -a 'BIN_NAME' $a | save $"slepau/($a)/dockerfile"
 			}
 			# Don't for ...
 			# if $a not-in ["gen_key"]  {
@@ -81,9 +83,9 @@ export def build_server [bin_dir:string = "bin", options = []] {
 	
 	print $"Building binaries to out/($bin_dir)."
 	# Build server
-	['auth','vreji', 'chunk', 'media', 'gen_key'] | each {|a|
+	['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
 		if $a not-in ["talebox"]  {
-			cargo build -Z unstable-options --out-dir $"out/($bin_dir)" $options --release --bin $a
+			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" $options --release --bin $a
 		}
 	};
 	print "Binaries built."
@@ -193,9 +195,7 @@ export def build_all [] {
 	build_web
 	
 	
-	build_server bin_linux_x86_64
-	organize_out bin_linux_x86_64
-	make_standalone linux_x86_64
+	
 	
 	# build_server bin_arm64 ["--target", "aarch64-unknown-linux-gnu"]
 	# organize_out bin_arm64
@@ -205,16 +205,18 @@ export def build_all [] {
 	# organize_out bin_armv7
 	# make_standalone armv7
 	
-	# build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf"]
-	# organize_out bin_armv7hf
-	# make_standalone armv7hf
+	build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf", "-Zbuild-std"]
+	organize_out bin_armv7hf
+	make_standalone armv7hf
 	
 	# build_server_musl
 	# organize_out bin_musl_x86_64
 	# make_standalone musl_x86_64
 	
-	### Make slepau directory have all x86_64 stuff again.
+	
+	build_server bin_linux_x86_64
 	organize_out bin_linux_x86_64
+	make_standalone linux_x86_64
 	
 	print "Build of everything finished. You can safely deploy now."
 }

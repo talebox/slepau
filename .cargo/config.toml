@@ -1,5 +1,5 @@
 [profile.dev.overrides."*"]
 opt-level = 2
 
-[build]
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+[target.armv7-unknown-linux-gnueabihf]
+linker = "/usr/bin/arm-none-linux-gnueabihf-gcc"

@@ -187,8 +187,9 @@ pub async fn conversion_service(
 			}
 			Some(task) = task_rx.recv() => {
 				db.write().unwrap().queue(task);
+				continue;
 			}
-			_ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}
+			_ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
 		}
 	}
 

@@ -1,14 +1,18 @@
+use std::ops::Bound::{Excluded, Included, Unbounded};
+
 use auth::UserClaims;
 use axum::{
-	body::{StreamBody},
+	body::StreamBody,
 	extract::{BodyStream, Path, Query},
+	headers,
 	http::header,
 	response::{IntoResponse, Response},
-	Extension, Json,
+	Extension, Json, TypedHeader,
 };
 use common::{
 	socket::ResourceSender,
-	utils::{DbError, LockedAtomic, CACHE_FOLDER}, vreji::log_ip_user_id,
+	utils::{DbError, LockedAtomic, CACHE_FOLDER},
+	vreji::log_ip_user_id,
 };
 use futures::{future::join_all, join};
 use hyper::StatusCode;
@@ -17,7 +21,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio_util::io::ReaderStream;
+use tokio_util::{bytes::Bytes, io::ReaderStream};
 
 use media::{MatcherType, MEDIA_FOLDER};
 
@@ -43,6 +47,7 @@ pub enum Any {
 
 pub async fn media_get(
 	Path(id): Path<MediaId>,
+	range: Option<TypedHeader<headers::Range>>,
 	ip: ClientIp,
 	Query(any): Query<Any>,
 	Extension(db): Extension<LockedAtomic<DB>>,
@@ -63,7 +68,7 @@ pub async fn media_get(
 		// Return original path
 		path = VersionReference::to_path_in(id);
 	} else if version_empty {
-		// If default_version path exists, return that path, 
+		// If default_version path exists, return that path,
 		// or schedule a default_version task and return original path
 		path = db.write().unwrap().default_version_path(id);
 	} else {
@@ -95,15 +100,9 @@ pub async fn media_get(
 	};
 
 	let mut buf = [0u8; 64];
-	if let Ok(_size) = file.read(&mut buf).await {
+	if let Ok(_buf_size) = file.read(&mut buf).await {
 		file.rewind().await.unwrap(); // Reset the counter to start of file
 		let _type = infer::get(&buf);
-
-		// // convert the `AsyncRead` into a `Stream`
-		let stream = ReaderStream::new(file);
-
-		// // convert the `Stream` into an `axum::body::HttpBody`
-		let body = StreamBody::new(stream);
 
 		let headers = [
 			(
@@ -115,7 +114,72 @@ pub async fn media_get(
 			),
 			(header::CACHE_CONTROL, "max-age=31536000"), // Makes browser cache for a year
 		];
-		Ok((headers, body))
+
+		let full_response = |file| {
+			// // convert the `AsyncRead` into a `Stream`
+			let stream = ReaderStream::new(file);
+			// // convert the `Stream` into an `axum::body::HttpBody`
+			let body = StreamBody::new(stream);
+
+			Ok((StatusCode::OK, headers.clone(), body).into_response())
+		};
+
+		if let Some(TypedHeader(range)) = range {
+			let file_size = file.metadata().await.unwrap().len();
+			let byte_bounds = range
+				.iter()
+				.map(|(a, b)| {
+					if let Included(b) = b {
+						if let Unbounded = a {
+							return (file_size - b, file_size - 1);
+						}
+					}
+					(
+						match a {
+							Unbounded => 0,
+							Included(v) => v,
+							Excluded(v) => v + 1,
+						},
+						match b {
+							Unbounded => file_size - 1,
+							Included(v) => v,
+							Excluded(v) => v - 1,
+						},
+					)
+				})
+				.collect::<Vec<_>>();
+			// If bounds is same as whole file, return whole file
+			if byte_bounds.is_empty() || (byte_bounds[0].0 == 0 && byte_bounds[0].1 == file_size - 1) {
+				return full_response(file)
+			}
+			for (i, (x1, x2)) in byte_bounds.iter().enumerate() {
+				if i == byte_bounds.len() - 1 {
+					break;
+				}
+				for (y1, y2) in byte_bounds[i + 1..].iter() {
+					if x1 <= y2 || y1 <= x2 {
+						return Ok(StatusCode::RANGE_NOT_SATISFIABLE.into_response());
+					}
+				}
+			}
+
+			let mut buffer = vec![0; file_size as usize];
+			file.read_exact(&mut buffer).await.expect("buffer overflow");
+			let mut body = Vec::<u8>::with_capacity(file_size as usize);
+			let mut i: u64 = 0;
+			for byte in buffer {
+				if byte_bounds.iter().any(|(a, b)| a <= &i && &i <= b) {
+					body.push(byte)
+				}
+				i += 1;
+			}
+
+			Ok((StatusCode::PARTIAL_CONTENT, headers, Bytes::from(body)).into_response())
+		} else {
+			full_response(file)
+		}
+
+		
 	} else {
 		Err((StatusCode::NO_CONTENT, "Error reading file?".to_string()).into_response())
 	}
@@ -258,7 +322,9 @@ pub async fn media_post(
 	let media = media.read().unwrap().clone();
 
 	// Notify
-	tx_resource.send(("media", [user_claims.user.to_owned()].into()).into()).ok();
+	tx_resource
+		.send(("media", [user_claims.user.to_owned()].into()).into())
+		.ok();
 
 	log_ip_user_id("media_post", ip.0, &user_claims.user, id.inner());
 

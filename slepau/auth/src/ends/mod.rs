@@ -123,8 +123,7 @@ pub async fn login(
 			[(
 				header::SET_COOKIE,
 				format!(
-					"auth={pub_token}; Domain={}; Path=/; SameSite=Strict; Max-Age={max_age}; HttpOnly; {}",
-					&host,
+					"auth={pub_token}; Domain={host}; Path=/; SameSite=Lax; Max-Age={max_age}; HttpOnly; {}",
 					if *SECURE { " Secure;" } else { "" }
 				),
 			)]

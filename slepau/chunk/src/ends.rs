@@ -14,6 +14,7 @@ use headers::ContentType;
 use axum_client_ip::InsecureClientIp;
 type ClientIp = InsecureClientIp;
 
+use hyper::StatusCode;
 use serde::Deserialize;
 use std::collections::HashSet;
 
@@ -63,6 +64,20 @@ pub async fn chunks_get_id(
 		Err(DbError::NotFound)
 	}
 }
+fn make_page(title: &str, body: &str, edit: Option<&str>) -> String {
+	let page = include_str!(env!("CHUNK_PAGE_PATH"));
+	let mut page = page.replace("PAGE_TITLE", &title);
+	page = page.replace("PAGE_BODY", &body);
+	if let Some(edit) = edit {
+		page = page.replace(
+			"class=\"edit-button\"",
+			format!("class=\"edit-button visible\" href=\"/app/edit/{edit}\"",).as_str(),
+		)
+	}
+	page
+}
+/// Returns an html page
+/// Supers will be able to see any page they have the id to
 pub async fn page_get_id(
 	Path(id): Path<ChunkId>,
 	Extension(db): Extension<LockedAtomic<DB>>,
@@ -83,19 +98,35 @@ pub async fn page_get_id(
 			};
 			html = value_to_html(&lock.chunk().value);
 		}
-		let page = include_str!(env!("CHUNK_PAGE_PATH"));
-		let mut page = page.replace("PAGE_TITLE", &title);
-		page = page.replace("PAGE_BODY", &html);
-		if user_claims.user != "public" {
-			page = page.replace(
-				"class=\"edit-button\"",
-				format!("class=\"edit-button visible\" href=\"/app/edit/{id}\"",).as_str(),
-			)
-		}
+		let id_str = id.to_quint();
+		let page = make_page(
+			&title,
+			&html,
+			if user_claims.user != "public" {
+				Some(&id_str)
+			} else {
+				None
+			},
+		);
 		log_ip_user_id("chunk_get_page", ip.0, &user_claims.user, id.inner().into());
-		Ok((TypedHeader(ContentType::html()), page))
+		Ok((StatusCode::OK, TypedHeader(ContentType::html()), page))
 	} else {
-		Err(DbError::NotFound)
+		let page = make_page(
+			"Not found",
+			&format!(
+				r#"
+			<div style="text-align:center;height:90vh;display:flex;align-content:center;justify-content:center;flex-flow:column;">
+
+			<p><code>{}</code> doesn't have access to <code>{id}</code></p>
+			<p>Maybe <a href="/login?path=/page/{id}"><button>Login</button></a>?</p>
+			
+			<div>
+			"#,
+				user_claims.user
+			),
+			None,
+		);
+		Ok((StatusCode::NOT_FOUND, TypedHeader(ContentType::html()), page))
 	}
 }
 

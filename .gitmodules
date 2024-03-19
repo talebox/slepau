@@ -1,12 +1,16 @@
 [submodule "web"]
 	path = web
 	url = git@github.com:talebox/slepau_web.git
+	branch = master
 [submodule "embedded/cc1101"]
 	path = embedded/cc1101
 	url = git@github.com:rubend056/cc1101.git
+	branch = main
 [submodule "embedded/embedded-nrf24l01"]
 	path = embedded/embedded-nrf24l01
 	url = git@github.com:rubend056/embedded-nrf24l01.git
+	branch = rework
 [submodule "embedded/samn-common"]
 	path = embedded/samn-common
 	url = git@github.com:rubend056/samn-common.git
+	branch = main

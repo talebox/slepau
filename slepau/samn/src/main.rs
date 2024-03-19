@@ -1,7 +1,8 @@
+#![feature(linked_list_remove)]
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
-	routing::get,
+	routing::{get, post},
 	Extension, Router,
 };
 
@@ -22,7 +23,7 @@ use std::{
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
-use tokio::{join, sync::watch};
+use tokio::{join, sync::{mpsc, watch}};
 use tower_http::timeout::TimeoutLayer;
 
 #[tokio::main]
@@ -53,19 +54,23 @@ async fn main() {
 	}
 
 	// DB Init
-	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+	let (shutdown_tx, shutdown_rx) = watch::channel(());
+	let (radio_tx, radio_rx) = mpsc::channel(10);
 
 	// Build router
 	let app = Router::new()
 		.route("/", get(ends::log_get))
-		.layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
+		.route("/command", post(ends::command))
+		.route("/command/wait", post(ends::command_response))
+		// .layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()
 				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
 				.concurrency_limit(100)
-				.layer(Extension(shutdown_rx.clone())), // .layer(Extension(resource_tx.clone())),
+				.layer(Extension(shutdown_rx.clone()))
+				.layer(Extension(radio_tx.clone())),
 		);
 
 	info!("Listening on '{}'.", SOCKET.to_string());
@@ -84,7 +89,7 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
-	let radio = tokio::spawn(radio::radio_service(shutdown_rx.clone()));
+	let radio = tokio::spawn(radio::radio_service(shutdown_rx.clone(), radio_rx));
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 

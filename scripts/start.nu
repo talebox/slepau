@@ -54,10 +54,10 @@ export def build_media [] {
 	
 	cargo build --bin media
 }
-export def run_gen_key [] {
+export def run_setup [] {
 	load_env_dev
 	
-	cargo run --bin gen_key
+	cargo run --bin setup
 }
 export def run_nginx [] {
 	$env.WEB_DIR = $"(pwd)/web/dist"

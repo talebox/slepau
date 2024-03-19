@@ -36,7 +36,7 @@ export def organize_out [bin_dir = "bin"] {
 				open $"../container/($dockerfile)" | str replace -a 'BIN_NAME' $a | save $"slepau/($a)/dockerfile"
 			}
 			# Don't for ...
-			# if $a not-in ["gen_key"]  {
+			# if $a not-in ["setup"]  {
 			# 	echo $"Web for ($a)."
 			# 	mkdir $"slepau/($a)/web"
 			# 	# Copy web
@@ -44,7 +44,7 @@ export def organize_out [bin_dir = "bin"] {
 			# }
 			
 			# Copy login project
-			# if $a not-in ["talebox", "gen_key"]  {
+			# if $a not-in ["talebox", "setup"]  {
 			# 	cp -r web/login $"slepau/($a)/web/"
 			# }
 		};
@@ -52,11 +52,13 @@ export def organize_out [bin_dir = "bin"] {
 		cp -r ../config/nginx ./
 		enter nginx
 		
-			/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
-			
-			/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
-			
-			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
+			# Don't enable https, or change logs for arm build
+			if $bin_dir != bin_armv7hf {
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
+
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
+			}
 			
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
 			
@@ -145,7 +147,7 @@ export def make_standalone [dir = "linux_x86_64"] {
 		mkdir $"standalone_($dir)"
 		enter $"standalone_($dir)"
 			mkdir keys
-			cp $"../bin_($dir)/gen_key" ./
+			cp $"../bin_($dir)/setup" ./
 			
 			["auth",'vreji',"chunk","media"] | each {|a|
 				cp -r $"../slepau/($a)" ./
@@ -247,12 +249,12 @@ export def build_server_musl [bin_dir = "bin_musl_x86_64"] {
 # 	rm -rf $out
 # 	mkdir $out
 	
-# 	cp out/bin/gen_key $"($out)/"
+# 	cp out/bin/setup $"($out)/"
 # 	cp standalone_readme.md $"($out)/readme.md"
 	
 # 	enter $out
 # 		mkdir keys
-# 		./gen_key
+# 		./setup
 # 	dexit
 	
 # 	# Copy files
@@ -281,7 +283,7 @@ export def build_server_musl [bin_dir = "bin_musl_x86_64"] {
 	
 # 	cargo build --release --target x86_64-pc-windows-gnu
 	
-# 	cp target/x86_64-pc-windows-gnu/release/gen_key.exe $"($out)/"
+# 	cp target/x86_64-pc-windows-gnu/release/setup.exe $"($out)/"
 # 	cp target/x86_64-pc-windows-gnu/release/auth.exe $"($out)/auth/"
 	
 # 	tar -cavf $"($out).zip" $out

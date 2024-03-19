@@ -4,8 +4,8 @@ use build.nu *
 use start.nu test
 
 # Creates a volume for keys at docker
-export def deploy_keys [] {
-	print $"Deploying docker keys."
+export def deploy_docker_setup [] {
+	print $"Deploying docker setup."
 	let context = (docker context show)
 	if $context not-in ['rpi', 'anty'] {
 		print "Context isn't rpi or anty, make sure it's right"
@@ -13,8 +13,10 @@ export def deploy_keys [] {
 	}
 	
 	docker volume create -d local talebox_keys
-	docker build -t keys ./out/slepau/gen_key
-	docker run -v talebox_keys:/server/keys --name keys_s keys
+	docker volume create -d local vreji_db
+	docker build -t gen_key ./out/slepau/gen_key
+	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db --name gen_key_s gen_key
+	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db gen_key touch vreji_db/main
 	
 	print "Done."
 }
@@ -50,7 +52,7 @@ export def deploy_docker [name] {
 		"-v", "vreji_db:/server/vreji_db", # Vreji (Logging)
 		"-v", $"($name)_data:/server/data", # Data
 		"-v", $"($name)_backup:/server/backup", # Backup
-		"-e", $"URL=https://($name).anty.dev", # URL variable
+		"-e", $"URL=(if $context == 'rpi' {'http'} else {'https'})://($name).anty.dev", # URL variable
 		"--env-file=container/env.config", # Env config
 	];
 

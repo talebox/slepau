@@ -27,3 +27,5 @@ sonnerie = "0.8.4"
 chrono = "0.4.28"
 samn-common = {path = "../../embedded/samn-common"}
 linux-embedded-hal = { version = "0.4.0", features = ["spi"] }
+postcard = {version = "1.0.8", features = ["use-std"]}
+nb = "1.1.0"

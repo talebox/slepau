@@ -18,7 +18,7 @@ pub struct CommandMessage {
 
 pub type RadioSyncType = (CommandMessage,Option<oneshot::Sender<Response>>);
 
-// THIS IS PURELY A TEST
+// not a test anymore, it works :)
 pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: mpsc::Receiver<RadioSyncType>) {
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.0").unwrap();
 	spi
@@ -59,14 +59,16 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 					if let Some(callback) = callback {
 						response_callbacks.push_back((c_id, callback));
 					}
+					let packet = postcard::to_vec::<_, 32>(&MessageData::Command {
+						id: c_id,
+						command: message.command,
+					})
+					.unwrap();
+					println!("Sending {} bytes", packet.len());
 					// Send command
 					nrf24.ce_disable();
 					nrf24.send(
-						&postcard::to_vec::<_, 32>(&MessageData::Command {
-							id: c_id,
-							command: message.command,
-						})
-						.unwrap(),
+						&packet,
 					).unwrap();
 					nrf24.rx().unwrap();
 				}
@@ -105,4 +107,5 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 		}
 	}
 	nrf24.ce_disable();
+	println!("nrf24 shut down.");
 }

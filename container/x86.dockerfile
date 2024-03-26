@@ -1,7 +1,7 @@
 from archlinux
 
 run pacman-key --init
-run pacman-key --populate archlinux
+run pacman -Sy --noconfirm archlinux-keyring
 run pacman -Syu --noconfirm
 
 run pacman -Sy --noconfirm --needed openssl ffmpeg

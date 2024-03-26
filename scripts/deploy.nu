@@ -3,81 +3,12 @@
 use build.nu *
 use start.nu test
 
-# Creates a volume for keys at docker
-export def deploy_docker_setup [] {
-	print $"Deploying docker setup."
-	let context = (docker context show)
-	if $context not-in ['rpi', 'anty'] {
-		print "Context isn't rpi or anty, make sure it's right"
-		return;
-	}
+export def deploy_sites [host = 'anty.dev'] {
+	print $"Deploying static sites to ($host)."
+	rsync -av $"out/web/*" $"($host):/srv/http/tale_web/"
 	
-	docker volume create -d local talebox_keys
-	docker volume create -d local vreji_db
-	docker build -t gen_key ./out/slepau/gen_key
-	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db --name gen_key_s gen_key
-	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db gen_key touch vreji_db/main
-	
-	print "Done."
-}
-
-export def deploy_docker [name] {
-	let context = (docker context show)
-	if $context not-in ['rpi', 'anty'] {
-		print "Context isn't rpi or anty, make sure it's right"
-		return;
-	}
-	let ports = {
-		"auth": 4501,
-		"chunk": 4502,
-		"media": 4503,
-		"vreji": 4504,
-		"samn": 4505,
-	}
-	if $name not-in $ports {
-		print $"'($name)' doesn't exist in deploy_docker.";
-		return;
-	}
-	print $"Deploying docker container '($name)', with '($context)' context."
-	docker build -t $name $"./out/slepau/($name)" 
-	docker volume create -d local $"($name)_data"
-	docker volume create -d local $"($name)_backup"
-	do -i {docker stop $"($name)_s"}
-	do -i {docker rm $"($name)_s"}
-	mut args = [
-		"-d", # Deamonize
-		"--restart", "unless-stopped",
-		"-p", $"127.0.0.1:($ports | get $name):4000", # Bind outside localhost:port to container's 4000 port
-		"-v", "talebox_keys:/server/keys", # Keys
-		"-v", "vreji_db:/server/vreji_db", # Vreji (Logging)
-		"-v", $"($name)_data:/server/data", # Data
-		"-v", $"($name)_backup:/server/backup", # Backup
-		"-e", $"URL=(if $context == 'rpi' {'http'} else {'https'})://($name).anty.dev", # URL variable
-		"--env-file=container/env.config", # Env config
-	];
-
-	# If we're deploying samn, make sure it has access to these devices
-	if $name == "samn" {$args = ($args | append "--device=/dev/spidev0.0" | append "--device=/dev/gpiochip0")}
-
-	docker run $args --name $"($name)_s" $name
-	
-	print "Done."
-	
-}
-
-export def deploy_static [name, host = 'anty.dev'] {
-	
-	print $"Deploying static site '($name)'."
-	if $name == "tale_web" {
-		rsync -av $"out/web/*" $"($host):/srv/http/($name)/"
-	} else {
-		rsync -av $"out/web/($name)/*" $"($host):/srv/http/($name)/"
-		if $name in ["talebox"] {
-			rsync -av out/*.tar.xz $"($host):/srv/http/($name)/"
-		}
-		print "Done."
-	}
-	
+	print $"Deploying standalone compressed builds to ($host)."
+	rsync -av out/*.tar.xz $"($host):/srv/http/tale_web/talebox/"
 }
 
 export def deploy_nginx [host = 'anty.dev'] {
@@ -96,10 +27,7 @@ export def deploy_all [] {
 	deploy_docker media
 	deploy_docker vreji
 	
-	deploy_static tale_web
-	deploy_static talebox
-	deploy_static gibos
-	
+	deploy_sites
 	deploy_nginx
 	
 	print "Deploy finished!"

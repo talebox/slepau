@@ -62,8 +62,8 @@ export def organize_out [bin_dir = "bin"] {
 			
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
 			
-			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#TALEBOX$root /srv/http/talebox;#TALEBOX$g'
-			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#GIBOS$root /srv/http/gibos;#GIBOS$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#TALEBOX$root /srv/http/tale_web/talebox;#TALEBOX$g'
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#GIBOS$root /srv/http/tale_web/gibos;#GIBOS$g'
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$root .*;#WEB_MONO$root /srv/http/tale_web;#WEB_MONO$g'
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's$alias .*;#WEB_MONO$alias /srv/http/tale_web/;#WEB_MONO$g'
 		
@@ -87,7 +87,7 @@ export def build_server [bin_dir:string = "bin", options = []] {
 	# Build server
 	['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
 		if $a not-in ["talebox"]  {
-			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" $options --release --bin $a
+			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $a
 		}
 	};
 	print "Binaries built."
@@ -147,7 +147,7 @@ export def make_standalone [dir = "linux_x86_64"] {
 		mkdir $"standalone_($dir)"
 		enter $"standalone_($dir)"
 			mkdir keys
-			cp $"../bin_($dir)/setup" ./
+			cp $"../bin_($dir)/gen_key" ./
 			
 			["auth",'vreji',"chunk","media"] | each {|a|
 				cp -r $"../slepau/($a)" ./

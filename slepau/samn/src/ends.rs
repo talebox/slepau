@@ -15,6 +15,7 @@ pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbErr
 	Ok(Json(records_json))
 }
 
+/// Queues a command to a node and doesn't wait for it
 pub async fn command(
 	Extension(radio_tx): Extension<mpsc::Sender<RadioSyncType>>,
 	Json(command): Json<CommandMessage>,
@@ -23,6 +24,7 @@ pub async fn command(
 	Ok(())
 }
 
+/// Queues a command to a node and waits for it
 pub async fn command_response(
 	Extension(radio_tx): Extension<mpsc::Sender<RadioSyncType>>,
 	Json(command): Json<CommandMessage>,

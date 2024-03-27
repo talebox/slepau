@@ -20,6 +20,11 @@ pub type RadioSyncType = (CommandMessage,Option<oneshot::Sender<Response>>);
 
 // not a test anymore, it works :)
 pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: mpsc::Receiver<RadioSyncType>) {
+	if std::env::var("RADIO").is_err() {
+		println!("Radio is off, if you want it enabled, set RADIO environment.");
+		return;
+	}
+
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.0").unwrap();
 	spi
 		.0

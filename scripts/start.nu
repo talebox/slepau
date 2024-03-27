@@ -48,6 +48,12 @@ export def run_vreji [] {
 	
 	cargo run --bin vreji
 }
+export def run_samn [] {
+	load_env_dev
+	open "config/vreji/dev.toml" | load-env
+	
+	cargo run --bin samn
+}
 export def build_media [] {
 	load_env_dev
 	open "config/media/dev.toml" | load-env

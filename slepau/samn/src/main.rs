@@ -15,15 +15,15 @@ mod ends;
 mod logging;
 mod radio;
 
-use std::{
-	net::SocketAddr,
-	time::Duration,
-};
+use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
 
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
-use tokio::{join, sync::{mpsc, watch}};
+use tokio::{
+	join,
+	sync::{mpsc, watch},
+};
 use tower_http::timeout::TimeoutLayer;
 
 #[tokio::main]
@@ -81,7 +81,7 @@ async fn main() {
 	let server = axum::Server::bind(&SOCKET)
 		.serve(app.into_make_service_with_connect_info::<SocketAddr>())
 		.with_graceful_shutdown(async move {
-			if let Err(err) =  _shutdown_rx.changed().await {
+			if let Err(err) = _shutdown_rx.changed().await {
 				error!("Error receiving shutdown {err:?}");
 			} else {
 				info!("Http server shutting down gracefully");

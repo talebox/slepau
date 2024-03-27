@@ -31,7 +31,7 @@ pub fn db() -> sonnerie::DatabaseReader {
 
 pub fn record_json(r: Record) -> serde_json::Value {
 	let mut v = vec![];
-	v.push(json!(r.time().timestamp_nanos()));
+	v.push(json!(r.time().and_utc().timestamp_nanos_opt()));
 	for (idx, c) in r.format().chars().enumerate() {
 		v.push(match c {
 			'f' => json!(r.get::<f32>(idx)),

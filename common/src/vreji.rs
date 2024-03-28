@@ -1,50 +1,15 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use chrono::Utc;
-use lazy_static::lazy_static;
-use serde_json::json;
-use sonnerie::{record, CreateTx, Record};
+use sonnerie::{record, Record};
 
-use crate::proquint::Proquint;
+use crate::{proquint::Proquint, sonnerie::{commit, transaction}};
 
-lazy_static! {
-	pub static ref DB_PATH_LOG: std::path::PathBuf =
-		std::path::PathBuf::from(std::env::var("DB_PATH_LOG").unwrap().as_str());
-}
-
-fn transaction() -> CreateTx {
-	sonnerie::CreateTx::new(DB_PATH_LOG.as_path()).unwrap()
-}
-fn commit(t: CreateTx) {
-	t.commit().unwrap();
-}
 pub fn ip_to_u32(ip: IpAddr) -> u32 {
 	match ip {
 		IpAddr::V4(v4) => v4.into(),
 		IpAddr::V6(_) => 0,
 	}
-}
-
-pub fn db() -> sonnerie::DatabaseReader {
-	sonnerie::DatabaseReader::new(DB_PATH_LOG.as_path()).unwrap()
-}
-
-pub fn record_json(r: Record) -> serde_json::Value {
-	let mut v = vec![];
-	v.push(json!(r.time().and_utc().timestamp_nanos_opt()));
-	for (idx, c) in r.format().chars().enumerate() {
-		v.push(match c {
-			'f' => json!(r.get::<f32>(idx)),
-			'F' => json!(r.get::<f64>(idx)),
-			'i' => json!(r.get::<i32>(idx)),
-			'I' => json!(r.get::<i64>(idx)),
-			'u' => json!(r.get::<u32>(idx)),
-			'U' => json!(r.get::<u64>(idx)),
-			's' => json!(r.get::<&str>(idx).escape_default().to_string()),
-			a => panic!("unknown format column '{a}'"),
-		});
-	}
-	json!(v)
 }
 
 pub struct RecordValues {

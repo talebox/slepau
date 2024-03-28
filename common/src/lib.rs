@@ -7,6 +7,8 @@ pub mod proquint;
 pub mod socket;
 pub mod utils;
 pub mod vreji;
+pub mod samn;
+pub mod sonnerie;
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(default)]

@@ -1,0 +1,4 @@
+DB_PATH_LOG=".tmp/samn_db"
+
+SOCKET="0.0.0.0:4005"
+URL="http://localhost:4005"

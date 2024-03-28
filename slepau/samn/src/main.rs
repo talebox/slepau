@@ -1,4 +1,5 @@
 #![feature(linked_list_remove)]
+#![feature(linked_list_retain)]
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
@@ -12,7 +13,6 @@ use hyper::StatusCode;
 use log::{error, info};
 
 mod ends;
-mod logging;
 mod radio;
 
 use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
@@ -35,6 +35,7 @@ async fn main() {
 
 	env_logger::init_from_env(env);
 	log_env();
+	common::sonnerie::init();
 
 	print!(
 		"\
@@ -55,11 +56,11 @@ async fn main() {
 
 	// DB Init
 	let (shutdown_tx, shutdown_rx) = watch::channel(());
-	let (radio_tx, radio_rx) = mpsc::channel(10);
+	let (radio_tx, radio_rx) = mpsc::channel(30);
 
 	// Build router
 	let app = Router::new()
-		.route("/", get(ends::log_get))
+		.route("/:key", get(ends::log_get))
 		.route("/command", post(ends::command))
 		.route("/command/wait", post(ends::command_response))
 		// .layer(axum::middleware::from_fn(auth::validate::flow::only_supers))

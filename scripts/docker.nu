@@ -25,20 +25,26 @@ def docker_args [name] {
 		"-p", $"127.0.0.1:($ports | get $name):4000", # Bind outside localhost:port to container's 4000 port
 		"-v", "talebox_keys:/server/keys", # Keys
 		"-v", "vreji_db:/server/vreji_db", # Vreji (Logging)
+		"-v", "samn_db:/server/samn_db", # Samn (Node Logging)
 		"-v", $"($name)_data:/server/data", # Data
 		"-v", $"($name)_backup:/server/backup", # Backup
 		"-e", $"URL=(if $context == 'rpi' {'http'} else {'https'})://($name).anty.dev", # URL variable
 		"--env-file=container/env.config", # Env config
 	];
 
-    # If it's samn, make sure it has access to these devices
-	if $name == "samn" {$args = ($args | append "--device=/dev/spidev0.0" | append "--device=/dev/gpiochip0")}
+    # If it's samn, make sure it has access to these devices and set a few env variables
+	if $name == "samn" {$args = ($args | append [
+		"--device=/dev/spidev0.0",
+		"--device=/dev/gpiochip0",
+		"-e", "DB_PATH_LOG=samn_db"
+		"-e", "RADIO=on"
+	])}
 
     return $args
 }
 
 # Runs a certain container
-export def run_docker [name, build = true] {
+export def run_docker [name, build = true, ...cmd] {
     mut args = docker_args $name
 
     # Build the container
@@ -49,7 +55,7 @@ export def run_docker [name, build = true] {
 	# Stop a previous, named container
 	do -i {docker stop $"($name)_s"}
 
-    docker run ...$args $name
+    docker run ...$args $name ...$cmd
 }
 
 # Deploys and demonizes a certain container
@@ -78,9 +84,9 @@ export def docker_setup [] {
 	
 	docker volume create -d local talebox_keys
 	docker volume create -d local vreji_db
+	docker volume create -d local samn_db
 	docker build -t gen_key ./out/slepau/gen_key
-	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db --name gen_key_s gen_key
-	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db gen_key touch vreji_db/main
-	
+	docker run -v talebox_keys:/server/keys gen_key
+	docker run -v talebox_keys:/server/keys -v vreji_db:/server/vreji_db -v samn_db:/server/samn_db gen_key sh -c 'touch vreji_db/main && touch samn_db/main'
 	print "Done."
 }

@@ -1,9 +1,8 @@
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
-use common::{utils::DbError, vreji::record_json};
+use common::{sonnerie::{db, record_json}, utils::DbError};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-	logging::db,
 	radio::{CommandMessage, RadioSyncType},
 };
 

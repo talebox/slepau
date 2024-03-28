@@ -10,8 +10,10 @@ use axum::{
 use sonnerie::Wildcard;
 use common::{
 	utils::DbError,
-	vreji::{db, record_json, RecordValues},
+	vreji::RecordValues,
+	sonnerie::{record_json, db}
 };
+
 use serde::Deserialize;
 
 /// Gets logs

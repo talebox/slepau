@@ -9,7 +9,7 @@ license = "MIT"
 
 [workspace.dependencies]
 common = { path = "common" }
-axum = { version = "0.6.6", features = ["ws", "macros", "headers"] }
+axum = { version = "0.6.6", features = ["ws", "macros", "headers", "tracing"] }
 axum-macros = "0.3.4"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

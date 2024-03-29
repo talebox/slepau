@@ -50,7 +50,7 @@ export def run_vreji [] {
 }
 export def run_samn [] {
 	load_env_dev
-	open "config/vreji/dev.toml" | load-env
+	open "config/samn/dev.toml" | load-env
 	
 	cargo run --bin samn
 }

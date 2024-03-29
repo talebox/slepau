@@ -3,26 +3,35 @@
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
+	middleware::from_fn,
 	routing::{get, post},
 	Extension, Router,
 };
 
-use common::utils::{log_env, SOCKET, URL};
+use common::{socket::ResourceMessage, utils::{log_env, SOCKET, URL}};
 use env_logger::Env;
 use hyper::StatusCode;
 use log::{error, info};
 
+mod db;
 mod ends;
 mod radio;
+mod socket;
 
-use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
+use std::{
+	env,
+	future::IntoFuture,
+	net::SocketAddr,
+	sync::{Arc, RwLock},
+	time::Duration,
+};
 
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{
 	join,
-	sync::{mpsc, watch},
+	sync::{broadcast, mpsc, watch},
 };
 use tower_http::timeout::TimeoutLayer;
 
@@ -55,7 +64,12 @@ async fn main() {
 	}
 
 	// DB Init
+	let db = db::DB::default();
+	// info!("{db:?}");
+	let db = Arc::new(RwLock::new(db));
+
 	let (shutdown_tx, shutdown_rx) = watch::channel(());
+	let (resource_tx, _resource_rx) = broadcast::channel::<ResourceMessage>(16);
 	let (radio_tx, radio_rx) = mpsc::channel(30);
 
 	// Build router
@@ -63,6 +77,10 @@ async fn main() {
 		.route("/:key", get(ends::log_get))
 		.route("/command", post(ends::command))
 		.route("/command/wait", post(ends::command_response))
+		.route(
+			"/stream",
+			get(socket::websocket_handler),
+		)
 		// .layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
@@ -71,7 +89,9 @@ async fn main() {
 				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
 				.concurrency_limit(100)
 				.layer(Extension(shutdown_rx.clone()))
-				.layer(Extension(radio_tx.clone())),
+				.layer(Extension(resource_tx.clone()))
+				.layer(Extension(radio_tx.clone()))
+				.layer(Extension(db.clone())),
 		);
 
 	info!("Listening on '{}'.", SOCKET.to_string());
@@ -90,7 +110,7 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
-	let radio = tokio::spawn(radio::radio_service(shutdown_rx.clone(), radio_rx));
+	let radio = tokio::spawn(radio::radio_service(db.clone(), shutdown_rx.clone(), radio_rx));
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 

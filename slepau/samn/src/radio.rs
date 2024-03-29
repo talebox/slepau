@@ -1,4 +1,4 @@
-use common::samn::{log_info, log_limbs};
+use common::{samn::{log_info, log_limbs}, utils::LockedAtomic};
 use linux_embedded_hal::{gpio_cdev::LineRequestFlags, spidev::SpidevOptions};
 use samn_common::{
 	node::{Command, Message, MessageData, Response},
@@ -15,6 +15,8 @@ use tokio::{
 	time,
 };
 
+use crate::db;
+
 #[derive(Deserialize, Debug)]
 pub struct CommandMessage {
 	for_id: u16,
@@ -24,7 +26,7 @@ pub struct CommandMessage {
 pub type RadioSyncType = (CommandMessage, Option<oneshot::Sender<Response>>);
 
 // not a test anymore, it works :)
-pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: mpsc::Receiver<RadioSyncType>) {
+pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Receiver<()>, mut radio_rx: mpsc::Receiver<RadioSyncType>) {
 	if std::env::var("RADIO").is_err() {
 		println!("Radio is off, if you want it enabled, set RADIO environment.");
 		return;
@@ -54,10 +56,10 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 
 	println!("Receiving...");
 	nrf24.rx().unwrap();
-	let mut heartbeats: HashMap<u16, (Instant, u32)> = HashMap::new();
+	
 	let mut command_messages = LinkedList::<(CommandMessage, Option<oneshot::Sender<Response>>)>::new();
 	let mut response_callbacks = LinkedList::<(u8, oneshot::Sender<Response>)>::new();
-	let mut command_id: u8 = 0;
+
 	loop {
 		if let Ok(bytes) = nrf24.receive() {
 			if let Ok(message) = postcard::from_bytes::<Message>(&bytes) {
@@ -71,7 +73,7 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 					// Check if we haven't received a packet from this node in more than 25 seconds
 					// Check that the message queue for this node isn't more than 6
 					// And if so queue Info + Limbs commands
-					if heartbeats
+					if db.read().unwrap().heartbeats
 						.get(&id_node)
 						.map(|(last, _)| (Instant::now() - *last).as_secs() > 25)
 						.unwrap_or(true)
@@ -96,7 +98,7 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 					// Send a command to the node if one is available
 					if let Some(i) = command_messages.iter().position(|(m, _)| m.for_id == id_node) {
 						let (message, callback) = command_messages.remove(i);
-
+						let command_id = db.read().unwrap().command_id;
 						// Add callback to another array with an id
 						// so we know what to call later if we receive a response
 						if let Some(callback) = callback {
@@ -111,7 +113,11 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 						})
 						.unwrap();
 						// Increment the command id
-						command_id = command_id.wrapping_add(1);
+						{
+							let mut db = db.write().unwrap();
+							db.command_id = db.command_id.wrapping_add(1);
+						}
+						
 						println!("Sending {} bytes", packet.len());
 						// Send command
 						nrf24.ce_disable();
@@ -128,7 +134,7 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 							log_limbs(id_node, limbs);
 						}
 						Response::Heartbeat(seconds) => {
-							heartbeats
+							db.write().unwrap().heartbeats
 								.entry(id_node)
 								.and_modify(|(_, seconds_)| {
 									*seconds_ = *seconds;
@@ -150,7 +156,7 @@ pub async fn radio_service(mut shutdown_rx: watch::Receiver<()>, mut radio_rx: m
 						response_callbacks.retain(|(_, callback)| !callback.is_closed());
 					}
 					// Update the heartbeat
-					heartbeats
+					db.write().unwrap().heartbeats
 						.entry(id_node)
 						.and_modify(|(instant, _)| {
 							*instant = Instant::now();

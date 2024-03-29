@@ -12,11 +12,11 @@ use crate::sonnerie::{commit, transaction};
 pub fn encode_binary_base64<T:Serialize>(v: &T) -> String {
 	BASE64_STANDARD.encode(postcard::to_vec::<T,32>(v).unwrap())
 }
-// pub fn decode_binary_base64<'a,T:Deserialize<'a>>(v: &'a mut Vec<u8>) -> T {
-// 	let input = v.clone();
-// 	BASE64_STANDARD.decode_slice(input, v).unwrap();
-// 	postcard::from_bytes(v).unwrap()
-// } 
+pub fn decode_binary_base64<'a,T:Deserialize<'a>>(v: &'a mut [u8]) -> T {
+	let input = v.to_owned();
+	BASE64_STANDARD.decode_slice(input, v).unwrap();
+	postcard::from_bytes(v).unwrap()
+} 
 
 pub fn log_limbs(id: u16, limbs: &[Limb]) {
 	let mut t = transaction();

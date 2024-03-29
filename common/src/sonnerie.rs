@@ -42,8 +42,6 @@ pub fn record_json(r: Record) -> serde_json::Value {
 			'I' => json!(r.get::<i64>(idx)),
 			'u' => json!(r.get::<u32>(idx)),
 			'U' => json!(r.get::<u64>(idx)),
-			'L' => json!(r.get::<Limb>(idx)),
-			'N' => json!(r.get::<NodeInfo>(idx)),
 			's' => json!(r.get::<&str>(idx).escape_default().to_string()),
 			a => panic!("unknown format column '{a}'"),
 		});

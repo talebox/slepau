@@ -281,6 +281,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -309,6 +310,7 @@ dependencies = [
  "rustversion",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -2467,6 +2469,7 @@ dependencies = [
  "chrono",
  "common",
  "env_logger",
+ "futures",
  "futures-util",
  "hyper",
  "lazy_static",

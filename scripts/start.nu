@@ -20,6 +20,10 @@ export def run_web [script] {
 	enter web
 		if $script == 'clean' {
 			rm -rf .parcel-cache dist
+		} else if $script == 'watch' {
+			# Clean first
+			rm -rf dist
+			yarn $script
 		} else {
 			yarn $script
 		}

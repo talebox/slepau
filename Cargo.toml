@@ -1,5 +1,5 @@
 [workspace]
-members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/samn", "slepau/vreji"]
+members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/samn", "slepau/vreji","sonnerie"]
 resolver = "2"
 
 [workspace.package]

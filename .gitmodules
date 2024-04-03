@@ -6,3 +6,7 @@
 	path = samn-common
 	url = git@github.com:rubend056/samn-common.git
 	branch = main
+[submodule "sonnerie"]
+	path = sonnerie
+	url = https://github.com/njaard/sonnerie
+	branch = master

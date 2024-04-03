@@ -149,18 +149,19 @@ pub async fn stats(Query(query): Query<StatQuery>) -> impl IntoResponse {
 	let wildcard = Wildcard::new(&query.key);
 
 	Json(db.get_filter(&wildcard).into_iter().fold(HashMap::new(), |mut acc, r| {
+		let time = r.timestamp_nanos() / 1_000_000_000; // Seconds
+		let time_diff = now - time;
+		if time_diff as usize >= query.limit * query.period {
+			return acc;
+		}
+
 		let r = RecordValues::from(&r);
 		if !RecordFilter::from(&query).matches(&r) {
 			return acc;
 		}
 
 		let key = if query.total { "Total".into() } else { r.key };
-		let time = r.time / 1_000_000_000; // Seconds
-		let time_diff = now - time;
 		let values = acc.entry(key).or_insert(vec![0; query.limit]);
-		if time_diff as usize >= query.limit * query.period {
-			return acc;
-		}
 		values[time_diff as usize / query.period] += 1;
 		acc
 	}))

@@ -14,29 +14,27 @@ use axum::{
 	Extension,
 };
 
+use ::sonnerie::Wildcard;
 use common::{
-	proquint::Proquint, samn::decode_binary_base64, socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage}, sonnerie, utils::LockedAtomic
+	proquint::Proquint,
+	samn::decode_binary_base64,
+	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
+	sonnerie,
+	utils::LockedAtomic,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use samn_common::node::{Limb, LimbType, NodeInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use ::sonnerie::Wildcard;
 use tokio::{sync::watch, time};
 
 use auth::UserClaims;
 
-use crate::db::DB;
-
-#[derive(Serialize, Default, Deserialize, Debug)]
-struct NodePreview {
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub info: Option<NodeInfo>,
-	pub limbs: HashMap<Proquint<u16>, (u64, LimbType)>,
-	/// Last message received
-	pub last: u64,
-}
+use crate::{
+	db::DB,
+	views::{self, limb_history, LimbQuery},
+};
 
 pub async fn websocket_handler(
 	ws: WebSocketUpgrade,
@@ -104,58 +102,41 @@ async fn handle_socket(
 
 			if piece == Some("views") {
 				let piece = res.pop_front();
-				if piece == Some("nodes") {
-					// All nodes preview
-					let nodes = sonnerie::db().get_filter(&Wildcard::new("%")).into_iter().fold(
-						HashMap::new(),
-						|mut acc: HashMap<String, NodePreview>, r| {
-							let key_split = r.key().split("_").collect::<Vec<_>>();
-							let id_node: String = key_split[0].into();
-							let id_limb: Option<String> = key_split.get(1).map(|v| String::from(*v));
-							let time = r.timestamp_nanos();
-							if let Some(id_limb) = id_limb {
-								let id_limb = Proquint::<u16>::from_quint(&id_limb).unwrap();
-								// Deserialize Limb
-								let mut bytes = r.get::<String>(0).into_bytes();
-								let limb: Limb = decode_binary_base64(&mut bytes);
-								acc
-									.entry(id_node)
-									.and_modify(|node| {
-										node
-											.limbs
-											.entry(id_limb)
-											.and_modify(|(last, limb_)| {
-												if time > *last {
-													*limb_ = limb.1.clone();
-													*last = time;
-												}
-											})
-											.or_insert((time, limb.1));
-									})
-									.or_insert(NodePreview::default());
-							} else {
-								// Deserialize Info
-								let mut bytes = r.get::<String>(0).into_bytes();
-								let info: NodeInfo = decode_binary_base64(&mut bytes);
-								acc
-									.entry(id_node)
-									.and_modify(|node| {
-										if time > node.last {
-											node.info = Some(info);
-											node.last = time;
-										}
-									})
-									.or_insert(NodePreview::default());
+				if let Some(piece) = piece {
+					if piece == "nodes" {
+						// All nodes preview
+						return reply((&views::node_previews(&db.read().unwrap(), "%".into())).into());
+					}
+					// This query would be `node_id/limb_id/period?/limit?`
+					if let Ok(node_id) = Proquint::<u16>::from_quint(piece) {
+						if let Some(piece) = res.pop_front() {
+							if let Ok(limb_id) = Proquint::<u16>::from_quint(piece) {
+								let mut query = LimbQuery {
+									node_id,
+									limb_id,
+									..Default::default()
+								};
+								if let Some(Ok(period)) = res.pop_front().map(|v| v.parse()) {
+									query.period = period;
+								}
+								if let Some(Ok(limit)) = res.pop_front().map(|v| v.parse()) {
+									query.limit = limit;
+								}
+								// Wants limb history
+								return reply(
+									(&limb_history(query))
+										.into(),
+								);
 							}
-							return acc;
-						},
-					);
-					return reply((&nodes).into());
+						}
+					}
 				}
 			} else if piece == Some("node") {
-				if let Some(id_node) = res.pop_front() {
-					// Node Detail
-					
+				if let Some(piece) = res.pop_front() {
+					if let Ok(node_id) = Proquint::<u16>::from_quint(piece) {
+						// Node Detail
+						return reply((&views::node_previews(&db.read().unwrap(), format!("{}%", node_id)).get(&node_id)).into());
+					}
 				}
 			}
 

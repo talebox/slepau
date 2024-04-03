@@ -17,6 +17,7 @@ mod db;
 mod ends;
 mod radio;
 mod socket;
+mod views;
 
 use std::{
 	env,

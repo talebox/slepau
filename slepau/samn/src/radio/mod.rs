@@ -1,8 +1,12 @@
-use common::{samn::{log_info, log_limbs}, utils::LockedAtomic};
-use linux_embedded_hal::{gpio_cdev::LineRequestFlags, spidev::SpidevOptions};
+use common::{
+	proquint::Proquint,
+	samn::{log_info, log_limbs},
+	utils::LockedAtomic,
+};
 use samn_common::{
 	node::{Command, Message, MessageData, Response},
-	radio::nrf24::{self, Device},
+	nrf24::Device,
+	radio::*,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -16,53 +20,47 @@ use tokio::{
 };
 
 use crate::db;
+mod cc1101;
+mod nrf24;
 
 #[derive(Deserialize, Debug)]
 pub struct CommandMessage {
-	for_id: u16,
+	for_id: Proquint<u16>,
 	command: Command,
 }
 
 pub type RadioSyncType = (CommandMessage, Option<oneshot::Sender<Response>>);
 
 // not a test anymore, it works :)
-pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Receiver<()>, mut radio_rx: mpsc::Receiver<RadioSyncType>) {
+pub async fn radio_service(
+	db: LockedAtomic<db::DB>,
+	mut shutdown_rx: watch::Receiver<()>,
+	mut radio_rx: mpsc::Receiver<RadioSyncType>,
+) {
 	if std::env::var("RADIO").is_err() {
 		println!("Radio is off, if you want it enabled, set RADIO environment.");
 		return;
 	}
 
-	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.0").unwrap();
-	spi
-		.0
-		.configure(&SpidevOptions {
-			max_speed_hz: Some(8_000_000),
-			..Default::default()
-		})
-		.unwrap();
 	let mut chip = linux_embedded_hal::gpio_cdev::Chip::new("/dev/gpiochip0").unwrap();
 
-	let line = chip
-		.get_line(25)
-		.unwrap()
-		.request(LineRequestFlags::OUTPUT, 0, "nrf24")
-		.unwrap();
-	let ce_pin = linux_embedded_hal::CdevPin::new(line).unwrap();
-	let mut nrf24 = nrf24::NRF24L01::new(ce_pin, spi).unwrap();
-
-	nrf24::init(&mut nrf24);
-	println!("Initalized the nrf24");
-	println!("Radio is connected: {}", nrf24.is_connected().unwrap());
+	let (mut nrf24, mut irq_pin) = nrf24::init(&mut chip);
+	let (mut cc1101, mut g2) = cc1101::init(&mut chip);
 
 	println!("Receiving...");
 	nrf24.rx().unwrap();
-	
+	cc1101.to_rx().unwrap();
+
 	let mut command_messages = LinkedList::<(CommandMessage, Option<oneshot::Sender<Response>>)>::new();
 	let mut response_callbacks = LinkedList::<(u8, oneshot::Sender<Response>)>::new();
 
 	loop {
-		if let Ok(bytes) = nrf24.receive() {
-			if let Ok(message) = postcard::from_bytes::<Message>(&bytes) {
+		if let Ok((payload, is_nrf)) = nrf24
+			.receive_(&mut irq_pin)
+			.map(|v| (v, true))
+			.or_else(|_| cc1101.receive_(&mut g2).map(|v| (v, false)))
+		{
+			if let Ok(message) = postcard::from_bytes::<Message>(&payload.data()) {
 				println!("{:?}", &message);
 				let id_node = message.id;
 				if let MessageData::Response {
@@ -73,22 +71,28 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 					// Check if we haven't received a packet from this node in more than 25 seconds
 					// Check that the message queue for this node isn't more than 6
 					// And if so queue Info + Limbs commands
-					if db.read().unwrap().heartbeats
+					if db
+						.read()
+						.unwrap()
+						.heartbeats
 						.get(&id_node)
 						.map(|(last, _)| (Instant::now() - *last).as_secs() > 25)
 						.unwrap_or(true)
-						&& command_messages.iter().filter(|(m, _)| m.for_id == id_node).count() < 2
+						&& command_messages
+							.iter()
+							.filter(|(m, _)| m.for_id.inner() == id_node)
+							.count() < 2
 					{
 						command_messages.push_back((
 							CommandMessage {
-								for_id: id_node,
+								for_id: id_node.into(),
 								command: Command::Info,
 							},
 							None,
 						));
 						command_messages.push_back((
 							CommandMessage {
-								for_id: id_node,
+								for_id: id_node.into(),
 								command: Command::Limbs,
 							},
 							None,
@@ -96,7 +100,7 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 					}
 					// println!("hearbeats: {:?}\ncommand_messages: {:?}", heartbeats, command_messages);
 					// Send a command to the node if one is available
-					if let Some(i) = command_messages.iter().position(|(m, _)| m.for_id == id_node) {
+					if let Some(i) = command_messages.iter().position(|(m, _)| m.for_id.inner() == id_node) {
 						let (message, callback) = command_messages.remove(i);
 						let command_id = db.read().unwrap().command_id;
 						// Add callback to another array with an id
@@ -117,12 +121,18 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 							let mut db = db.write().unwrap();
 							db.command_id = db.command_id.wrapping_add(1);
 						}
-						
+
 						println!("Sending {} bytes", packet.len());
 						// Send command
-						nrf24.ce_disable();
-						nrf24.send(&packet).unwrap();
-						nrf24.rx().unwrap();
+						if is_nrf {
+							nrf24.ce_disable();
+							nrf24.transmit_(&Payload::new(&packet)).unwrap();
+							nrf24.rx().unwrap();
+						} else {
+							cc1101.to_idle().unwrap();
+							cc1101.transmit_(&Payload::new(&packet)).unwrap();
+							cc1101.to_rx().unwrap();
+						}
 					}
 
 					// Log this message
@@ -134,7 +144,9 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 							log_limbs(id_node, limbs);
 						}
 						Response::Heartbeat(seconds) => {
-							db.write().unwrap().heartbeats
+							db.write()
+								.unwrap()
+								.heartbeats
 								.entry(id_node)
 								.and_modify(|(_, seconds_)| {
 									*seconds_ = *seconds;
@@ -156,7 +168,9 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 						response_callbacks.retain(|(_, callback)| !callback.is_closed());
 					}
 					// Update the heartbeat
-					db.write().unwrap().heartbeats
+					db.write()
+						.unwrap()
+						.heartbeats
 						.entry(id_node)
 						.and_modify(|(instant, _)| {
 							*instant = Instant::now();
@@ -165,7 +179,11 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 				}
 			} else {
 				// let text = std::str::from_utf8(&bytes).unwrap();
-				println!("Couldn't deserialize, received {} bytes: {:?}", bytes.len(), &bytes);
+				println!(
+					"Couldn't deserialize, received {} bytes: {:?}",
+					payload.len(),
+					&payload.data()
+				);
 			}
 		}
 
@@ -180,5 +198,6 @@ pub async fn radio_service(db: LockedAtomic<db::DB>, mut shutdown_rx: watch::Rec
 		}
 	}
 	nrf24.ce_disable();
-	println!("nrf24 shut down.");
+	cc1101.to_idle().unwrap();
+	println!("radios shut down.");
 }

@@ -76,10 +76,10 @@ export def run_nginx [] {
 		sudo -E ./nginx.sh
 }
 
-export def test [] {
+export def test [package] {
 	load_env_dev
 	
-	cargo test
+	cargo test --package $package
 }
 
 export def check [] {

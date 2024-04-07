@@ -4,5 +4,6 @@
 		"-c",
 		"use scripts/env.nu *; load_env; cargo check --quiet --workspace --message-format=json --all-targets"
 	],
-	"editor.foldingImportsByDefault": false
+	"editor.foldingImportsByDefault": false,
+	"rust-analyzer.showUnlinkedFileNotification": false
 }

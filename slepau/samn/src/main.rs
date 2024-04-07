@@ -8,7 +8,7 @@ use axum::{
 	Extension, Router,
 };
 
-use common::{socket::ResourceMessage, utils::{log_env, SOCKET, URL}};
+use common::{init::{init, save}, socket::ResourceMessage, utils::{log_env, SOCKET, URL}};
 use env_logger::Env;
 use hyper::StatusCode;
 use log::{error, info};
@@ -65,7 +65,7 @@ async fn main() {
 	}
 
 	// DB Init
-	let db = db::DB::default();
+	let db = init::<db::DB>().await;
 	// info!("{db:?}");
 	let db = Arc::new(RwLock::new(db));
 
@@ -142,4 +142,25 @@ async fn main() {
 	let _server_r = join!(server, radio);
 
 	info!("Everyone's shut down!");
+	
+	if db.is_poisoned() {
+		error!(
+			"DB was poisoned, can't clear it because we're in (stable) channel; so saving won't work.\n\
+			This probaly happened because of an error.\n\
+			Logging service will soon be implemented to notify of these."
+		);
+		// db.clear_poison();
+	}
+
+	match Arc::try_unwrap(db) {
+		Ok(db) => {
+			let db = db.into_inner().unwrap();
+			common::init::save(&db);
+		}
+		Err(db) => {
+			error!("Couldn't unwrap DB, will save anyways, but beware of this");
+			common::init::save(&*db.read().unwrap());
+		}
+	}
+
 }

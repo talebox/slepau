@@ -1,9 +1,4 @@
-use std::{
-	collections::{HashMap, VecDeque},
-	net::SocketAddr,
-	sync::RwLock,
-	time::Duration,
-};
+use std::{collections::VecDeque, net::SocketAddr, sync::RwLock, time::Duration};
 
 use axum::{
 	extract::{
@@ -14,19 +9,14 @@ use axum::{
 	Extension,
 };
 
-use ::sonnerie::Wildcard;
 use common::{
 	proquint::Proquint,
-	samn::decode_binary_base64,
 	socket::{MessageType, ResourceMessage, ResourceSender, SocketMessage},
-	sonnerie,
 	utils::LockedAtomic,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
-use samn_common::node::{Limb, LimbType, NodeInfo};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use samn_common::node::{LimbId, NodeId};
 use tokio::{sync::watch, time};
 
 use auth::UserClaims;
@@ -108,32 +98,27 @@ async fn handle_socket(
 						return reply((&views::node_previews(&db.read().unwrap(), "%".into())).into());
 					}
 					// This query would be `node_id/limb_id/period?/limit?`
-					if let Ok(node_id) = Proquint::<u16>::from_quint(piece) {
-						if let Some(piece) = res.pop_front() {
-							if let Ok(limb_id) = Proquint::<u16>::from_quint(piece) {
-								let mut query = LimbQuery {
-									node_id,
-									limb_id,
-									..Default::default()
-								};
-								if let Some(Ok(period)) = res.pop_front().map(|v| v.parse()) {
-									query.period = period;
-								}
-								if let Some(Ok(limit)) = res.pop_front().map(|v| v.parse()) {
-									query.limit = limit;
-								}
-								// Wants limb history
-								return reply(
-									(&limb_history(query))
-										.into(),
-								);
+					if let Ok(node_id) = Proquint::<NodeId>::from_quint(piece) {
+						if let Some(limb_id) = res.pop_front().and_then(|v| v.parse::<LimbId>().ok()) {
+							let mut query = LimbQuery {
+								node_id,
+								limb_id,
+								..Default::default()
+							};
+							if let Some(period) = res.pop_front().and_then(|v| v.parse().ok()) {
+								query.period = period;
 							}
+							if let Some(limit) = res.pop_front().and_then(|v| v.parse().ok()) {
+								query.limit = limit;
+							}
+							// Wants limb history
+							return reply((&limb_history(query)).into());
 						}
 					}
 				}
 			} else if piece == Some("node") {
 				if let Some(piece) = res.pop_front() {
-					if let Ok(node_id) = Proquint::<u16>::from_quint(piece) {
+					if let Ok(node_id) = Proquint::<NodeId>::from_quint(piece) {
 						// Node Detail
 						return reply((&views::node_previews(&db.read().unwrap(), format!("{}%", node_id)).get(&node_id)).into());
 					}

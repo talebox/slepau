@@ -18,17 +18,18 @@ pub fn decode_binary_base64<'a,T:Deserialize<'a>>(v: &'a mut [u8]) -> T {
 	postcard::from_bytes(v).unwrap()
 } 
 
-pub fn log_limbs(id: u16, limbs: &[Limb]) {
+/// Logs limbs as <id>_01
+pub fn log_limbs(id: u32, limbs: &[Limb]) {
 	let mut t = transaction();
 	for limb in limbs {
-		let key = format!("{}_{}", id.to_quint(), limb.0.to_quint());
+		let key = format!("{}_{:02X}", id.to_quint(), limb.0);
 		let str = encode_binary_base64(limb);
 		t.add_record(&key, Utc::now().naive_utc(), record(str))
 			.unwrap();
 	}
 	commit(t);
 }
-pub fn log_info(id: u16, info: &NodeInfo) {
+pub fn log_info(id: u32, info: &NodeInfo) {
     let mut t = transaction();
 	let str = encode_binary_base64(info);
     t.add_record(&id.to_quint(), Utc::now().naive_utc(), record(str))

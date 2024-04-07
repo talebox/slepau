@@ -31,3 +31,4 @@ postcard = {git = "https://github.com/jamesmunns/postcard.git", features = ["use
 nb = "1.1.0"
 futures = "0.3.26"
 embedded-hal = "1.0.0"
+bimap = { version = "0.6.3", features = ["serde"] }

@@ -4,15 +4,15 @@ use std::{
 };
 
 use common::{proquint::Proquint, samn::decode_binary_base64};
-use samn_common::node::{Limb, LimbType, NodeInfo};
+use samn_common::node::{Limb, LimbId, LimbType, NodeId, NodeInfo};
 use serde::{Deserialize, Serialize};
-use sonnerie::Wildcard;
+use sonnerie::{Record, Wildcard};
 
 use crate::db::DB;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LimbPreview {
-	pub id: Proquint<u16>,
+	pub id: LimbId,
 	pub data: LimbType,
 	/// Last message received, in epoch seconds
 	pub last: u64,
@@ -20,30 +20,31 @@ pub struct LimbPreview {
 
 #[derive(Serialize, Default, Deserialize, Debug)]
 pub struct NodePreview {
-	pub id: Proquint<u16>,
+	pub id: Proquint<NodeId>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub info: Option<NodeInfo>,
-	pub limbs: HashMap<Proquint<u16>, LimbPreview>,
+	pub limbs: HashMap<LimbId, LimbPreview>,
 	/// Last message received, in epoch seconds
 	pub last: u64,
 	/// Node uptime, in seconds
 	pub uptime: u32,
 }
 
-pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<u16>, NodePreview> {
-	let uptime = |node_id: u16| db.heartbeats.get(&node_id).map(|(_, uptime)| *uptime).unwrap_or(0);
+pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePreview> {
+	let uptime = |node_id| db.heartbeats.get(&node_id).map(|(_, last, uptime,_)| (*last, *uptime)).unwrap_or((0,0));
 	common::sonnerie::db().get_filter(&Wildcard::new(&key)).into_iter().fold(
 		HashMap::new(),
-		|mut acc: HashMap<Proquint<u16>, NodePreview>, r| {
+		|mut acc, r | {
 			let key_split = r.key().split("_").collect::<Vec<_>>();
-			let id_node: String = key_split[0].into();
-			let id_node = Proquint::<u16>::from_quint(&id_node).unwrap();
-			let id_limb = key_split.get(1).map(|v| String::from(*v));
+			// let id_node: String = .into();
+			let id_node = Proquint::<u32>::from_quint(&key_split[0..2].join("_")).unwrap();
+			let id_limb = key_split.get(2).map(|v| LimbId::from_str_radix(v, 16).unwrap());
 			let time = r.timestamp_nanos();
+			let (last,uptime) = uptime(id_node.inner());
 
 			let node = acc.entry(id_node);
 			if let Some(id_limb) = id_limb {
-				let id_limb = Proquint::<u16>::from_quint(&id_limb).unwrap();
+				// let id_limb = Proquint::<u16>::from_quint(&id_limb).unwrap();
 				// Deserialize Limb
 				let mut bytes = r.get::<String>(0).into_bytes();
 				let limb: Limb = decode_binary_base64(&mut bytes);
@@ -75,11 +76,12 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<u16>, NodePreview
 								last: time,
 							},
 						)]),
-						last: time,
-						uptime: uptime(id_node.inner()),
+						last,
+						uptime,
 						..Default::default()
 					});
 			} else {
+				
 				// Deserialize Info
 				let mut bytes = r.get::<String>(0).into_bytes();
 				let info: NodeInfo = decode_binary_base64(&mut bytes);
@@ -93,8 +95,8 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<u16>, NodePreview
 					.or_insert(NodePreview {
 						id: id_node,
 						info: Some(info),
-						last: time,
-						uptime: uptime(id_node.inner()),
+						last,
+						uptime,
 						..Default::default()
 					});
 			}
@@ -106,8 +108,8 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<u16>, NodePreview
 #[derive(Deserialize, Clone)]
 #[serde(default)]
 pub struct LimbQuery {
-	pub node_id: Proquint<u16>,
-	pub limb_id: Proquint<u16>,
+	pub node_id: Proquint<NodeId>,
+	pub limb_id: LimbId,
 
 	pub period: usize, // in sec
 	pub limit: usize,  // in # of periods
@@ -131,7 +133,7 @@ pub fn limb_history(query: LimbQuery) -> BTreeMap<u64, LimbType> {
 		.as_secs();
 
 	common::sonnerie::db()
-		.get(&format!("{}_{}", query.node_id, query.limb_id))
+		.get(&format!("{}_{:02X}", query.node_id, query.limb_id))
 		.into_iter()
 		.fold(BTreeMap::new(), |mut acc, r| {
 			let time = r.timestamp_nanos() / 1_000_000_000; // Seconds

@@ -4,7 +4,9 @@ use linux_embedded_hal::{
 	spidev::SpidevOptions,
 	CdevPin, CdevPinError, SpidevDevice,
 };
-use samn_common::cc1101::Cc1101;
+use samn_common::{cc1101::Cc1101, radio::Radio};
+
+use crate::db::HQ_PIPES;
 
 pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.1").unwrap();
@@ -35,6 +37,7 @@ pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
     cc1101.reset().unwrap();
     delay.delay_ms(1);
 	cc1101.configure();
+	cc1101.set_rx_filter(&HQ_PIPES).unwrap();
 
 	println!("Initalized the cc1101");
 

@@ -8,7 +8,6 @@ use axum::{
 };
 
 use common::{
-	http::static_routes,
 	socket::ResourceMessage,
 	utils::{log_env, SOCKET, URL},
 };

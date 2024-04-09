@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use samn_common::node::{Limb, NodeInfo};
 use serde_json::json;
 use sonnerie::{CreateTx, Record};
 

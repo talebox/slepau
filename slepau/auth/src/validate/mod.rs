@@ -3,11 +3,10 @@ use axum::{
 	headers::{Cookie, Host},
 	http::Request,
 	middleware::Next,
-	response::{Response}, RequestPartsExt,
+	response::Response, RequestPartsExt,
 };
 use common::utils::{hostname_normalize, K_PRIVATE, K_PUBLIC, K_SECRET};
-use core::convert::TryFrom;
-use hyper::{StatusCode};
+use hyper::StatusCode;
 use lazy_static::lazy_static;
 use pasetors::{
 	claims::ClaimsValidationRules,

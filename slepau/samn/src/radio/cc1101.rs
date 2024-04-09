@@ -1,8 +1,7 @@
-use embedded_hal::delay::DelayNs;
 use linux_embedded_hal::{
 	gpio_cdev::{Chip, LineRequestFlags},
 	spidev::SpidevOptions,
-	CdevPin, CdevPinError, SpidevDevice,
+	CdevPin, SpidevDevice,
 };
 use samn_common::{cc1101::Cc1101, radio::Radio};
 

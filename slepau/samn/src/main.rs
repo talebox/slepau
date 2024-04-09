@@ -3,13 +3,12 @@
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
-	middleware::from_fn,
 	routing::{get, post},
 	Extension, Router,
 };
 
 use common::{
-	init::{init, save},
+	init::{init},
 	socket::ResourceMessage,
 	utils::{log_env, SOCKET, URL},
 };
@@ -24,8 +23,6 @@ mod socket;
 mod views;
 
 use std::{
-	env,
-	future::IntoFuture,
 	net::SocketAddr,
 	sync::{Arc, RwLock},
 	time::Duration,

@@ -6,7 +6,7 @@ use std::{
 use common::{proquint::Proquint, samn::decode_binary_base64};
 use samn_common::node::{Limb, LimbId, LimbType, NodeId, NodeInfo};
 use serde::{Deserialize, Serialize};
-use sonnerie::{Record, Wildcard};
+use sonnerie::{Wildcard};
 
 use crate::db::DB;
 

@@ -113,7 +113,7 @@ impl DB {
 		c
 	}
 	pub fn commands(&self) -> Vec<&CommandMessage> {
-		self.command_messages.iter().map(|(m,_)| m).collect()
+		self.command_messages.iter().map(|(m, _)| m).collect()
 	}
 
 	// We'll give the nrf24 all addresses > HQADDRESS
@@ -164,11 +164,10 @@ impl DB {
 }
 
 mod test {
-	use super::DB;
-	use crate::db::HQADDRESS;
 
 	#[test]
 	fn addresses() {
+		use crate::db::{DB, HQADDRESS};
 		let mut db = DB::default();
 
 		// New address

@@ -1,6 +1,6 @@
 use std::{
 	collections::VecDeque,
-	io::{BufRead, BufReader, BufWriter},
+	io::BufWriter,
 	net::SocketAddr,
 	sync::RwLock,
 	time::Duration,
@@ -25,7 +25,6 @@ use common::{
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use serde_json::{json, Value};
-use std::io::Read;
 use tokio::{sync::watch, time};
 
 use axum_client_ip::InsecureClientIp;

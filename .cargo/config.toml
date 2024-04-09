@@ -1,5 +1,2 @@
-[profile.dev.overrides."*"]
-opt-level = 2
-
 [target.armv7-unknown-linux-gnueabihf]
 linker = "/usr/bin/arm-none-linux-gnueabihf-gcc"

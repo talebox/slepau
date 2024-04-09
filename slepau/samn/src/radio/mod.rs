@@ -4,17 +4,16 @@ use common::{
 	socket::{ResourceMessage, SocketMessage},
 	utils::LockedAtomic,
 };
-use embedded_hal::{delay::DelayNs, digital::InputPin};
+use embedded_hal::digital::InputPin;
 use linux_embedded_hal::CdevPin;
 use log::info;
 use samn_common::{
-	node::{Command, Limb, Message, MessageData, Response},
+	node::{Command, Message, MessageData, Response},
 	nrf24::Device,
 	radio::*,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-	collections::{HashMap, LinkedList},
 	fmt::Debug,
 	time::{Duration, Instant, SystemTime},
 };
@@ -23,7 +22,7 @@ use tokio::{
 	time::{self, timeout},
 };
 
-use crate::db::{self, HQ_PIPES};
+use crate::db::{self};
 mod cc1101;
 mod nrf24;
 
@@ -45,11 +44,7 @@ fn get_nanos() -> u64 {
 pub type RadioSyncType = (CommandMessage, Option<oneshot::Sender<Response>>);
 
 use core::future::poll_fn;
-use std::task::{Context, Poll};
-
-fn poll_irq_pin(_cx: &mut Context<'_>) -> Poll<String> {
-	Poll::Ready("Hello, World!".into())
-}
+use std::task::Poll;
 
 // not a test anymore, it works :)
 pub async fn radio_service(

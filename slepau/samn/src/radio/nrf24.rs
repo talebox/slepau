@@ -35,7 +35,7 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, 
 	)
 	.unwrap();
 	let mut nrf24 = NRF24L01::new(ce_pin, spi).unwrap();
-	nrf24.configure().unwrap();
+	nrf24.init(&mut linux_embedded_hal::Delay).unwrap();
 	nrf24.set_rx_filter(&HQ_PIPES).unwrap();
 	
 	// Not working with more than first pipe open :(

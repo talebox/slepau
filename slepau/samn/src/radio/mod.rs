@@ -1,9 +1,10 @@
 use common::{
 	proquint::Proquint,
 	samn::{log_info, log_limbs},
+	socket::{ResourceMessage, SocketMessage},
 	utils::LockedAtomic,
 };
-use embedded_hal::digital::InputPin;
+use embedded_hal::{delay::DelayNs, digital::InputPin};
 use linux_embedded_hal::CdevPin;
 use log::info;
 use samn_common::{
@@ -18,18 +19,18 @@ use std::{
 	time::{Duration, Instant, SystemTime},
 };
 use tokio::{
-	sync::{mpsc, oneshot, watch},
-	time,
+	sync::{broadcast, mpsc, oneshot, watch},
+	time::{self, timeout},
 };
 
 use crate::db::{self, HQ_PIPES};
 mod cc1101;
 mod nrf24;
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CommandMessage {
-	for_id: Proquint<u32>,
-	command: Command,
+	pub for_id: Proquint<u32>,
+	pub command: Command,
 }
 
 fn get_nanos() -> u64 {
@@ -55,6 +56,7 @@ pub async fn radio_service(
 	db: LockedAtomic<db::DB>,
 	mut shutdown_rx: watch::Receiver<()>,
 	mut radio_rx: mpsc::Receiver<RadioSyncType>,
+	tx_resource: broadcast::Sender<ResourceMessage>,
 ) {
 	if std::env::var("RADIO").is_err() {
 		println!("Radio is off, if you want it enabled, set RADIO environment.");
@@ -70,25 +72,32 @@ pub async fn radio_service(
 	cc1101.to_rx().unwrap();
 	println!("Receiving...");
 
-	let mut command_messages = LinkedList::<(CommandMessage, Option<oneshot::Sender<Response>>)>::new();
-	let mut response_callbacks = LinkedList::<(u8, oneshot::Sender<Response>)>::new();
-
-	fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
+	async fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 		nrf24: &mut R0,
 		cc1101: &mut R1,
 		nrf24_pin: &mut CdevPin,
 		cc1101_pin: &mut CdevPin,
 	) -> nb::Result<(Payload, bool), E1> {
-		nrf24
-			.receive(nrf24_pin, None)
-			.map(|v| (v, true))
-			.or_else(|_| cc1101.receive(cc1101_pin, None).map(|v| (v, true)))
+		match timeout(Duration::from_millis(50), async {
+			nrf24
+				.receive(nrf24_pin, None)
+				.map(|v| (v, true))
+				.or_else(|_| cc1101.receive(cc1101_pin, None).map(|v| (v, false)))
+		})
+		.await
+		{
+			Ok(v) => v,
+			Err(delay) => {
+				log::error!("Receiving took too long {:?}", delay);
+				nb::Result::Err(nb::Error::WouldBlock)
+			}
+		}
 	}
 
 	fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) {
 		radio.transmit(payload).unwrap();
 	}
-	fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
+	async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 		nrf24: &mut R0,
 		cc1101: &mut R1,
 		message: &Message,
@@ -97,76 +106,83 @@ pub async fn radio_service(
 	) {
 		let packet = postcard::to_vec::<_, 32>(&message).unwrap();
 		let payload = Payload::new_with_addr(&packet, address, addr_to_rx_pipe(address));
-		if is_nrf {
-			transmit(nrf24, &payload);
-			nrf24.to_rx().unwrap();
-		} else {
-			transmit(cc1101, &payload);
-			cc1101.to_rx().unwrap();
-		}
-		println!("Sent {} bytes {:?}", packet.len(), message);
+		match timeout(Duration::from_millis(100), async {
+			if is_nrf {
+				transmit(nrf24, &payload);
+				nrf24.to_rx().unwrap();
+			} else {
+				transmit(cc1101, &payload);
+				cc1101.to_rx().unwrap();
+			}
+		})
+		.await
+		{
+			Ok(_) => {
+				info!("Sent {} bytes {:?}", packet.len(), message);
+			}
+			Err(delay) => {
+				log::error!(
+					"Sending with {} took too long {:?}, switching to rx just in case",
+					if is_nrf { "nrf24" } else { "cc1101" },
+					delay
+				);
+				if is_nrf {
+					nrf24.to_rx().unwrap();
+				} else {
+					cc1101.to_rx().unwrap();
+				}
+			}
+		};
 	}
+	let send_commands_changed = |db: &db::DB| {
+		tx_resource
+			.send(SocketMessage::from(("commands", &db.commands())).into())
+			.ok();
+	};
 
-	let mut before_receive;
+	let mut rx_start;
 
 	loop {
 		tokio::select! {
-			message = radio_rx.recv() => {
-				if let Some(message) = message{command_messages.push_back(message);}
+			Some(message) = radio_rx.recv() => {
+				db.write().unwrap().command_messages.push_back(message);
+				send_commands_changed(&db.read().unwrap());
 			}
 			// Make polling functions for IRQ pins
 			_ = poll_fn(|_| {
 				if g2.is_high().unwrap() {Poll::Ready(())} else {Poll::Pending}
-			}) => {
-				// info!("G2 trigger");
-			}
+			}) => {}
 			_ = poll_fn(|_| {
 				if irq_pin.is_low().unwrap() {
 					Poll::Ready(())
 				} else {Poll::Pending}
-			}) => {
-				// info!("IRQ trigger");
-			}
+			}) => {}
 			_ = time::sleep(Duration::from_millis(10)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
 			}
 		}
-		before_receive = Instant::now();
 
-		while let Ok((payload, is_nrf)) = receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2) {
+		rx_start = Instant::now();
+		while let Ok((payload, is_nrf)) = receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await {
+			let rx_end = Instant::now();
 			if let Ok(message) = postcard::from_bytes::<Message>(&payload.data()) {
-				let id_node = payload
+				let id_node_db = payload
 					.address()
-					.and_then(|address| db.read().unwrap().addresses.get_by_right(&address).cloned());
-				if id_node.is_none() {
-					// info!(
-					// 	"No matching id found for address {:?}, will prob issue a new one.",
-					// 	payload.address()
-					// )
-				}
+					.and_then(|address| db.read().unwrap().addresses.get_by_right(&address).copied());
 
-				match (message.clone(), id_node, payload.address()) {
+				match (message.clone(), id_node_db, payload.address()) {
 					(Message::SearchingNetwork(node_id), _, Some(payload_address)) => {
 						// Only use node_id
-						let mut db = db.write().unwrap();
-						// if !db.addresses.contains_left(&node_id) {
-						// 	let mut new_address: u16 = random();
-						// 	while db.addresses.contains_right(&new_address) {
-						// 		new_address = random();
-						// 	}
-						// 	db.addresses.insert(node_id, new_address);
-						// }
-						// let node_address = db.addresses.get_by_left(&node_id).cloned().unwrap();
-						let node_addr = db.issue_address(node_id, is_nrf);
+						let node_addr = db.write().unwrap().issue_address(node_id, is_nrf);
 						// Send message
 						let message = Message::Network(node_id, node_addr);
-						let transmit_instant = Instant::now();
-						transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf);
+						let tx_start = Instant::now();
+						transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
 						println!(
 							"Receive -> transmit {:?}, transmit delay {:?}",
-							transmit_instant - before_receive,
-							Instant::now() - transmit_instant
+							rx_start - rx_end,
+							Instant::now() - tx_start
 						);
 					}
 					(
@@ -174,78 +190,40 @@ pub async fn radio_service(
 							id: id_command,
 							response,
 						}),
-						Some(id_node),
+						Some(id_node_db),
 						Some(payload_address),
 					) => {
-						// Check if we haven't received a packet from this node in more than 25 seconds
-						// Check that the message queue for this node isn't more than 6
-						// And if so queue Info + Limbs commands
-						if db
-							.read()
-							.unwrap()
-							.heartbeats
-							.get(&id_node)
-							.map(|(last, _, _, interval)| (Instant::now() - *last).as_secs() > (*interval * 3).into())
-							.unwrap_or(true)
-							&& command_messages
-								.iter()
-								.filter(|(m, _)| m.for_id.inner() == id_node)
-								.count() < 2
-						{
-							command_messages.push_back((
-								CommandMessage {
-									for_id: id_node.into(),
-									command: Command::Info,
-								},
-								None,
-							));
-							command_messages.push_back((
-								CommandMessage {
-									for_id: id_node.into(),
-									command: Command::Limbs,
-								},
-								None,
-							));
-						}
+						let mut changed_commands = db.write().unwrap().maybe_queue_update(id_node_db);
+
 						// println!("hearbeats: {:?}\ncommand_messages: {:?}", heartbeats, command_messages);
 						// Send a command to the node if one is available
-						if let Some(i) = command_messages.iter().position(|(m, _)| m.for_id.inner() == id_node) {
-							let (message, callback) = command_messages.remove(i);
-							let command_id = db.read().unwrap().command_id;
-							// Add callback to another array with an id
-							// so we know what to call later if we receive a response
-							if let Some(callback) = callback {
-								response_callbacks.push_back((command_id, callback));
-							}
+						let command_message = db.write().unwrap().get_next_command_message(id_node_db);
+						if let Some((command_id, command_message)) = command_message {
+							changed_commands = true;
 
 							// Send command
 							let message = Message::Message(MessageData::Command {
 								id: command_id,
-								command: message.command,
+								command: command_message.command,
 							});
-							// Increment the command id
-							{
-								let mut db = db.write().unwrap();
-								db.command_id = db.command_id.wrapping_add(1);
-							}
 
-							let transmit_instant = Instant::now();
-							transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf);
+							let tx_start = Instant::now();
+							transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
 							println!(
 								"Receive -> transmit {:?}, transmit delay {:?}",
-								transmit_instant - before_receive,
-								Instant::now() - transmit_instant
+								rx_start - rx_end,
+								Instant::now() - tx_start
 							);
 						}
 
 						// Log this message
 						match &response {
 							Response::Info(info) => {
-								log_info(id_node, info);
+								log_info(id_node_db, info);
 								db.write()
 									.unwrap()
 									.heartbeats
-									.entry(id_node)
+									.entry(id_node_db)
 									.and_modify(|(_, _, _, delay)| {
 										*delay = info.heartbeat_interval;
 									})
@@ -256,13 +234,13 @@ pub async fn radio_service(
 									.iter()
 									.filter_map(|l| if let Some(l) = l { Some(l.clone()) } else { None })
 									.collect::<Vec<_>>();
-								log_limbs(id_node, &limbs);
+								log_limbs(id_node_db, &limbs);
 							}
 							Response::Heartbeat(seconds) => {
 								db.write()
 									.unwrap()
 									.heartbeats
-									.entry(id_node)
+									.entry(id_node_db)
 									.and_modify(|(_, _, seconds_, _)| {
 										*seconds_ = *seconds;
 									})
@@ -271,22 +249,18 @@ pub async fn radio_service(
 							_ => {}
 						}
 						// Call back anything that needed this command
-						if let Some(id_command) = id_command {
-							if let Some(i) = response_callbacks
-								.iter()
-								.position(|(id_command_, _)| *id_command_ == id_command)
-							{
-								let (_, callback) = response_callbacks.remove(i);
-								callback.send(response).ok();
-							}
-							// Remove all callbacks that are closed
-							response_callbacks.retain(|(_, callback)| !callback.is_closed());
+						if let Some(callback) = id_command.and_then(|id| db.write().unwrap().get_response_callback(id)) {
+							callback.send(response).ok();
+						}
+						// Update ui commands
+						if changed_commands {
+							send_commands_changed(&db.read().unwrap());
 						}
 						// Update the heartbeat
 						db.write()
 							.unwrap()
 							.heartbeats
-							.entry(id_node)
+							.entry(id_node_db)
 							.and_modify(|(instant, last, _, _)| {
 								*instant = Instant::now();
 								*last = get_nanos();
@@ -301,6 +275,24 @@ pub async fn radio_service(
 					payload.address(),
 					&message
 				);
+
+				// Notify UI that this node changed
+				tx_resource
+					.send(ResourceMessage {
+						message: SocketMessage {
+							resource: format!(
+								"nodes{}",
+								if let Some(id_node_db) = id_node_db {
+									format!("/{}", Proquint::from(id_node_db))
+								} else {
+									"".into()
+								}
+							),
+							..Default::default()
+						},
+						..Default::default()
+					})
+					.ok();
 			} else {
 				// let text = std::str::from_utf8(&bytes).unwrap();
 				println!(

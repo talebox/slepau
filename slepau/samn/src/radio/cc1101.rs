@@ -32,11 +32,8 @@ pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
 	// 		.request(LineRequestFlags::INPUT, 0, "cc1101_g0")
 	// 		.unwrap(),
 	// ).unwrap();
-    let mut delay = linux_embedded_hal::Delay;
 	let mut cc1101 = Cc1101::new(spi).unwrap();
-    cc1101.reset().unwrap();
-    delay.delay_ms(1);
-	cc1101.configure();
+	cc1101.init(&mut linux_embedded_hal::Delay).unwrap();
 	cc1101.set_rx_filter(&HQ_PIPES).unwrap();
 
 	println!("Initalized the cc1101");

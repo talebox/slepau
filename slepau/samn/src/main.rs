@@ -8,7 +8,11 @@ use axum::{
 	Extension, Router,
 };
 
-use common::{init::{init, save}, socket::ResourceMessage, utils::{log_env, SOCKET, URL}};
+use common::{
+	init::{init, save},
+	socket::ResourceMessage,
+	utils::{log_env, SOCKET, URL},
+};
 use env_logger::Env;
 use hyper::StatusCode;
 use log::{error, info};
@@ -78,10 +82,7 @@ async fn main() {
 		.route("/:key", get(ends::log_get))
 		.route("/command", post(ends::command))
 		.route("/command/wait", post(ends::command_response))
-		.route(
-			"/stream",
-			get(socket::websocket_handler),
-		)
+		.route("/stream", get(socket::websocket_handler))
 		// .layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
@@ -111,7 +112,12 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
-	let radio = tokio::spawn(radio::radio_service(db.clone(), shutdown_rx.clone(), radio_rx));
+	let radio = tokio::spawn(radio::radio_service(
+		db.clone(),
+		shutdown_rx.clone(),
+		radio_rx,
+		resource_tx.clone(),
+	));
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 
@@ -142,7 +148,7 @@ async fn main() {
 	let _server_r = join!(server, radio);
 
 	info!("Everyone's shut down!");
-	
+
 	if db.is_poisoned() {
 		error!(
 			"DB was poisoned, can't clear it because we're in (stable) channel; so saving won't work.\n\
@@ -162,5 +168,4 @@ async fn main() {
 			common::init::save(&*db.read().unwrap());
 		}
 	}
-
 }

@@ -89,38 +89,43 @@ async fn handle_socket(
 			};
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let piece = res.pop_front();
-
-			if piece == Some("views") {
+			if piece == Some("commands") {
+				return reply((&db.read().unwrap().commands()).into());
+			} else if piece == Some("views") {
 				let piece = res.pop_front();
 				if let Some(piece) = piece {
 					if piece == "nodes" {
-						// All nodes preview
-						return reply((&views::node_previews(&db.read().unwrap(), "%".into())).into());
-					}
-					// This query would be `node_id/limb_id/period?/limit?`
-					if let Ok(node_id) = Proquint::<NodeId>::from_quint(piece) {
-						if let Some(limb_id) = res.pop_front().and_then(|v| v.parse::<LimbId>().ok()) {
-							let mut query = LimbQuery {
-								node_id,
-								limb_id,
-								..Default::default()
-							};
-							if let Some(period) = res.pop_front().and_then(|v| v.parse().ok()) {
-								query.period = period;
+						if let Some(node_id) = res
+							.pop_front()
+							.and_then(|piece| Proquint::<NodeId>::from_quint(piece).ok())
+						{
+							if let Some(limb_id) = res.pop_front().and_then(|v| v.parse::<LimbId>().ok()) {
+								let mut query = LimbQuery {
+									node_id,
+									limb_id,
+									..Default::default()
+								};
+								if let Some(period) = res.pop_front().and_then(|v| v.parse().ok()) {
+									query.period = period;
+								}
+								if let Some(limit) = res.pop_front().and_then(|v| v.parse().ok()) {
+									query.limit = limit;
+								}
+								// Limb history
+								// views/nodes/<node_id>/<limb_id>/period?/limit?
+								return reply((&limb_history(query)).into());
+							} else {
+								// Node Detail
+								// views/nodes/<node_id>
+								return reply(
+									(&views::node_previews(&db.read().unwrap(), format!("{}%", node_id)).get(&node_id)).into(),
+								);
 							}
-							if let Some(limit) = res.pop_front().and_then(|v| v.parse().ok()) {
-								query.limit = limit;
-							}
-							// Wants limb history
-							return reply((&limb_history(query)).into());
+						} else {
+							// All nodes preview
+							// views/nodes
+							return reply((&views::node_previews(&db.read().unwrap(), "%".into())).into());
 						}
-					}
-				}
-			} else if piece == Some("node") {
-				if let Some(piece) = res.pop_front() {
-					if let Ok(node_id) = Proquint::<NodeId>::from_quint(piece) {
-						// Node Detail
-						return reply((&views::node_previews(&db.read().unwrap(), format!("{}%", node_id)).get(&node_id)).into());
 					}
 				}
 			}

@@ -1,12 +1,17 @@
-use std::{collections::HashMap, time::Instant};
+use std::{
+	collections::{HashMap, LinkedList},
+	time::Instant,
+};
 
 use bimap::BiMap;
-use common::proquint::Proquint;
 use samn_common::{
-	node::{NodeAddress, NodeId},
+	node::{Command, NodeAddress, NodeId, Response},
 	radio::DEFAULT_PIPE,
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
+
+use crate::radio::CommandMessage;
 
 const HQADDRESS: u16 = 0x9797u16;
 pub const HQ_PIPES: [u8; 6] = [
@@ -31,9 +36,86 @@ pub struct DB {
 	pub heartbeats: HashMap<u32, (Instant, u64, u32, u16)>,
 	#[serde(skip)]
 	pub command_id: u8,
+	#[serde(skip)]
+	pub command_messages: LinkedList<(CommandMessage, Option<oneshot::Sender<Response>>)>,
+	#[serde(skip)]
+	pub response_callbacks: LinkedList<(u8, oneshot::Sender<Response>)>,
 }
 
 impl DB {
+	pub fn maybe_queue_update(&mut self, id_node_db: u32) -> bool {
+		if self
+			.heartbeats
+			.get(&id_node_db)
+			.map(|(last, _, _, interval)| (Instant::now() - *last).as_secs() > (*interval * 3).into())
+			.unwrap_or(true)
+			&& self
+				.command_messages
+				.iter()
+				.filter(|(m, _)| m.for_id.inner() == id_node_db)
+				.count() < 2
+		{
+			self.command_messages.push_back((
+				CommandMessage {
+					for_id: id_node_db.into(),
+					command: Command::Info,
+				},
+				None,
+			));
+			self.command_messages.push_back((
+				CommandMessage {
+					for_id: id_node_db.into(),
+					command: Command::Limbs,
+				},
+				None,
+			));
+			true
+		} else {
+			false
+		}
+	}
+	pub fn get_next_command_message(&mut self, id_node_db: u32) -> Option<(u8, CommandMessage)> {
+		if let Some(i) = self
+			.command_messages
+			.iter()
+			.position(|(m, _)| m.for_id.inner() == id_node_db)
+		{
+			let (message, callback) = self.command_messages.remove(i);
+			let command_id = self.next_command_id();
+			// Add callback to another array with an id
+			// so we know what to call later if we receive a response
+			if let Some(callback) = callback {
+				self.response_callbacks.push_back((command_id, callback));
+			}
+			Some((command_id, message))
+		} else {
+			None
+		}
+	}
+	pub fn get_response_callback(&mut self, id_command: u8) -> Option<oneshot::Sender<Response>> {
+		// Remove all callbacks that are closed
+		self.response_callbacks.retain(|(_, callback)| !callback.is_closed());
+		if let Some(i) = self
+			.response_callbacks
+			.iter()
+			.position(|(id_command_, _)| *id_command_ == id_command)
+		{
+			let (_, callback) = self.response_callbacks.remove(i);
+			Some(callback)
+		} else {
+			None
+		}
+	}
+
+	pub fn next_command_id(&mut self) -> u8 {
+		let c = self.command_id;
+		self.command_id += 1;
+		c
+	}
+	pub fn commands(&self) -> Vec<&CommandMessage> {
+		self.command_messages.iter().map(|(m,_)| m).collect()
+	}
+
 	// We'll give the nrf24 all addresses > HQADDRESS
 	pub fn nrf24_addresses(&self) -> Vec<u16> {
 		self

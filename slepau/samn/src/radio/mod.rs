@@ -43,10 +43,6 @@ fn get_nanos() -> u64 {
 
 pub type RadioSyncType = (CommandMessage, Option<oneshot::Sender<Response>>);
 
-use core::future::poll_fn;
-use std::task::Poll;
-
-// not a test anymore, it works :)
 pub async fn radio_service(
 	db: LockedAtomic<db::DB>,
 	mut shutdown_rx: watch::Receiver<()>,
@@ -89,8 +85,32 @@ pub async fn radio_service(
 		}
 	}
 
-	fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) {
-		radio.transmit(payload).unwrap();
+	async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
+		
+		radio.transmit_start(payload).unwrap();
+		// This is to wait for cc1101 to switch to TX mode
+		// Because the polling only asks wether it's in Iddle
+		// If this wasn't here transmit_start would send command probe and radio
+		// could still be in Idle when we poll it.
+		tokio::time::sleep(Duration::from_micros(30)).await;
+
+		loop {
+			match radio.transmit_poll() {
+				nb::Result::Ok(v) => return v.unwrap_or(true),
+				nb::Result::Err(e) => {
+					match e {
+						nb::Error::Other(e) => {
+							log::error!("{:?}", e);
+							return false;
+						}
+						nb::Error::WouldBlock => {
+							// Keep polling
+						}
+					}
+				}
+			}
+			tokio::time::sleep(Duration::from_micros(100)).await;
+		}
 	}
 	async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 		nrf24: &mut R0,
@@ -103,17 +123,20 @@ pub async fn radio_service(
 		let payload = Payload::new_with_addr(&packet, address, addr_to_rx_pipe(address));
 		match timeout(Duration::from_millis(100), async {
 			if is_nrf {
-				transmit(nrf24, &payload);
-				nrf24.to_rx().unwrap();
+				transmit(nrf24, &payload).await
 			} else {
-				transmit(cc1101, &payload);
-				cc1101.to_rx().unwrap();
+				transmit(cc1101, &payload).await
 			}
 		})
 		.await
 		{
-			Ok(_) => {
-				info!("Sent {} bytes {:?}", packet.len(), message);
+			Ok(success) => {
+				info!(
+					"{} {} bytes {:?}",
+					if success { "Sent" } else { "Sent Failed" },
+					packet.len(),
+					message
+				);
 			}
 			Err(delay) => {
 				log::error!(
@@ -121,13 +144,13 @@ pub async fn radio_service(
 					if is_nrf { "nrf24" } else { "cc1101" },
 					delay
 				);
-				if is_nrf {
-					nrf24.to_rx().unwrap();
-				} else {
-					cc1101.to_rx().unwrap();
-				}
 			}
 		};
+		if is_nrf {
+			nrf24.to_rx().unwrap();
+		} else {
+			cc1101.to_rx().unwrap();
+		}
 	}
 	let send_commands_changed = |db: &db::DB| {
 		tx_resource
@@ -135,7 +158,18 @@ pub async fn radio_service(
 			.ok();
 	};
 
-	let mut rx_start;
+	async fn poll_pin(pin: &mut CdevPin, state: bool) {
+		loop {
+			if if state {
+				pin.is_high().unwrap()
+			} else {
+				pin.is_low().unwrap()
+			} {
+				break;
+			}
+			tokio::time::sleep(Duration::from_micros(100)).await;
+		}
+	}
 
 	loop {
 		tokio::select! {
@@ -144,21 +178,15 @@ pub async fn radio_service(
 				send_commands_changed(&db.read().unwrap());
 			}
 			// Make polling functions for IRQ pins
-			_ = poll_fn(|_| {
-				if g2.is_high().unwrap() {Poll::Ready(())} else {Poll::Pending}
-			}) => {}
-			_ = poll_fn(|_| {
-				if irq_pin.is_low().unwrap() {
-					Poll::Ready(())
-				} else {Poll::Pending}
-			}) => {}
+			_ = poll_pin(&mut g2, true) => {}
+			_ = poll_pin(&mut irq_pin, false) => {}
 			_ = time::sleep(Duration::from_millis(10)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
 			}
 		}
 
-		rx_start = Instant::now();
+		let rx_start = Instant::now();
 		while let Ok((payload, is_nrf)) = receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await {
 			let rx_end = Instant::now();
 			if let Ok(message) = postcard::from_bytes::<Message>(&payload.data()) {

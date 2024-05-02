@@ -33,12 +33,13 @@ def docker_args [name] {
 
     # If it's samn, make sure it has access to these devices and set a few env variables
 	if $name == "samn" {$args = ($args | append [
-		"-v", "samn_db:/server/samn_db", # Samn (Node Logging)
-		"--device=/dev/spidev0.0",
-		"--device=/dev/spidev0.1",
-		"--device=/dev/gpiochip0",
-		"-e", "DB_PATH_LOG=samn_db"
-		"-e", "RADIO=on"
+		-v "samn_db:/server/samn_db" # Samn (Node Logging)
+		--device=/dev/spidev0.0
+		--device=/dev/spidev0.1
+		--device=/dev/gpiochip0
+		-e DB_PATH_LOG=samn_db
+		-e RADIO=on
+		-e RUST_BACKTRACE=1
 	])}
 
     return $args
@@ -69,8 +70,8 @@ export def deploy_docker [name] {
 	do -i {docker stop $"($name)_s"}
 	do -i {docker rm $"($name)_s"}
     $args = ($args 
-        | append ["-d"]  # Deamonize
-        | append ["--restart", "unless-stopped"]
+        | append [-d]  # Deamonize
+        | append [--restart unless-stopped]
     );
 
 	docker run ...$args --name $"($name)_s" $name

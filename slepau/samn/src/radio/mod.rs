@@ -1,3 +1,4 @@
+use chrono::Local;
 use common::{
 	proquint::Proquint,
 	samn::{log_info, log_limbs},
@@ -6,7 +7,6 @@ use common::{
 };
 use embedded_hal::digital::InputPin;
 use linux_embedded_hal::CdevPin;
-use log::info;
 use samn_common::{
 	node::{Command, Message, MessageData, Response},
 	nrf24::Device,
@@ -77,7 +77,26 @@ pub async fn radio_service(
 		})
 		.await
 		{
-			Ok(v) => v,
+			Ok(v) => match v {
+				Ok((payload, is_nrf)) => {
+					if !payload.len_is_valid() {
+						log::error!(
+							"{} packet length {} isn't valid, discarding & flushing rx fifo",
+							if is_nrf { "nrf24" } else { "cc1101" },
+							payload.len()
+						);
+						if is_nrf {
+							nrf24.flush_rx().unwrap();
+						} else {
+							cc1101.flush_rx().unwrap();
+						}
+						nb::Result::Err(nb::Error::WouldBlock)
+					} else {
+						Ok((payload, is_nrf))
+					}
+				}
+				Err(e) => Err(e),
+			},
 			Err(delay) => {
 				log::error!("Receiving took too long {:?}", delay);
 				nb::Result::Err(nb::Error::WouldBlock)
@@ -86,7 +105,6 @@ pub async fn radio_service(
 	}
 
 	async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
-		
 		radio.transmit_start(payload).unwrap();
 		// This is to wait for cc1101 to switch to TX mode
 		// Because the polling only asks wether it's in Iddle
@@ -96,7 +114,7 @@ pub async fn radio_service(
 
 		loop {
 			match radio.transmit_poll() {
-				nb::Result::Ok(v) => return v.unwrap_or(true),
+				nb::Result::Ok(v) => return v,
 				nb::Result::Err(e) => {
 					match e {
 						nb::Error::Other(e) => {
@@ -131,19 +149,28 @@ pub async fn radio_service(
 		.await
 		{
 			Ok(success) => {
-				info!(
+				println!(
 					"{} {} bytes {:?}",
-					if success { "Sent" } else { "Sent Failed" },
+					if success { "Sent" } else { "Failed sending" },
 					packet.len(),
 					message
 				);
 			}
 			Err(delay) => {
 				log::error!(
-					"Sending with {} took too long {:?}, switching to rx just in case",
+					"Sending with {} took too long {:?}, flushing fifos & switching to rx just in case",
 					if is_nrf { "nrf24" } else { "cc1101" },
 					delay
 				);
+				if is_nrf {
+					nrf24.flush_tx().unwrap();
+					nrf24.flush_rx().unwrap();
+					nrf24.to_idle().unwrap();
+				} else {
+					cc1101.flush_tx().unwrap();
+					cc1101.flush_rx().unwrap();
+					cc1101.to_idle().unwrap();
+				}
 			}
 		};
 		if is_nrf {
@@ -180,7 +207,7 @@ pub async fn radio_service(
 			// Make polling functions for IRQ pins
 			_ = poll_pin(&mut g2, true) => {}
 			_ = poll_pin(&mut irq_pin, false) => {}
-			_ = time::sleep(Duration::from_millis(10)) => {}
+			_ = time::sleep(Duration::from_millis(100)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
 			}
@@ -202,11 +229,11 @@ pub async fn radio_service(
 						let message = Message::Network(node_id, node_addr);
 						let tx_start = Instant::now();
 						transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
-						println!(
-							"Receive -> transmit {:?}, transmit delay {:?}",
-							rx_start - rx_end,
-							Instant::now() - tx_start
-						);
+						// println!(
+						// 	"Receive -> transmit {:?}, transmit delay {:?}",
+						// 	rx_start - rx_end,
+						// 	Instant::now() - tx_start
+						// );
 					}
 					(
 						Message::Message(MessageData::Response {
@@ -232,11 +259,11 @@ pub async fn radio_service(
 
 							let tx_start = Instant::now();
 							transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
-							println!(
-								"Receive -> transmit {:?}, transmit delay {:?}",
-								rx_start - rx_end,
-								Instant::now() - tx_start
-							);
+							// println!(
+							// 	"Receive -> transmit {:?}, transmit delay {:?}",
+							// 	rx_start - rx_end,
+							// 	Instant::now() - tx_start
+							// );
 						}
 
 						// Log this message
@@ -293,7 +320,8 @@ pub async fn radio_service(
 					_ => {}
 				}
 				println!(
-					"Payload len {}, addr {:?}, {:?}",
+					"{} Payload len {}, addr {:?}, {:?}",
+					Local::now().format("%a %b %e %T"),
 					payload.len(),
 					payload.address(),
 					&message

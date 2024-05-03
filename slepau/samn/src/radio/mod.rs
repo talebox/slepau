@@ -6,11 +6,9 @@ use common::{
 	utils::LockedAtomic,
 };
 use embedded_hal::digital::InputPin;
-use linux_embedded_hal::CdevPin;
+use linux_embedded_hal::{CdevPin, SpidevDevice};
 use samn_common::{
-	node::{Command, Message, MessageData, Response},
-	nrf24::Device,
-	radio::*,
+	cc1101::{Cc1101, MachineState}, node::{Command, Message, MessageData, Response}, nrf24::Device, radio::*
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -62,6 +60,8 @@ pub async fn radio_service(
 
 	nrf24.to_rx().unwrap();
 	cc1101.to_rx().unwrap();
+	// We set this here because calibration is performed from Iddle to RX / TX
+	let mut last_calibration = Instant::now();
 	println!("Receiving...");
 
 	async fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
@@ -193,22 +193,38 @@ pub async fn radio_service(
 			} else {
 				pin.is_low().unwrap()
 			} {
+				
 				break;
 			}
 			tokio::time::sleep(Duration::from_micros(100)).await;
 		}
 	}
+	
+	/// Checks radio state, flushes buffers and performs calibration
+	async fn cc1101_checkpoint(cc1101:&mut Cc1101<SpidevDevice>) {
+		let marc_state = cc1101.get_marc_state().unwrap();
+		if marc_state != MachineState::RX.value() {
+			log::error!("cc1101 not in rx state, instead it's in: {marc_state}");
+			cc1101.flush_rx().unwrap();
+			cc1101.flush_tx().unwrap();
+		}
+		cc1101.to_idle().unwrap();
+		cc1101.to_rx().unwrap();
+	}
+	// Amount of times checkpoint info log will be printed
+	let mut cc1101_checkpoint_n = 30;
 
 	loop {
+		let mut pin_awake = false;
 		tokio::select! {
 			Some(message) = radio_rx.recv() => {
 				db.write().unwrap().command_messages.push_back(message);
 				send_commands_changed(&db.read().unwrap());
 			}
 			// Make polling functions for IRQ pins
-			_ = poll_pin(&mut g2, true) => {}
-			_ = poll_pin(&mut irq_pin, false) => {}
-			_ = time::sleep(Duration::from_millis(100)) => {}
+			_ = poll_pin(&mut g2, true) => {pin_awake=true;}
+			_ = poll_pin(&mut irq_pin, false) => {pin_awake=true;}
+			_ = time::sleep(Duration::from_secs(5)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
 			}
@@ -321,9 +337,10 @@ pub async fn radio_service(
 					_ => {}
 				}
 				println!(
-					"{} Payload len {}, addr {:?}, {:?}",
+					"{} Payload len {}, pin {}, addr {:?}, {:?}",
 					Local::now().format("%a %b %e %T"),
 					payload.len(),
+					pin_awake,
 					payload.address(),
 					&message
 				);
@@ -354,8 +371,18 @@ pub async fn radio_service(
 				);
 			}
 		}
+
+		if (Instant::now() - last_calibration).as_secs() > 30 {
+			last_calibration = Instant::now();
+			cc1101_checkpoint(&mut cc1101).await;
+			if cc1101_checkpoint_n > 0 {
+				cc1101_checkpoint_n -= 1;
+				println!("cc1101 checkpoint took {:?}, will log this {cc1101_checkpoint_n} more times.", Instant::now() - last_calibration);
+			}
+			
+		}
 	}
-	nrf24.ce_disable();
+	nrf24.to_idle().unwrap();
 	cc1101.to_idle().unwrap();
 	println!("radios shut down.");
 }

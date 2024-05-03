@@ -6,9 +6,9 @@ use std::{
 use common::{proquint::Proquint, samn::decode_binary_base64};
 use samn_common::node::{Limb, LimbId, LimbType, NodeId, NodeInfo};
 use serde::{Deserialize, Serialize};
-use sonnerie::{Wildcard};
+use sonnerie::Wildcard;
 
-use crate::db::DB;
+use crate::db::{NodeUiData, DB};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LimbPreview {
@@ -20,6 +20,7 @@ pub struct LimbPreview {
 
 #[derive(Serialize, Default, Deserialize, Debug)]
 pub struct NodePreview {
+	pub ui: NodeUiData,
 	pub id: Proquint<NodeId>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub info: Option<NodeInfo>,
@@ -78,7 +79,8 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePrev
 						)]),
 						last,
 						uptime,
-						..Default::default()
+						info: Default::default(),
+						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default()
 					});
 			} else {
 				
@@ -97,7 +99,8 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePrev
 						info: Some(info),
 						last,
 						uptime,
-						..Default::default()
+						limbs: Default::default(),
+						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default()
 					});
 			}
 			return acc;

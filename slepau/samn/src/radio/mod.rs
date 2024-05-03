@@ -25,6 +25,7 @@ use tokio::{
 use crate::db::{self};
 mod cc1101;
 mod nrf24;
+mod view;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandMessage {

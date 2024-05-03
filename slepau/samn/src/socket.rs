@@ -22,7 +22,7 @@ use tokio::{sync::watch, time};
 use auth::UserClaims;
 
 use crate::{
-	db::DB,
+	db::{NodeUiData, DB},
 	views::{self, limb_history, LimbQuery},
 };
 
@@ -89,8 +89,22 @@ async fn handle_socket(
 			};
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let piece = res.pop_front();
+
 			if piece == Some("commands") {
 				return reply((&db.read().unwrap().commands()).into());
+			} else if piece == Some("edit") {
+				if let Some(node_id) = res
+					.pop_front()
+					.and_then(|piece| Proquint::<NodeId>::from_quint(piece).ok())
+				{
+					if let Some(ui_data) = m
+						.value
+						.to_owned()
+						.and_then(|v| serde_json::from_str::<NodeUiData>(&v).ok())
+					{
+						db.write().unwrap().set_ui_data(node_id.inner(), ui_data)
+					}
+				}
 			} else if piece == Some("views") {
 				let piece = res.pop_front();
 				if let Some(piece) = piece {

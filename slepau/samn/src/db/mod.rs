@@ -23,16 +23,23 @@ pub const HQ_PIPES: [u8; 6] = [
 	DEFAULT_PIPE + 5,
 ];
 
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct NodeUiData {
+	pub name: String,
+}
+
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct DB {
 	/// Id <> Address
 	pub addresses: BiMap<NodeId, NodeAddress>,
-	#[serde(skip)]
+	pub node_ui_data: HashMap<NodeId, NodeUiData>,
+	
 	/// Instant (used to measure now - last)
 	/// Last Message (u64)
 	/// Uptime (u32)
 	/// Heartbeat delay time in secs (u16)
+	#[serde(skip)]
 	pub heartbeats: HashMap<u32, (Instant, u64, u32, u16)>,
 	#[serde(skip)]
 	pub command_id: u8,
@@ -40,6 +47,7 @@ pub struct DB {
 	pub command_messages: LinkedList<(CommandMessage, Option<oneshot::Sender<Response>>)>,
 	#[serde(skip)]
 	pub response_callbacks: LinkedList<(u8, oneshot::Sender<Response>)>,
+
 }
 
 impl DB {
@@ -109,7 +117,7 @@ impl DB {
 
 	pub fn next_command_id(&mut self) -> u8 {
 		let c = self.command_id;
-		self.command_id += 1;
+		self.command_id = self.command_id.wrapping_add(1);
 		c
 	}
 	pub fn commands(&self) -> Vec<&CommandMessage> {
@@ -160,6 +168,9 @@ impl DB {
 
 			new_address
 		}
+	}
+	pub fn set_ui_data(&mut self, node_id: NodeId, ui_data: NodeUiData) {
+		self.node_ui_data.insert(node_id, ui_data);
 	}
 }
 

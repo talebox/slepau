@@ -5,10 +5,10 @@ use start.nu test
 
 export def deploy_sites [host = 'anty.dev'] {
 	print $"Deploying static sites to ($host)."
-	rsync -av $"out/web/" $"($host):/srv/http/tale_web/"
+	rsync -av $"out/web/" $"root@($host):/srv/http/tale_web/"
 	
 	print $"Deploying standalone compressed builds to ($host)."
-	rsync -av out/*.tar.xz $"($host):/srv/http/tale_web/talebox/"
+	rsync -av out/*.tar.xz $"root@($host):/srv/http/tale_web/talebox/"
 }
 
 export def deploy_nginx [host = 'anty.dev'] {

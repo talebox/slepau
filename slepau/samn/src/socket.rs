@@ -17,6 +17,7 @@ use common::{
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use samn_common::node::{LimbId, NodeId};
+use ::time::Instant;
 use tokio::{sync::watch, time};
 
 use auth::UserClaims;
@@ -68,6 +69,7 @@ async fn handle_socket(
 				return None;
 			}
 			let m = m.unwrap();
+			let query_start_time = Instant::now();
 			// let page_query = m.value.as_ref().and_then(|v| serde_json::from_str::<PageQuery>(v.as_str()).ok()).unwrap_or_default();
 			let reply = |mut v: SocketMessage| {
 				v.resource = m.resource.to_owned();
@@ -85,7 +87,11 @@ async fn handle_socket(
 						};
 					}
 				}
-				Some(Message::Text(serde_json::to_string(&v).unwrap()))
+				let result = Some(Message::Text(serde_json::to_string(&v).unwrap()));
+
+				let query_end_time = Instant::now();
+				info!("{}ms for {}", (query_end_time - query_start_time).whole_milliseconds(), v.resource);
+				result
 			};
 			let mut res = m.resource.split('/').collect::<VecDeque<_>>();
 			let piece = res.pop_front();

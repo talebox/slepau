@@ -56,7 +56,7 @@ export def run_samn [] {
 	load_env_dev
 	open "config/samn/dev.toml" | load-env
 	
-	cargo run --bin samn
+	cargo run --release --bin samn
 }
 export def build_media [] {
 	load_env_dev

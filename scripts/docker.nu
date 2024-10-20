@@ -1,6 +1,6 @@
 def get_context [] {
 	let context = (docker context show)
-	if $context not-in ['rpi', 'anty'] {
+	if $context not-in ['rpi', 'anty', 'pi_local'] {
 		error make {msg: $"Context '($context)' isn't rpi or anty, make sure it's right"}
 	} else  {
         print $"Using '($context)' context."    

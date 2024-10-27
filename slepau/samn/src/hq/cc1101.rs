@@ -3,11 +3,12 @@ use linux_embedded_hal::{
 	spidev::SpidevOptions,
 	CdevPin, SpidevDevice,
 };
+use rppal::gpio::InputPin;
 use samn_common::{cc1101::Cc1101, radio::Radio};
 
 use crate::db::HQ_PIPES;
 
-pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
+pub fn init() -> (Cc1101<SpidevDevice>, InputPin) {
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.1").unwrap();
 	spi
 		.0
@@ -17,14 +18,8 @@ pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
 		})
 		.unwrap();
 
-	let g2 = linux_embedded_hal::CdevPin::new(
-		chip
-			.get_line(6)
-			.unwrap()
-			.request(LineRequestFlags::INPUT, 0, "cc1101_g2")
-			.unwrap(),
-	).unwrap();
-    // let g0 = linux_embedded_hal::CdevPin::new(
+	let g2 = rppal::gpio::Gpio::new().unwrap().get(23).unwrap().into_input();
+  // let g0 = linux_embedded_hal::CdevPin::new(
 	// 	chip
 	// 		.get_line(12)
 	// 		.unwrap()

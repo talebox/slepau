@@ -5,24 +5,31 @@ use common::{
 	socket::{ResourceMessage, SocketMessage},
 	utils::LockedAtomic,
 };
-use embedded_hal::digital::InputPin;
-use linux_embedded_hal::{CdevPin, SpidevDevice};
+use leds::LEDSyncType;
+// use embedded_hal::digital::InputPin;
+use linux_embedded_hal::{serialport::new, CdevPin, SpidevDevice};
+use log::info;
+use rppal::gpio::{Gpio, InputPin, Level};
 use samn_common::{
-	cc1101::{Cc1101, MachineState}, node::{Command, Message, MessageData, Response}, nrf24::Device, radio::*
+	cc1101::{Cc1101, MachineState},
+	node::{Command, Message, MessageData, Response},
+	nrf24::Device,
+	radio::*,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-	fmt::Debug,
-	time::{Duration, Instant, SystemTime},
+	fmt::Debug, thread, time::{Duration, Instant, SystemTime}
 };
 use tokio::{
 	sync::{broadcast, mpsc, oneshot, watch},
-	time::{self, timeout},
+	time::{self, timeout, MissedTickBehavior},
 };
 
 use crate::db::{self};
 mod cc1101;
+mod leds;
 mod nrf24;
+// mod leds2;
 mod view;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -42,21 +49,28 @@ fn get_nanos() -> u64 {
 
 pub type RadioSyncType = (CommandMessage, Option<oneshot::Sender<Response>>);
 
-pub async fn radio_service(
+pub async fn hq_service(
 	db: LockedAtomic<db::DB>,
 	mut shutdown_rx: watch::Receiver<()>,
 	mut radio_rx: mpsc::Receiver<RadioSyncType>,
 	tx_resource: broadcast::Sender<ResourceMessage>,
 ) {
-	if std::env::var("RADIO").is_err() {
-		println!("Radio is off, if you want it enabled, set RADIO environment.");
+	if std::env::var("HQ_MODULE").is_err() {
+		println!("HQ Module is off, if you want it enabled, set HQ_MODULE environment.");
 		return;
 	}
 
-	let mut chip = linux_embedded_hal::gpio_cdev::Chip::new("/dev/gpiochip0").unwrap();
+	let (mut leds_tx,leds_rx) = mpsc::channel::<LEDSyncType>(3);
 
-	let (mut nrf24, mut irq_pin) = nrf24::init(&mut chip);
-	let (mut cc1101, mut g2) = cc1101::init(&mut chip);
+	let shutdown_rx_ = shutdown_rx.clone();
+	let led_thread = thread::spawn(move || {
+		leds::handle_leds(shutdown_rx_, leds_rx);
+	});
+	
+
+	// let mut chip = linux_embedded_hal::gpio_cdev::Chip::new("/dev/gpiochip0").unwrap();
+	let (mut nrf24, mut irq_pin) = nrf24::init();
+	let (mut cc1101, mut g2) = cc1101::init();
 
 	nrf24.to_rx().unwrap();
 	cc1101.to_rx().unwrap();
@@ -67,8 +81,8 @@ pub async fn radio_service(
 	async fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 		nrf24: &mut R0,
 		cc1101: &mut R1,
-		nrf24_pin: &mut CdevPin,
-		cc1101_pin: &mut CdevPin,
+		nrf24_pin: &mut InputPin,
+		cc1101_pin: &mut InputPin,
 	) -> nb::Result<(Payload, bool), E1> {
 		match timeout(Duration::from_millis(50), async {
 			nrf24
@@ -186,22 +200,17 @@ pub async fn radio_service(
 			.ok();
 	};
 
-	async fn poll_pin(pin: &mut CdevPin, state: bool) {
+	async fn poll_pin(pin: &mut InputPin, state: Level) {
 		loop {
-			if if state {
-				pin.is_high().unwrap()
-			} else {
-				pin.is_low().unwrap()
-			} {
-				
+			if pin.read() == state {
 				break;
 			}
 			tokio::time::sleep(Duration::from_micros(100)).await;
 		}
 	}
-	
+
 	/// Checks radio state, flushes buffers and performs calibration
-	async fn cc1101_checkpoint(cc1101:&mut Cc1101<SpidevDevice>) {
+	async fn cc1101_checkpoint(cc1101: &mut Cc1101<SpidevDevice>) {
 		let marc_state = cc1101.get_marc_state().unwrap();
 		if marc_state != MachineState::RX.value() {
 			log::error!("cc1101 not in rx state, instead it's in: {marc_state}");
@@ -222,8 +231,8 @@ pub async fn radio_service(
 				send_commands_changed(&db.read().unwrap());
 			}
 			// Make polling functions for IRQ pins
-			_ = poll_pin(&mut g2, true) => {pin_awake=true;}
-			_ = poll_pin(&mut irq_pin, false) => {pin_awake=true;}
+			_ = poll_pin(&mut g2,  Level::High) => {pin_awake=true;}
+			_ = poll_pin(&mut irq_pin, Level::Low) => {pin_awake=true;}
 			_ = time::sleep(Duration::from_secs(5)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
@@ -377,12 +386,16 @@ pub async fn radio_service(
 			cc1101_checkpoint(&mut cc1101).await;
 			if cc1101_checkpoint_n > 0 {
 				cc1101_checkpoint_n -= 1;
-				println!("cc1101 checkpoint took {:?}, will log this {cc1101_checkpoint_n} more times.", Instant::now() - last_calibration);
+				println!(
+					"cc1101 checkpoint took {:?}, will log this {cc1101_checkpoint_n} more times.",
+					Instant::now() - last_calibration
+				);
 			}
-			
 		}
 	}
 	nrf24.to_idle().unwrap();
 	cc1101.to_idle().unwrap();
 	println!("radios shut down.");
+
+	led_thread.join().unwrap();
 }

@@ -1,6 +1,6 @@
 def get_context [] {
 	let context = (docker context show)
-	if $context not-in ['rpi', 'anty', 'pi_local'] {
+	if $context not-in ['rpi', 'anty', 'pi_local', 'pi_zero'] {
 		error make {msg: $"Context '($context)' isn't rpi or anty, make sure it's right"}
 	} else  {
         print $"Using '($context)' context."    
@@ -37,8 +37,10 @@ def docker_args [name] {
 		--device=/dev/spidev0.0
 		--device=/dev/spidev0.1
 		--device=/dev/gpiochip0
+		--device=/dev/gpiomem
+		--cap-add=SYS_NICE
 		-e DB_PATH_LOG=samn_db
-		-e RADIO=on
+		-e HQ_MODULE=on
 		-e RUST_BACKTRACE=1
 	])}
 

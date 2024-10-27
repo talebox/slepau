@@ -3,7 +3,7 @@ use common::{sonnerie::{db, record_json}, utils::DbError};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-	radio::{CommandMessage, RadioSyncType},
+	hq::{CommandMessage, RadioSyncType},
 };
 
 pub async fn log_get(Path(key): Path<String>) -> Result<impl IntoResponse, DbError> {

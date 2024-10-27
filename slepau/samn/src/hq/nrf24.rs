@@ -1,14 +1,27 @@
+use std::convert::Infallible;
+
 use embedded_hal::spi::SpiDevice;
 use linux_embedded_hal::{
 	gpio_cdev::{Chip, LineRequestFlags},
 	spidev::SpidevOptions,
 	CdevPin, CdevPinError, SpidevDevice,
 };
+use rppal::gpio::{InputPin, OutputPin};
 use samn_common::{nrf24::NRF24L01, radio::Radio};
 
 use crate::db::HQ_PIPES;
 
-pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, CdevPin) {
+
+
+pub fn init() -> (NRF24L01<Infallible, OutputPin, SpidevDevice>, InputPin) {
+
+	// let mut spi = rppal::spi::Spi::new(
+	// 	rppal::spi::Bus::Spi0,
+	// 	rppal::spi::SlaveSelect::Ss0,
+	// 	8_000_000,
+	// 	rppal::spi::Mode::Mode0,
+	// )
+	// .unwrap();
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.0").unwrap();
 	spi
 		.0
@@ -18,22 +31,24 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, 
 		})
 		.unwrap();
 
-	let ce_pin = linux_embedded_hal::CdevPin::new(
-		chip
-			.get_line(25)
-			.unwrap()
-			.request(LineRequestFlags::OUTPUT, 0, "nrf24_ce")
-			.unwrap(),
-	)
-	.unwrap();
-	let irq_pin = linux_embedded_hal::CdevPin::new(
-		chip
-			.get_line(24)
-			.unwrap()
-			.request(LineRequestFlags::INPUT, 0, "nrf24_irq")
-			.unwrap(),
-	)
-	.unwrap();
+	let ce_pin = rppal::gpio::Gpio::new().unwrap().get(25).unwrap().into_output();
+	// let ce_pin = linux_embedded_hal::CdevPin::new(
+	// 	chip
+	// 		.get_line(25)
+	// 		.unwrap()
+	// 		.request(LineRequestFlags::OUTPUT, 0, "nrf24_ce")
+	// 		.unwrap(),
+	// )
+	// .unwrap();
+	let irq_pin = rppal::gpio::Gpio::new().unwrap().get(24).unwrap().into_input();
+	// let irq_pin = linux_embedded_hal::CdevPin::new(
+	// 	chip
+	// 		.get_line(24)
+	// 		.unwrap()
+	// 		.request(LineRequestFlags::INPUT, 0, "nrf24_irq")
+	// 		.unwrap(),
+	// )
+	// .unwrap();
 	let mut nrf24 = NRF24L01::new(ce_pin, spi).unwrap();
 	nrf24.init(&mut linux_embedded_hal::Delay).unwrap();
 	nrf24.set_rx_filter(&HQ_PIPES).unwrap();

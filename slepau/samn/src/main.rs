@@ -1,5 +1,7 @@
 #![feature(linked_list_remove)]
 #![feature(linked_list_retain)]
+#![feature(asm)]
+
 use auth::validate::KPR;
 use axum::{
 	error_handling::HandleErrorLayer,
@@ -18,7 +20,7 @@ use log::{error, info};
 
 mod db;
 mod ends;
-mod radio;
+mod hq;
 mod socket;
 mod views;
 
@@ -109,7 +111,7 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
-	let radio = tokio::spawn(radio::radio_service(
+	let radio = tokio::spawn(hq::hq_service(
 		db.clone(),
 		shutdown_rx.clone(),
 		radio_rx,

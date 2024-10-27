@@ -11,7 +11,7 @@ use samn_common::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::radio::CommandMessage;
+use crate::hq::CommandMessage;
 
 const HQADDRESS: u16 = 0x9797u16;
 pub const HQ_PIPES: [u8; 6] = [

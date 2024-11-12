@@ -8,9 +8,7 @@ use axum::{
 };
 
 use common::{
-	init::{init},
-	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL},
+	init::init, socket::ResourceMessage, sonnerie::compact_service, utils::{log_env, SOCKET, URL}
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -108,6 +106,7 @@ async fn main() {
 			}
 		});
 
+	let compact = tokio::spawn(compact_service(shutdown_rx.clone()));
 	let server = tokio::spawn(server);
 	let radio = tokio::spawn(radio::radio_service(
 		db.clone(),
@@ -115,6 +114,7 @@ async fn main() {
 		radio_rx,
 		resource_tx.clone(),
 	));
+	
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 
@@ -142,7 +142,7 @@ async fn main() {
 	shutdown_tx.send(()).unwrap();
 
 	info!("Waiting for everyone to shutdown.");
-	let _server_r = join!(server, radio);
+	let _server_r = join!(server, radio, compact);
 
 	info!("Everyone's shut down!");
 

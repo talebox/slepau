@@ -1,8 +1,9 @@
-TITLE = "^# +([^\\n\\-=>]*\\w+[^\\n\\-=>]*)(?:[-=]?> *((?:,? *(?:_?[aioubdfghjklmnprstvz]{5})+)+))? *\\n"
-ACCESS = "^(?:share|access): *((?: *,? *[a-z0-9_]{3,10} +(?:r|w|a|read|write|admin))+) *$"
-PROQUINT = "(?:_?[aioubdfghjklmnprstvz]{5})+"
-USERNAME = "^[a-z0-9_]{3,10}$"
+TITLE = '^# +([^\n\-=>]*\w+[^\n\-=>]*)(?:[-=]?> *((?:,? *(?:_?[aioubdfghjklmnprstvz]{5})+)+))? *\n'
+ACCESS = '^(?:share|access): *((?: *,? *[a-z0-9_]{3,10} +(?:r|w|a|read|write|admin))+) *$'
+PROQUINT = '(?:_?[aioubdfghjklmnprstvz]{5})+'
+USERNAME = '^[a-z0-9_]{3,10}$'
 USERNAME_HUMAN = "Lowercase, underscore, and digits only, min 3, max 10"
-PASSWORD = "^.{6,64}$"
+PASSWORD = '^.{6,64}$'
 PASSWORD_HUMAN = "Minimum 6, max 64"
-PROPERTY = "^([a-z0-9_]+): (.*)$"
+PROPERTY = '^([a-z0-9_]+): (.*)$'
+GRAPHVIZ = '^``` {0,2}(?:dot|gv) {0,2}\n([\s\S]*?)```$'

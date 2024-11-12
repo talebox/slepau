@@ -23,5 +23,5 @@ argon2 = "0.4.1"
 pasetors = "0.6.3"
 rand.workspace = true
 futures-util = "0.3.26"
-sonnerie = "0.8.6"
+sonnerie.workspace = true
 chrono = "0.4.28"

@@ -18,7 +18,7 @@ pub fn decode_binary_base64<'a,T:Deserialize<'a>>(v: &'a mut [u8]) -> T {
 	postcard::from_bytes(v).unwrap()
 } 
 
-/// Logs limbs as <id>_01
+/// Logs limbs as \<id\>_01
 pub fn log_limbs(id: u32, limbs: &[Limb]) {
 	let mut t = transaction();
 	for limb in limbs {

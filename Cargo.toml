@@ -1,5 +1,5 @@
 [workspace]
-members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/samn", "slepau/vreji","sonnerie"]
+members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/samn", "slepau/vreji"]
 resolver = "2"
 
 [workspace.package]
@@ -30,4 +30,4 @@ proquint = { git = "https://github.com/rubend056/proquint-rs" }
 rand = "0.8.5"
 diff = "0.1.13"
 axum-client-ip = "0.4"
-
+sonnerie = {git = "https://github.com/rubend056/sonnerie.git",branch = "master"}

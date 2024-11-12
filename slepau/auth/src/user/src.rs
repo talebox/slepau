@@ -7,6 +7,7 @@ use common::utils::{DbError, REGEX_PASSWORD, REGEX_PASSWORD_HUMAN, REGEX_USERNAM
 
 use super::{blacklist::BLACKLIST, User};
 
+#[allow(dead_code)]
 impl User {
 	pub fn verify_login(&self, pass: &str) -> Result<(), DbError> {
 		if !self.active {

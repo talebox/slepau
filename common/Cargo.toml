@@ -24,7 +24,7 @@ env_logger.workspace = true
 samn-common = {path = "../samn-common", features = ["sonnerie"]}
 regex = "1.7.1"
 psl = "2.1.3"
-sonnerie = "0.8.6"
+sonnerie.workspace = true
 chrono = "0.4.28"
 postcard = "1.0.8"
 base64 = "0.22.0"

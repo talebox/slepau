@@ -20,6 +20,7 @@ pub struct UserView {
 	active: bool,
 	claims: BTreeMap<String, String>,
 }
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct UserSet {
 	pub active: Option<bool>,

@@ -75,7 +75,7 @@ impl<'a> FromIterator<&'a LockedWeak<Media>> for MediaStats {
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct VersionInfo {
-	/// How long (in seconds)
+	/// How long (in seconds) it took to process this version
 	time: f32,
 	/// The metadata of output.
 	meta: meta::FileMeta,

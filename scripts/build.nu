@@ -85,7 +85,7 @@ export def build_server [bin_dir:string = "bin", options = []] {
 	
 	print $"Building binaries to out/($bin_dir)."
 	# Build server
-	['auth','vreji', 'chunk', 'media', 'samn', 'gen_key', 'sonnerie'] | each {|a|
+	['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
 		if $a not-in ["talebox"]  {
 			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $a
 		}

@@ -1,23 +1,15 @@
 use auth::validate::KPR;
-use axum::{
-	error_handling::HandleErrorLayer,
-	routing::{get},
-	Extension, Router,
-};
+use axum::{error_handling::HandleErrorLayer, routing::get, Extension, Router};
 
 use common::{
+	sonnerie::compact_service,
 	utils::{log_env, SOCKET, URL},
 };
 use env_logger::Env;
 use hyper::StatusCode;
 use log::{error, info};
 
-
-
-use std::{
-	net::SocketAddr,
-	time::Duration,
-};
+use std::{net::SocketAddr, time::Duration};
 
 #[cfg(not(target_family = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
@@ -80,10 +72,11 @@ async fn main() {
 	info!("Public url is on '{}'.", URL.as_str());
 
 	// Create server
+	let mut _shutdown_rx = shutdown_rx.clone();
 	let server = axum::Server::bind(&SOCKET)
 		.serve(app.into_make_service_with_connect_info::<SocketAddr>())
 		.with_graceful_shutdown(async move {
-			if let Err(err) = shutdown_rx.changed().await {
+			if let Err(err) = _shutdown_rx.changed().await {
 				error!("Error receiving shutdown {err:?}");
 			} else {
 				info!("Http server shutting down gracefully");
@@ -91,6 +84,7 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
+	let compact = tokio::spawn(compact_service(shutdown_rx.clone()));
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 
@@ -118,7 +112,7 @@ async fn main() {
 	shutdown_tx.send(()).unwrap();
 
 	info!("Waiting for everyone to shutdown.");
-	let _server_r = join!(server);
+	let _server_r = join!(server, compact);
 
 	info!("Everyone's shut down!");
 }

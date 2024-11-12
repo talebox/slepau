@@ -1,6 +1,11 @@
+use std::time::Duration;
+
 use lazy_static::lazy_static;
+use log::info;
 use serde_json::json;
 use sonnerie::{CreateTx, Record};
+
+use crate::utils::SECS_IN_HOUR;
 
 
 lazy_static! {
@@ -46,4 +51,25 @@ pub fn record_json(r: Record) -> serde_json::Value {
 		});
 	}
 	json!(v)
+}
+
+pub async fn compact_service(
+	mut shutdown_rx: tokio::sync::watch::Receiver<()>,
+) {
+	
+	loop {
+		match sonnerie::compact(DB_PATH_LOG.as_path(), true) {
+			Ok(v) => info!("Compacted {} records.", v),
+			Err(err) => log::error!("Couldn't compact {err:?}")
+		}
+		let wait = Duration::from_secs( SECS_IN_HOUR * 2);
+		info!("Next compaction in {}h", wait.as_secs() / SECS_IN_HOUR);
+		tokio::select! {
+			_ = tokio::time::sleep(wait) => {
+			}
+			_ = shutdown_rx.changed() => {
+				break;
+			}
+		}
+	}
 }

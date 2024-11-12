@@ -5,13 +5,13 @@ use std::{
 
 use bimap::BiMap;
 use samn_common::{
-	node::{Command, NodeAddress, NodeId, Response},
+	node::{Board, Command, Limb, LimbId, LimbType, NodeAddress, NodeId, NodeInfo, Response},
 	radio::DEFAULT_PIPE,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::radio::CommandMessage;
+use crate::radio::{CommandMessage, RadioSyncType};
 
 const HQADDRESS: u16 = 0x9797u16;
 pub const HQ_PIPES: [u8; 6] = [
@@ -34,34 +34,59 @@ pub struct DB {
 	/// Id <> Address
 	pub addresses: BiMap<NodeId, NodeAddress>,
 	pub node_ui_data: HashMap<NodeId, NodeUiData>,
-	
-	/// Instant (used to measure now - last)
-	/// Last Message (u64)
-	/// Uptime (u32)
-	/// Heartbeat delay time in secs (u16)
+
+	/// Instant (used to measure now - last), a fast way of checking elapsed time
+	/// Last Message (u64) unix system time in nanoseconds
+	///
+	/// Uptime (u32) uptime of the node in seconds
+	/// NodeInfo, heartbeat_interval & board version
 	#[serde(skip)]
-	pub heartbeats: HashMap<u32, (Instant, u64, u32, u16)>,
+	pub radio_info: HashMap<NodeId, (Instant, u64, u32, Option<NodeInfo>)>,
+	/// This is a cache for limbs, node_previews is the only allowed to create a new record.
+	/// A zero length means for node_previews that it should recurse the logs and create the records.
+	/// 
+	/// Upon a radio message if a record exists it is updated with limbs.
+	/// 
+	/// This allows node_preview to not have to recurse the logs every time, making pulling the latest data
+	/// incredibly fast.
+	#[serde(skip)]
+	pub node_cache: HashMap<NodeId, (Option<NodeInfo>, Vec<Limb>)>,
+
 	#[serde(skip)]
 	pub command_id: u8,
+
+	// Normal command messages get sent out after a message from a node
 	#[serde(skip)]
 	pub command_messages: LinkedList<(CommandMessage, Option<oneshot::Sender<Response>>)>,
+
+	/// Instant command messages get sent out immediately
+	#[serde(skip)]
+	pub command_messages_instant: LinkedList<(CommandMessage, Option<oneshot::Sender<Response>>)>,
+
 	#[serde(skip)]
 	pub response_callbacks: LinkedList<(u8, oneshot::Sender<Response>)>,
-
 }
 
 impl DB {
 	pub fn maybe_queue_update(&mut self, id_node_db: u32) -> bool {
+		// Queue an update if node hasn't reported for > 3 * heartbeat_interval.
+		// and there's less than 2 messages queued.
 		if self
-			.heartbeats
+			.radio_info
 			.get(&id_node_db)
-			.map(|(last, _, _, interval)| (Instant::now() - *last).as_secs() > (*interval * 3).into())
+			.map(|(last, _, _, info)| {
+				if let Some(info) = info {
+					(Instant::now() - *last).as_secs() > (info.heartbeat_interval * 3).into()
+				} else {
+					true
+				}
+			})
 			.unwrap_or(true)
 			&& self
 				.command_messages
 				.iter()
 				.filter(|(m, _)| m.for_id.inner() == id_node_db)
-				.count() < 2
+				.count() == 0
 		{
 			self.command_messages.push_back((
 				CommandMessage {
@@ -100,6 +125,26 @@ impl DB {
 			None
 		}
 	}
+	pub fn get_next_instant_command_message(&mut self) -> Option<(u8, NodeAddress, CommandMessage)> {
+		// First we figure out command, then get its node address
+		self
+			.command_messages_instant
+			.pop_front()
+			.and_then(|(message, callback)| {
+				self
+					.addresses
+					.get_by_left(&message.for_id.inner())
+					.map(|node_address| (message, callback, *node_address))
+			})
+			.map(|(message, callback, node_address)| {
+				// Then we process the command and send all we need back
+				let command_id = self.next_command_id();
+				if let Some(callback) = callback {
+					self.response_callbacks.push_back((command_id, callback));
+				}
+				(command_id, node_address, message)
+			})
+	}
 	pub fn get_response_callback(&mut self, id_command: u8) -> Option<oneshot::Sender<Response>> {
 		// Remove all callbacks that are closed
 		self.response_callbacks.retain(|(_, callback)| !callback.is_closed());
@@ -122,6 +167,26 @@ impl DB {
 	}
 	pub fn commands(&self) -> Vec<&CommandMessage> {
 		self.command_messages.iter().map(|(m, _)| m).collect()
+	}
+
+	/// Picks where to place this command:
+	/// - either as an instant command, gets sent out immediately
+	/// - or as a command that gets sent out after a message from a node
+	///
+	/// Returns wether a non-instant command was queued.
+	pub fn queue_command(&mut self, command: RadioSyncType) -> bool {
+		if let Some((_, _, _, Some(info))) = self.radio_info.get(&command.0.for_id.inner()) {
+			if match info.board {
+				Board::SamnDC => true,
+				Board::SamnSwitch => true,
+				_ => false,
+			} {
+				self.command_messages_instant.push_back(command);
+				return false;
+			}
+		}
+		self.command_messages.push_back(command);
+		true
 	}
 
 	// We'll give the nrf24 all addresses > HQADDRESS
@@ -174,20 +239,5 @@ impl DB {
 	}
 }
 
-mod test {
-
-	#[test]
-	fn addresses() {
-		use crate::db::{DB, HQADDRESS};
-		let mut db = DB::default();
-
-		// New address
-		assert_eq!(db.issue_address(16, true), (HQADDRESS + 1));
-		// Address 1 above the one before
-		assert_eq!(db.issue_address(22, true), (HQADDRESS + 2));
-		// Same address as before, nodeid exists
-		assert_eq!(db.issue_address(22, false), (HQADDRESS + 2));
-		// For cc1101 is 1 below
-		assert_eq!(db.issue_address(324, false), (HQADDRESS - 1));
-	}
-}
+#[cfg(test)]
+mod tests;

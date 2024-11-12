@@ -108,7 +108,8 @@ async fn handle_socket(
 						.to_owned()
 						.and_then(|v| serde_json::from_str::<NodeUiData>(&v).ok())
 					{
-						db.write().unwrap().set_ui_data(node_id.inner(), ui_data)
+						db.write().unwrap().set_ui_data(node_id.inner(), ui_data);
+						return None;
 					}
 				}
 			} else if piece == Some("views") {
@@ -138,13 +139,13 @@ async fn handle_socket(
 								// Node Detail
 								// views/nodes/<node_id>
 								return reply(
-									(&views::node_previews(&db.read().unwrap(), format!("{}%", node_id)).get(&node_id)).into(),
+									(&views::node_previews_with_cache(&mut db.write().unwrap(),  Some(node_id)).get(&node_id)).into(),
 								);
 							}
 						} else {
 							// All nodes preview
 							// views/nodes
-							return reply((&views::node_previews(&db.read().unwrap(), "%".into())).into());
+							return reply((&views::node_previews_with_cache(&mut db.write().unwrap(), None)).into());
 						}
 					}
 				}

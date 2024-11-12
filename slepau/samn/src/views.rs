@@ -1,6 +1,6 @@
 use std::{
 	collections::{BTreeMap, HashMap},
-	time::SystemTime,
+	time::{Instant, SystemTime},
 };
 
 use common::{proquint::Proquint, samn::decode_binary_base64};
@@ -20,6 +20,63 @@ pub struct LimbPreview {
 	pub last: u64,
 }
 
+/// This function is quicker because it recuses logs once to update cache in DB
+///
+/// Then it just uses the updated cache to answer back.
+pub fn node_previews_with_cache(
+	db: &mut DB,
+	node_id: Option<Proquint<NodeId>>,
+) -> HashMap<Proquint<NodeId>, NodePreview> {
+	if db.node_cache.len() < db.addresses.len() {
+		// Cache not built, doing that
+		let node_previews = node_previews(db, "%".into());
+		for (node_id, v) in node_previews {
+			db.node_cache.insert(
+				node_id.inner(),
+				(v.info, v.limbs.into_iter().map(|(id, limb)| Limb(id, limb.data)).collect()),
+			);
+		}
+	}
+
+	// Return cached values
+	db.node_cache
+		.iter()
+		.filter(|(n_id, _)| node_id.map(|node_id| node_id.inner() == **n_id).unwrap_or(true))
+		.map(|(node_id, (info, limbs))| {
+			let (last, uptime) = db
+				.radio_info
+				.get(&node_id)
+				.map(|(_, last, uptime, _)| (*last, *uptime))
+				.unwrap_or((0, 0));
+			(
+				Proquint::<NodeId>::from(*node_id),
+				NodePreview {
+					ui: db.node_ui_data.get(node_id).cloned().unwrap_or_default(),
+					id: Proquint::<NodeId>::from(*node_id),
+					info: info.clone(),
+					limbs: limbs
+						.iter()
+						.map(|Limb(id, limb)| {
+							(
+								*id,
+								LimbPreview {
+									id: *id,
+									data: limb.clone(),
+									last: last / 1_000_000_000,
+								},
+							)
+						})
+						.collect(),
+					last: last / 1_000_000_000,
+					uptime,
+				},
+			)
+		})
+		.collect()
+
+	// Default::default()
+}
+
 #[derive(Serialize, Default, Deserialize, Debug)]
 pub struct NodePreview {
 	pub ui: NodeUiData,
@@ -33,8 +90,9 @@ pub struct NodePreview {
 	pub uptime: u32,
 }
 
+/// Node Previews agregattes all latest known data about X key.
 pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePreview> {
-	let now = SystemTime::now()
+	let now_seconds = SystemTime::now()
 		.duration_since(SystemTime::UNIX_EPOCH)
 		.unwrap()
 		.as_secs();
@@ -42,36 +100,42 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePrev
 	let mut skipped = 0;
 	let mut total = 0;
 	let mut rand_g = thread_rng();
-	let uptime = |node_id| db.heartbeats.get(&node_id).map(|(_, last, uptime,_)| (*last, *uptime)).unwrap_or((0,0));
-	let result: HashMap<Proquint<NodeId>, NodePreview> = common::sonnerie::db().get_filter(&Wildcard::new(&key)).into_iter().fold(
-		HashMap::new(),
-		|mut acc, r | {
+	let uptime = |node_id| {
+		db.radio_info
+			.get(&node_id)
+			.map(|(_, last, uptime, _)| (*last, *uptime))
+			.unwrap_or((0, 0))
+	};
+	let result: HashMap<Proquint<NodeId>, NodePreview> = common::sonnerie::db()
+		.get_filter(&Wildcard::new(&key))
+		.into_iter()
+		.fold(HashMap::new(), |mut acc, r| {
 			total += 1;
 			// return acc;
-			
+
 			// We're gonna implement a dropoff function to make this a bit quicker
-			let time_nanos = r.timestamp_nanos();
-			if first == 0 {first = time_nanos / 1_000_000_000}
-			let time_diff = now - (time_nanos / 1_000_000_000);
-			let random:f32 = rand_g.gen();
-			let x = (time_diff) as f32 / (now - first) as f32;
+			let record_seconds = r.timestamp_nanos() / 1_000_000_000;
+			if first == 0 {
+				first = record_seconds
+			}
+			let time_diff = now_seconds - record_seconds;
+			let random: f32 = rand_g.gen();
+			let x = (time_diff) as f32 / (now_seconds - first) as f32;
 			// With this function we skip about 88% of entries
 			// The function we currently use is 1/(x+.99)^12 + .01
-			if random > (1. / (x+0.99).powi(12) + 0.01) {
+			if random > (1. / (x + 0.99).powi(12) + 0.01) {
 				skipped += 1;
-				return acc
+				return acc;
 			}
-			
 
 			let key_split = r.key().split("_").collect::<Vec<_>>();
 			let id_node = Proquint::<u32>::from_quint(&key_split[0..2].join("_")).unwrap();
 			let id_limb = key_split.get(2).map(|v| LimbId::from_str_radix(v, 16).unwrap());
-			
-			let (last,uptime) = uptime(id_node.inner());
+
+			let (last, uptime) = uptime(id_node.inner());
 
 			let node = acc.entry(id_node);
 			if let Some(id_limb) = id_limb {
-				
 				// Deserialize Limb
 				let mut bytes = r.get::<String>(0).into_bytes();
 				let limb: Limb = decode_binary_base64(&mut bytes);
@@ -82,58 +146,59 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePrev
 							.limbs
 							.entry(id_limb)
 							.and_modify(|limb_| {
-								if time_nanos > limb_.last {
+								if record_seconds > limb_.last {
 									limb_.data = limb.1.clone();
-									limb_.last = time_nanos;
+									limb_.last = record_seconds;
 								}
 							})
-							.or_insert_with( || LimbPreview {
+							.or_insert_with(|| LimbPreview {
 								id: id_limb,
 								data: limb.1.clone(),
-								last: time_nanos,
+								last: record_seconds,
 							});
 					})
-					.or_insert_with( || NodePreview {
+					.or_insert_with(|| NodePreview {
 						id: id_node,
 						limbs: HashMap::from([(
 							id_limb,
 							LimbPreview {
 								id: id_limb,
 								data: limb.1.clone(),
-								last: time_nanos,
+								last: record_seconds,
 							},
 						)]),
 						last,
 						uptime,
 						info: Default::default(),
-						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default()
+						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default(),
 					});
 			} else {
-				
 				// Deserialize Info
 				let mut bytes = r.get::<String>(0).into_bytes();
 				let info: NodeInfo = decode_binary_base64(&mut bytes);
 				node
 					.and_modify(|node| {
-						if time_nanos > node.last {
+						if record_seconds > node.last {
 							node.info = Some(info.clone());
-							node.last = time_nanos;
+							node.last = record_seconds;
 						}
 					})
-					.or_insert_with( || NodePreview {
+					.or_insert_with(|| NodePreview {
 						id: id_node,
 						info: Some(info),
 						last,
 						uptime,
 						limbs: Default::default(),
-						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default()
+						ui: db.node_ui_data.get(&id_node.inner()).cloned().unwrap_or_default(),
 					});
 			}
-			
+
 			return acc;
-		},
+		});
+	info!(
+		"Skipped {skipped} out of {total}, about {:.0}%",
+		skipped as f32 / total as f32 * 100.
 	);
-	info!("Skipped {skipped} out of {total}, about {:.0}%", skipped as f32 / total as f32 * 100.);
 	result
 }
 
@@ -187,9 +252,8 @@ pub fn limb_history(query: LimbQuery) -> BTreeMap<u64, LimbType> {
 		})
 }
 
-
 // #[cfg(test)]
 // mod tests {
 // 	#[test]
-// 	fn nodes_bench 
+// 	fn nodes_bench
 // }

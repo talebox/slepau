@@ -79,7 +79,7 @@ export def run_nginx [] {
 export def test [package] {
 	load_env_dev
 	
-	cargo test --package $package
+	cargo test --package $package -- --nocapture
 }
 
 export def check [] {

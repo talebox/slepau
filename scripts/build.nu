@@ -87,11 +87,11 @@ export def build_server [bin_dir:string = "bin", options = [], binary = "all"] {
 		print $"Building binaries to out/($bin_dir)."
 		# Build server
 		['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
-			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $a
+			cargo build -Zunstable-options --artifact-dir $"out/($bin_dir)" ...$options --release --bin $a
 		};
 		print $"All binaries built to 'out/($bin_dir)'."
 	} else {
-		cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $binary
+		cargo build -Zunstable-options --artifact-dir $"out/($bin_dir)" ...$options --release --bin $binary
 		print $"($binary) built to 'out/($bin_dir)/($binary)'."
 	}
 	
@@ -101,7 +101,7 @@ export def build_server [bin_dir:string = "bin", options = [], binary = "all"] {
 # 	load_env_prod
 # 	rm -rf $"out/($bin_dir)"
 # 	mkdir $"out/($bin_dir)"
-# 	cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin sonnerie
+# 	cargo build -Zunstable-options --artifact-dir $"out/($bin_dir)" ...$options --release --bin sonnerie
 # 	print "Built sonnerie."
 # }
 export def build_web [] {

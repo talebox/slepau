@@ -31,3 +31,7 @@ rand = "0.8.5"
 diff = "0.1.13"
 axum-client-ip = "0.4"
 sonnerie = {git = "https://github.com/rubend056/sonnerie.git",branch = "master"}
+nb = "1.1.0"
+
+[profile.release]
+lto = true

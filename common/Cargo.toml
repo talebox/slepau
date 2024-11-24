@@ -21,7 +21,7 @@ rand.workspace = true
 proquint.workspace = true
 diff.workspace = true
 env_logger.workspace = true
-samn-common = {path = "../samn-common", features = ["sonnerie"]}
+samn-common = {path = "../samn-common", features = ["std"]}
 regex = "1.7.1"
 psl = "2.1.3"
 sonnerie.workspace = true

@@ -1,19 +1,20 @@
 use embedded_hal::spi::SpiDevice;
 use linux_embedded_hal::{
 	gpio_cdev::{Chip, LineRequestFlags},
-	spidev::SpidevOptions,
-	CdevPin, CdevPinError, SpidevDevice,
+	spidev::{SpiModeFlags, SpidevOptions},
+	CdevPin, SpidevDevice,
 };
 use samn_common::{nrf24::NRF24L01, radio::Radio};
 
 use crate::db::HQ_PIPES;
 
-pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, CdevPin) {
+pub fn init(chip: &mut Chip) -> (NRF24L01<SpidevDevice, CdevPin>, CdevPin) {
 	let mut spi = linux_embedded_hal::SpidevDevice::open("/dev/spidev0.0").unwrap();
 	spi
 		.0
 		.configure(&SpidevOptions {
 			max_speed_hz: Some(8_000_000),
+			spi_mode: Some(SpiModeFlags::SPI_MODE_0), 
 			..Default::default()
 		})
 		.unwrap();
@@ -34,8 +35,15 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, 
 			.unwrap(),
 	)
 	.unwrap();
-	let mut nrf24 = NRF24L01::new(ce_pin, spi).unwrap();
+	let mut nrf24 = NRF24L01::new(ce_pin, spi);
 	nrf24.init(&mut linux_embedded_hal::Delay).unwrap();
+
+	// // Enabling all pipes
+	// const PIPES: [bool; 6] = [true;6];
+	// nrf24.set_auto_ack_pipes(&PIPES).unwrap();
+	// nrf24.set_rx_enabled_pipes(&PIPES).unwrap();
+	// nrf24.set_dynamic_payload_pipes(&PIPES).unwrap();
+
 	nrf24.set_rx_filter(&HQ_PIPES).unwrap();
 	
 	// Not working with more than first pipe open :(
@@ -43,7 +51,7 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<CdevPinError, CdevPin, SpidevDevice>, 
 	// nrf24.set_pipes_rx_enable(&pipes).unwrap();
 	// nrf24.set_auto_ack(&pipes).unwrap();
 
-	println!("Initalized the nrf24, connected: {}", nrf24.is_connected().unwrap());
+	// println!("Initalized the nrf24, connected: {}", nrf24.is_connected().unwrap());
 	println!("After configuration, here's the register values V");
 	{
 		let mut a = |i| {

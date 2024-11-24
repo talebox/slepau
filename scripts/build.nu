@@ -77,20 +77,25 @@ export def organize_out [bin_dir = "bin"] {
 	print "Seprating done."
 }
 
-export def build_server [bin_dir:string = "bin", options = []] {
+export def build_server [bin_dir:string = "bin", options = [], binary = "all"] {
 	load_env_prod
 	
-	rm -rf $"out/($bin_dir)"
-	mkdir $"out/($bin_dir)"
-	
-	print $"Building binaries to out/($bin_dir)."
-	# Build server
-	['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
-		if $a not-in ["talebox"]  {
+	if $binary == "all" {
+		rm -rf $"out/($bin_dir)"
+		mkdir $"out/($bin_dir)"
+		
+		print $"Building binaries to out/($bin_dir)."
+		# Build server
+		['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
 			cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $a
-		}
-	};
-	print "Binaries built."
+		};
+		print $"All binaries built to 'out/($bin_dir)'."
+	} else {
+		cargo build -Zunstable-options --out-dir $"out/($bin_dir)" ...$options --release --bin $binary
+		print $"($binary) built to 'out/($bin_dir)/($binary)'."
+	}
+	
+	
 }
 # export def build_sonnerie [bin_dir:string = "bin", options = []] {
 # 	load_env_prod

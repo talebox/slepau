@@ -14,13 +14,13 @@ use tokio::sync::oneshot;
 use crate::radio::{CommandMessage, RadioSyncType};
 
 const HQADDRESS: u16 = 0x9797u16;
-pub const HQ_PIPES: [u8; 6] = [
+pub const HQ_PIPES: [u8; 2] = [
 	DEFAULT_PIPE,
-	DEFAULT_PIPE + 1,
-	DEFAULT_PIPE + 2,
-	DEFAULT_PIPE + 3,
-	DEFAULT_PIPE + 4,
-	DEFAULT_PIPE + 5,
+	DEFAULT_PIPE,
+	// DEFAULT_PIPE + 1,
+	// DEFAULT_PIPE + 2,
+	// DEFAULT_PIPE + 3,
+	// DEFAULT_PIPE + 4,
 ];
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -162,7 +162,7 @@ impl DB {
 
 	pub fn next_command_id(&mut self) -> u8 {
 		let c = self.command_id;
-		self.command_id = self.command_id.wrapping_add(1);
+		self.command_id = (self.command_id + 1) % samn_common::node::COMMAND_ID_MAX;
 		c
 	}
 	pub fn commands(&self) -> Vec<&CommandMessage> {
@@ -211,7 +211,7 @@ impl DB {
 
 	/// Issuing an address won't be easy
 	///
-	/// We need to pull the corresponding address of each
+	/// We need to pull the corresponding address of each nrf/cc1101
 	pub fn issue_address(&mut self, id: NodeId, is_nrf: bool) -> NodeAddress {
 		if let Some(address) = self.addresses.get_by_left(&id).cloned() {
 			address

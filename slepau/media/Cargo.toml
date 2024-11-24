@@ -31,7 +31,3 @@ mime = "0.3.16"
 futures = "0.3.26"
 kamadak-exif = "0.5.5"
 base64 = "0.21.0"
-
-[profile.release]
-lto = "off"
-

@@ -24,7 +24,7 @@ pasetors = "0.6.3"
 rand.workspace = true
 futures-util = "0.3.26"
 chrono = "0.4.28"
-samn-common = {path = "../../samn-common"}
+samn-common = {path = "../../samn-common", features = ["std"]}
 linux-embedded-hal = { version = "0.4.0", features = ["spi"] }
 postcard = {git = "https://github.com/jamesmunns/postcard.git", features = ["use-std"]}
 nb = "1.1.0"

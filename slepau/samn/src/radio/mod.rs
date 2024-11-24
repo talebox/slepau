@@ -5,16 +5,15 @@ use common::{
 	socket::{ResourceMessage, SocketMessage},
 	utils::LockedAtomic,
 };
+use core::str;
 use embedded_hal::digital::InputPin;
 use linux_embedded_hal::{CdevPin, SpidevDevice};
 use samn_common::{
 	cc1101::{Cc1101, MachineState},
 	node::{Command, Message, MessageData, Response},
-	nrf24::Device,
 	radio::*,
 };
 use serde::{Deserialize, Serialize};
-use core::str;
 use std::{
 	fmt::Debug,
 	time::{Duration, Instant, SystemTime},
@@ -108,13 +107,12 @@ pub async fn radio_service(
 		}
 	}
 
-	
-
 	async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
 		// let spin_sleeper = spin_sleep::SpinSleeper::new(100_000)
-    // .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint);
+		// .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint);
+		
 
-		radio.transmit_start(payload).unwrap();
+		radio.transmit_start(payload, &mut linux_embedded_hal::Delay).unwrap(); // This enables ce
 		// This is to wait for cc1101 to switch to TX mode
 		// Because the polling only asks wether it's in Iddle
 		// If this wasn't here transmit_start would send command probe and radio
@@ -122,13 +120,13 @@ pub async fn radio_service(
 		// tokio::time::sleep(Duration::from_micros(30)).await;
 		// spin_sleeper.sleep_ns(30_000);
 
-		let mut interval = tokio::time::interval(Duration::from_micros(30));
+		let mut interval = tokio::time::interval(Duration::from_micros(100));
+		interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
 		interval.tick().await; // Let first instant tick happen
-
 		loop {
-			interval.tick().await; // This first await should be >= 30us long
+			interval.tick().await; // This first await should be >= 100us long
 			match radio.transmit_poll() {
-				nb::Result::Ok(v) => return v,
+				nb::Result::Ok(v) => {return v;},
 				nb::Result::Err(e) => {
 					match e {
 						nb::Error::Other(e) => {
@@ -149,9 +147,19 @@ pub async fn radio_service(
 		message: &Message,
 		address: u16,
 		is_nrf: bool,
+		new_wire_format: bool,
 	) {
-		let packet = postcard::to_vec::<_, 32>(&message).unwrap();
-		let payload = Payload::new_with_addr(&packet, address, addr_to_rx_pipe(address));
+		let payload = {
+			let mut packet = [0u8; 32];
+			let packet_l;
+			if new_wire_format {
+				packet_l = message.serialize_to_bytes(&mut packet).unwrap();
+			} else {
+				packet_l = postcard::to_slice(&message, &mut packet).unwrap().len();
+			}
+			Payload::new_with_addr_from_array(packet, packet_l, address, addr_to_rx_pipe(address))
+		};
+
 		match timeout(Duration::from_millis(100), async {
 			if is_nrf {
 				transmit(nrf24, &payload).await
@@ -169,9 +177,10 @@ pub async fn radio_service(
 				}
 
 				println!(
-					"{} {} bytes {:?}",
+					"{} {} bytes{}, {:?}",
 					if success { "Sent" } else { "Failed sending" },
-					packet.len(),
+					payload.len(),
+					if new_wire_format {" with new wire format"}else{""},
 					message
 				);
 			}
@@ -195,7 +204,6 @@ pub async fn radio_service(
 				);
 			}
 		};
-		
 	}
 	let send_commands_changed = |db: &db::DB| {
 		tx_resource
@@ -212,7 +220,7 @@ pub async fn radio_service(
 			} {
 				break;
 			}
-			tokio::time::sleep(Duration::from_micros(100)).await;
+			tokio::time::sleep(Duration::from_micros(400)).await;
 		}
 	}
 
@@ -251,7 +259,10 @@ pub async fn radio_service(
 		let rx_start = Instant::now();
 		while let Ok((payload, is_nrf)) = receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await {
 			let rx_end = Instant::now();
-			if let Ok(message) = postcard::from_bytes::<Message>(&payload.data()) {
+			if let Ok((message, new_wire_format)) = Message::deserialize_from_bytes(&payload.data())
+				.map(|v| (v.0, true))
+				.or_else(|_| postcard::from_bytes::<Message>(&payload.data()).map(|v| (v, false)))
+			{
 				let id_node_db = payload
 					.address()
 					.and_then(|address| db.read().unwrap().addresses.get_by_right(&address).copied());
@@ -263,7 +274,15 @@ pub async fn radio_service(
 						// Send message
 						let message = Message::Network(node_id, node_addr);
 						// let tx_start = Instant::now();
-						transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
+						transmit_any(
+							&mut nrf24,
+							&mut cc1101,
+							&message,
+							payload_address,
+							is_nrf,
+							new_wire_format,
+						)
+						.await;
 						// println!(
 						// 	"Receive -> transmit {:?}, transmit delay {:?}",
 						// 	rx_start - rx_end,
@@ -293,12 +312,20 @@ pub async fn radio_service(
 							});
 
 							let tx_start = Instant::now();
-							transmit_any(&mut nrf24, &mut cc1101, &message, payload_address, is_nrf).await;
-							println!(
-								"Receive -> transmit {:?}, transmit delay {:?}",
-								rx_start - rx_end,
-								Instant::now() - tx_start
-							);
+							transmit_any(
+								&mut nrf24,
+								&mut cc1101,
+								&message,
+								payload_address,
+								is_nrf,
+								new_wire_format,
+							)
+							.await;
+							// println!(
+							// 	"Receive -> transmit {:?}, transmit delay {:?}",
+							// 	rx_end - tx_start,
+							// 	Instant::now() - tx_start
+							// );
 						}
 
 						// Log this message
@@ -313,7 +340,11 @@ pub async fn radio_service(
 										*_info = Some(info.clone());
 									})
 									.or_insert((Instant::now(), get_nanos(), 0, Some(info.clone())));
-								db.write().unwrap().node_cache.entry(id_node_db).and_modify(|(_info,_)| *_info = Some(info.clone()));
+								db.write()
+									.unwrap()
+									.node_cache
+									.entry(id_node_db)
+									.and_modify(|(_info, _)| *_info = Some(info.clone()));
 							}
 							Response::Limbs(limbs) => {
 								let limbs = limbs
@@ -321,7 +352,11 @@ pub async fn radio_service(
 									.filter_map(|l| if let Some(l) = l { Some(l.clone()) } else { None })
 									.collect::<Vec<_>>();
 								log_limbs(id_node_db, &limbs);
-								db.write().unwrap().node_cache.entry(id_node_db).and_modify(|(_,_limbs)| *_limbs = limbs);
+								db.write()
+									.unwrap()
+									.node_cache
+									.entry(id_node_db)
+									.and_modify(|(_, _limbs)| *_limbs = limbs);
 							}
 							Response::Heartbeat(seconds) => {
 								db.write()
@@ -406,14 +441,9 @@ pub async fn radio_service(
 				command: command_message.command,
 			});
 
-			let is_nrf = true; // Because all instant messages are sent to DC & Switch which have NRF exclusively
-
-			let tx_start= Instant::now();
-			transmit_any(&mut nrf24, &mut cc1101, &message, node_address, is_nrf).await;
-			println!(
-				"Transmit delay {:?}",
-				tx_start.elapsed()
-			);
+			let tx_start = Instant::now();
+			transmit_any(&mut nrf24, &mut cc1101, &message, node_address, true, true).await;
+			println!("Transmit delay {:?}", tx_start.elapsed());
 		}
 
 		if (Instant::now() - last_calibration).as_secs() > 30 {

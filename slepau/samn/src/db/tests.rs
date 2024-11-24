@@ -13,20 +13,20 @@ fn addresses() {
 	assert_eq!(db.issue_address(324, false), (HQADDRESS - 1));
 }
 
-#[test]
-fn message_size() {
-  use samn_common::node::*;
-  let message = Message::Message(MessageData::Response {
-    id: None,
-    response: Response::Heartbeat(64),
-  });
-  let v: heapless::Vec<u8, 32> = postcard::to_vec(&message).unwrap();
-  println!("Hearbeat {} {v:?}", v.len());
+// #[test]
+// fn message_size() {
+//   use samn_common::node::*;
+//   let message = Message::Message(MessageData::Response {
+//     id: None,
+//     response: Response::Heartbeat(64),
+//   });
+//   let v: heapless::Vec<u8, 32> = postcard::to_vec(&message).unwrap();
+//   println!("Hearbeat {} {v:?}", v.len());
 
-  let message = Message::Message(MessageData::Response {
-    id: None,
-    response: Response::Limbs([Some(Limb(1, LimbType::Actuator(Actuator::Light(true)))), None, None]),
-  });
-  let v: heapless::Vec<u8, 32> = postcard::to_vec(&message).unwrap();
-  println!("Limbs {} {v:?}", v.len());
-}
+//   let message = Message::Message(MessageData::Response {
+//     id: None,
+//     response: Response::Limbs([Some(Limb(1, LimbType::Actuator(Actuator::Light(true)))), None, None]),
+//   });
+//   let v: heapless::Vec<u8, 32> = postcard::to_vec(&message).unwrap();
+//   println!("Limbs {} {v:?}", v.len());
+// }

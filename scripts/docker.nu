@@ -27,7 +27,8 @@ def docker_args [name] {
 		"-v", "vreji_db:/server/vreji_db", # Vreji (Logging)
 		"-v", $"($name)_data:/server/data", # Data
 		"-v", $"($name)_backup:/server/backup", # Backup
-		"-e", $"URL=(if $context == 'rpi' {'http'} else {'https'})://($name).anty.dev", # URL variable
+		# Maybe we should remove URL env altogether since it's only being used for user info purposes...
+		"-e", $"URL=(if $context in ['rpi','pi_local'] {'http'} else {'https'})://($name).anty.dev", # URL variable
 		"--env-file=container/env.config", # Env config
 	];
 

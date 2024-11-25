@@ -124,7 +124,9 @@ pub async fn login(
 				header::SET_COOKIE,
 				format!(
 					"auth={pub_token}; Domain={host}; Path=/; SameSite=Lax; Max-Age={max_age}; HttpOnly; {}",
-					if *SECURE { " Secure;" } else { "" }
+					// Allowing unsecure cookies, depending on URL for this is problematic :\ 
+					// if *SECURE { " Secure;" } else 
+					{ "" }
 				),
 			)]
 			// )
@@ -276,7 +278,9 @@ pub async fn logout(
 				format!(
 					"auth=; Domain={}; Path=/; SameSite=Strict; Max-Age=0; HttpOnly; {}",
 					&host,
-					if *SECURE { " Secure;" } else { "" }
+					// Allowing unsecure cookies, depending on URL for this is problematic :\ 
+					// if *SECURE { " Secure;" } else
+					 { "" }
 				),
 			),
 			// (

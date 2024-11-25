@@ -2,6 +2,7 @@
 
 use build.nu *
 use start.nu test
+use docker.nu deploy_docker
 
 export def deploy_sites [host = 'anty.dev'] {
 	print $"Deploying static sites to ($host)."

@@ -1,6 +1,9 @@
 #!/bin/env sh
 echo "Launching everything:"
 
+# Initializing DB_PATH_LOG (where every slepau will log to)
+export DB_PATH_LOG="../vreji_db"
+mkdir -p vreji_db
 
 sh -c "cd auth; URL='http://auth.talebox.local:8080' SOCKET='0.0.0.0:4001' ./auth" &
 sh -c "cd chunk; URL='http://chunk.talebox.local:8080' SOCKET='0.0.0.0:4002' ./chunk" &

@@ -27,33 +27,33 @@ pub fn node_previews_with_cache(
 	db: &mut DB,
 	node_id: Option<Proquint<NodeId>>,
 ) -> HashMap<Proquint<NodeId>, NodePreview> {
-	if db.node_cache.len() < db.addresses.len() {
+	if db.limbs_cache.len() < db.addresses.len() {
 		// Cache not built, doing that
 		let node_previews = node_previews(db, "%".into());
 		for (node_id, v) in node_previews {
-			db.node_cache.insert(
+			db.limbs_cache.insert(
 				node_id.inner(),
-				(v.info, v.limbs.into_iter().map(|(id, limb)| Limb(id, limb.data)).collect()),
+				v.limbs.into_iter().map(|(id, limb)| Limb(id, limb.data)).collect(),
 			);
 		}
 	}
 
 	// Return cached values
-	db.node_cache
+	db.limbs_cache
 		.iter()
 		.filter(|(n_id, _)| node_id.map(|node_id| node_id.inner() == **n_id).unwrap_or(true))
-		.map(|(node_id, (info, limbs))| {
-			let (last, uptime) = db
+		.map(|(node_id, limbs)| {
+			let (last, uptime, info) = db
 				.radio_info
 				.get(&node_id)
-				.map(|(_, last, uptime, _)| (*last, *uptime))
-				.unwrap_or((0, 0));
+				.map(|(_, last, uptime, info)| (*last, *uptime, info.clone()))
+				.unwrap_or((0, 0, None));
 			(
 				Proquint::<NodeId>::from(*node_id),
 				NodePreview {
 					ui: db.node_ui_data.get(node_id).cloned().unwrap_or_default(),
 					id: Proquint::<NodeId>::from(*node_id),
-					info: info.clone(),
+					info,
 					limbs: limbs
 						.iter()
 						.map(|Limb(id, limb)| {

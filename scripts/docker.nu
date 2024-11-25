@@ -62,10 +62,10 @@ export def run_docker [name, build = true, ...cmd] {
 }
 
 # Deploys and demonizes a certain container
-export def deploy_docker [name] {
+export def deploy_docker [name, build_opts = [], run_opts = []] {
 	mut args = docker_args $name
 
-	docker build -t $name $"./out/slepau/($name)" 
+	docker build -t $name ...$build_opts $"./out/slepau/($name)" 
 	docker volume create -d local $"($name)_data"
 	docker volume create -d local $"($name)_backup"
 	do -i {docker stop $"($name)_s"}
@@ -75,7 +75,7 @@ export def deploy_docker [name] {
         | append [--restart unless-stopped]
     );
 
-	docker run ...$args --name $"($name)_s" $name
+	docker run ...$args ...$run_opts --name $"($name)_s" $name
 
 	print "Done."
 }

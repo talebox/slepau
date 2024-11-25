@@ -14,6 +14,8 @@ lazy_static! {
 }
 
 /// Creates a new sonnerie DB at DB_PATH_LOG if non-existent.
+/// 
+/// Make sure DB_PATH_LOG resolves to an existing directory tho.
 pub fn init() {
 	let mut main = DB_PATH_LOG.clone();
 	main.push("main");

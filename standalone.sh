@@ -16,11 +16,11 @@ HOSTS_CONFIG="127.0.0.1 auth.talebox.local vreji.talebox.local chunk.talebox.loc
 echo "We're using domain '*.talebox.local', you should have this in your /etc/hosts file already '($HOSTS_CONFIG)' so those domains are resolved to the loopback ip 127.0.0.1"
 
 echo "As a first time script, we'll check for a specific line in hosts and add it if it doesn't exist."
-if [[ ! -z $(grep "$HOSTS_CONFIG" "/etc/hosts") ]]; then 
+if [[ ! -z $(grep "talebox.local" "/etc/hosts") ]]; then 
 	echo "Found /etc/hosts line, good :), doing nothing."
 else
 	echo "/etc/hosts line not found, adding line at the end, we need root access."
-	echo "$HOSTS_CONFIG\n" | sudo tee -a /etc/hosts
+	printf "\n$HOSTS_CONFIG\n" | sudo tee -a /etc/hosts
 fi
 
 echo "But nginx is setup to handle any domain you want without any config changes here. So using something other than '*.talebox.local' would also work, just make sure it begins with 'auth.' 'media.' etc.... Have fun :)"

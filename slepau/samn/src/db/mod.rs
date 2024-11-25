@@ -50,7 +50,7 @@ pub struct DB {
 	/// This allows node_preview to not have to recurse the logs every time, making pulling the latest data
 	/// incredibly fast.
 	#[serde(skip)]
-	pub node_cache: HashMap<NodeId, (Option<NodeInfo>, Vec<Limb>)>,
+	pub limbs_cache: HashMap<NodeId, Vec<Limb>>,
 
 	#[serde(skip)]
 	pub command_id: u8,

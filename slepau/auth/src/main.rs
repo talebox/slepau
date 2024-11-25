@@ -44,6 +44,7 @@ async fn main() {
 
 	env_logger::init_from_env(env);
 	log_env();
+	common::sonnerie::init();
 
 	print!(
 		"\

@@ -1639,6 +1639,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lasna"
+version = "0.7.0"
+dependencies = [
+ "common",
+ "env_logger",
+ "lazy_static",
+ "log",
+ "socket2",
+ "tokio",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2315,7 +2327,7 @@ dependencies = [
 [[package]]
 name = "proquint"
 version = "0.1.0"
-source = "git+https://github.com/rubend056/proquint-rs#79b6a9592b990153190b75a9880c44e19544a9aa"
+source = "git+https://github.com/rubend056/proquint-rs?branch=master#0418b92a5d65bbc736a7d9abc0d90268a99b070c"
 
 [[package]]
 name = "psl"
@@ -2810,9 +2822,9 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "socket2"
-version = "0.5.7"
+version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
+checksum = "c970269d99b64e60ec3bd6ad27270092a5394c4e309314b18ae3fe575695fbe8"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",

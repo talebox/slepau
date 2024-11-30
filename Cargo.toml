@@ -1,5 +1,12 @@
 [workspace]
-members = ["slepau/auth", "slepau/chunk", "slepau/media", "slepau/samn", "slepau/vreji"]
+members = [
+	"slepau/auth",
+	"slepau/chunk",
+	"slepau/media",
+	"slepau/samn",
+	"slepau/vreji",
+	"slepau/lasna"
+]
 resolver = "2"
 
 [workspace.package]
@@ -26,11 +33,11 @@ tower = { version = "0.4.13", features = [
 tower_governor = "0.0.4"
 hyper = { version = "0.14.20", features = ["full"] }
 lazy_static = "1.4.0"
-proquint = { git = "https://github.com/rubend056/proquint-rs" }
+proquint = { git = "https://github.com/rubend056/proquint-rs", branch="master"}
 rand = "0.8.5"
 diff = "0.1.13"
 axum-client-ip = "0.4"
-sonnerie = {git = "https://github.com/rubend056/sonnerie.git",branch = "master"}
+sonnerie = { git = "https://github.com/rubend056/sonnerie.git", branch = "master"}
 nb = "1.1.0"
 
 [profile.release]

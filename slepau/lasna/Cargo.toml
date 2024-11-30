@@ -1,0 +1,15 @@
+[package]
+name = "lasna"
+license = "MIT"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# hyper.workspace = true
+tokio.workspace = true
+lazy_static.workspace = true
+
+common.workspace = true
+log.workspace = true
+env_logger.workspace = true
+socket2 = "0.5.8"

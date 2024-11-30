@@ -52,6 +52,12 @@ export def run_vreji [] {
 	
 	cargo run --bin vreji
 }
+export def run_lasna [] {
+	load_env_dev
+	open "config/vreji/dev.toml" | load-env
+	
+	cargo run --bin lasna
+}
 export def run_samn [] {
 	load_env_dev
 	open "config/samn/dev.toml" | load-env

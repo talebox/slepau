@@ -1,4 +1,4 @@
-use proquint::{QuintError, Quintable};
+pub use proquint::{QuintError, Quintable};
 use rand::{distributions::Standard, prelude::Distribution};
 use serde::{de::Visitor, Deserialize, Serialize};
 
@@ -8,6 +8,12 @@ pub struct Proquint<T>(T);
 impl<T : Copy> Proquint<T> {
 	pub fn inner(&self) -> T {
 		self.0
+	}
+}
+impl<T> Deref for Proquint<T> {
+	type Target = T;
+	fn deref(&self) -> &Self::Target {
+			&self.0
 	}
 }
 impl<T: Quintable> Serialize for Proquint<T> {
@@ -40,7 +46,7 @@ where
 	}
 }
 
-use std::{fmt::Display, marker::PhantomData};
+use std::{fmt::Display, marker::PhantomData, ops::Deref};
 #[derive(Default)]
 struct ProquintVistor<T> {
 	phantom: PhantomData<T>,

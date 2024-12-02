@@ -8,6 +8,7 @@ use samn_common::{
 	node::{Board, Command, Limb, LimbId, LimbType, NodeAddress, NodeId, NodeInfo, Response},
 	radio::DEFAULT_PIPE,
 };
+use schedule::Schedule;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
@@ -28,12 +29,16 @@ pub struct NodeUiData {
 	pub name: String,
 }
 
+pub mod schedule;
+
+
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct DB {
 	/// Id <> Address
 	pub addresses: BiMap<NodeId, NodeAddress>,
 	pub node_ui_data: HashMap<NodeId, NodeUiData>,
+	pub schedule_raw: String,
 
 	/// Instant (used to measure now - last), a fast way of checking elapsed time
 	/// Last Message (u64) unix system time in nanoseconds
@@ -65,12 +70,15 @@ pub struct DB {
 
 	#[serde(skip)]
 	pub response_callbacks: LinkedList<(u8, oneshot::Sender<Response>)>,
+
+	#[serde(skip)]
+	pub schedule: Schedule
 }
 
 impl DB {
 	pub fn maybe_queue_update(&mut self, id_node_db: u32) -> bool {
 		// Queue an update if node hasn't reported for > 3 * heartbeat_interval.
-		// and there's less than 2 messages queued.
+		// and there's 0 messages queued.
 		if self
 			.radio_info
 			.get(&id_node_db)

@@ -32,3 +32,7 @@ pub async fn command_response(
 	radio_tx.send((command, Some(tx))).await.unwrap();
 	Ok(Json (rx.await.unwrap()))
 }
+
+pub async fn get_schedule() -> impl IntoResponse {
+	
+}

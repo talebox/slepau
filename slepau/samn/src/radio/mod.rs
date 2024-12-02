@@ -10,7 +10,7 @@ use embedded_hal::digital::InputPin;
 use linux_embedded_hal::{CdevPin, SpidevDevice};
 use samn_common::{
 	cc1101::{Cc1101, MachineState},
-	node::{Command, Message, MessageData, Response},
+	node::{Actuator, Command, Limb, LimbType, Message, MessageData, Response},
 	radio::*,
 };
 use serde::{Deserialize, Serialize};
@@ -20,10 +20,13 @@ use std::{
 };
 use tokio::{
 	sync::{broadcast, mpsc, oneshot, watch},
-	time::{self, timeout},
+	time::timeout,
 };
 
-use crate::db::{self};
+use crate::db::{
+	self,
+	schedule::{Event, EventTime},
+};
 mod cc1101;
 mod nrf24;
 
@@ -110,23 +113,27 @@ pub async fn radio_service(
 	async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
 		// let spin_sleeper = spin_sleep::SpinSleeper::new(100_000)
 		// .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint);
-		
 
-		radio.transmit_start(payload, &mut linux_embedded_hal::Delay).unwrap(); // This enables ce
-		// This is to wait for cc1101 to switch to TX mode
-		// Because the polling only asks wether it's in Iddle
-		// If this wasn't here transmit_start would send command probe and radio
-		// could still be in Idle when we poll it.
-		// tokio::time::sleep(Duration::from_micros(30)).await;
-		// spin_sleeper.sleep_ns(30_000);
+
+		radio
+			.transmit_start(payload, &mut linux_embedded_hal::Delay)
+			.unwrap(); // This enables ce
+							// This is to wait for cc1101 to switch to TX mode
+							// Because the polling only asks wether it's in Iddle
+							// If this wasn't here transmit_start would send command probe and radio
+							// could still be in Idle when we poll it.
+							// tokio::time::sleep(Duration::from_micros(30)).await;
+							// spin_sleeper.sleep_ns(30_000);
 
 		let mut interval = tokio::time::interval(Duration::from_micros(100));
-		interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+		interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 		interval.tick().await; // Let first instant tick happen
 		loop {
 			interval.tick().await; // This first await should be >= 100us long
 			match radio.transmit_poll() {
-				nb::Result::Ok(v) => {return v;},
+				nb::Result::Ok(v) => {
+					return v;
+				}
 				nb::Result::Err(e) => {
 					match e {
 						nb::Error::Other(e) => {
@@ -157,7 +164,12 @@ pub async fn radio_service(
 			} else {
 				packet_l = postcard::to_slice(&message, &mut packet).unwrap().len();
 			}
-			Payload::new_with_addr_from_array(packet, packet_l, address, addr_to_rx_pipe(address))
+			Payload::new_with_addr_from_array(
+				packet,
+				packet_l,
+				address,
+				addr_to_rx_pipe(address),
+			)
 		};
 
 		match timeout(Duration::from_millis(100), async {
@@ -180,7 +192,11 @@ pub async fn radio_service(
 					"{} {} bytes{}, {:?}",
 					if success { "Sent" } else { "Failed sending" },
 					payload.len(),
-					if new_wire_format {" with new wire format"}else{""},
+					if new_wire_format {
+						" with new wire format"
+					} else {
+						""
+					},
 					message
 				);
 			}
@@ -238,6 +254,95 @@ pub async fn radio_service(
 	// Amount of times checkpoint info log will be printed
 	let mut cc1101_checkpoint_n = 30;
 
+
+	// Spawn the scheduler
+	{
+		let mut shutdown_rx = shutdown_rx.clone();
+
+		// Test schedule
+		let db = db.clone();
+		db.write().unwrap().schedule.events.extend([
+			// Kitchen at 9am
+			Event {
+				id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
+					.unwrap()
+					.inner(),
+				time: EventTime::new(Some(0), Some(9), None, None, None),
+				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
+			},
+			// Kitchen at 12am
+			Event {
+				id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
+					.unwrap()
+					.inner(),
+				time: EventTime::new(Some(0), Some(0), None, None, None),
+				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
+			},
+			// Living Room at 8pm
+			Event {
+				id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
+					.unwrap()
+					.inner(),
+				time: EventTime::new(Some(0), Some(20), None, None, None),
+				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
+			},
+			// Living Room at 10pm
+			Event {
+				id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
+					.unwrap()
+					.inner(),
+				time: EventTime::new(Some(0), Some(22), None, None, None),
+				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
+			},
+		]);
+
+		tokio::spawn(async move {
+			let mut interval = tokio::time::interval(Duration::from_secs(60));
+			interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+			interval.tick().await; // Let first instant tick happen
+			loop {
+				tokio::select! {
+					_ = interval.tick() => {}
+					_ = shutdown_rx.changed() => {
+						break;
+					}
+				}
+				let now = time::OffsetDateTime::now_utc().replace_offset(
+					time::UtcOffset::current_local_offset()
+						.unwrap_or_else(|_| time::UtcOffset::from_hms(-5, 0, 0).unwrap()),
+				);
+				
+				// Every minute check the scheduler
+				let mut db = db.write().unwrap();
+				for event in db.schedule.events.clone() {
+					// If it's time for the event
+					if !event.time.matches(&now) {
+						continue;
+					}
+					// If there's no other command messages
+					if db
+						.command_messages
+						.iter()
+						.filter(|(command, _)| command.for_id.inner() == event.id)
+						.count()
+						> 0
+					{
+						continue;
+					}
+					// Then queue the message
+					db.command_messages.push_back((
+						CommandMessage {
+							for_id: event.id.into(),
+							command: event.command.clone(),
+						},
+						None,
+					));
+				}
+			}
+		});
+	}
+
+
 	loop {
 		let mut pin_awake = false;
 		tokio::select! {
@@ -250,22 +355,26 @@ pub async fn radio_service(
 			// Make polling functions for IRQ pins
 			_ = poll_pin(&mut g2, true) => {pin_awake=true;}
 			_ = poll_pin(&mut irq_pin, false) => {pin_awake=true;}
-			_ = time::sleep(Duration::from_secs(5)) => {}
+			_ = tokio::time::sleep(Duration::from_secs(5)) => {}
 			_ = shutdown_rx.changed() => {
 				break;
 			}
 		}
 
 		let rx_start = Instant::now();
-		while let Ok((payload, is_nrf)) = receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await {
+		while let Ok((payload, is_nrf)) =
+			receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await
+		{
 			let rx_end = Instant::now();
-			if let Ok((message, new_wire_format)) = Message::deserialize_from_bytes(&payload.data())
-				.map(|v| (v.0, true))
-				.or_else(|_| postcard::from_bytes::<Message>(&payload.data()).map(|v| (v, false)))
-			{
-				let id_node_db = payload
-					.address()
-					.and_then(|address| db.read().unwrap().addresses.get_by_right(&address).copied());
+			if let Ok((message, new_wire_format)) =
+				Message::deserialize_from_bytes(&payload.data())
+					.map(|v| (v.0, true))
+					.or_else(|_| {
+						postcard::from_bytes::<Message>(&payload.data()).map(|v| (v, false))
+					}) {
+				let id_node_db = payload.address().and_then(|address| {
+					db.read().unwrap().addresses.get_by_right(&address).copied()
+				});
 
 				match (message.clone(), id_node_db, payload.address()) {
 					(Message::SearchingNetwork(node_id), _, Some(payload_address)) => {
@@ -301,7 +410,8 @@ pub async fn radio_service(
 
 						// println!("hearbeats: {:?}\ncommand_messages: {:?}", heartbeats, command_messages);
 						// Send a command to the node if one is available
-						let command_message = db.write().unwrap().get_next_command_message(id_node_db);
+						let command_message =
+							db.write().unwrap().get_next_command_message(id_node_db);
 						if let Some((command_id, command_message)) = command_message {
 							changed_commands = true;
 
@@ -349,7 +459,13 @@ pub async fn radio_service(
 							Response::Limbs(limbs) => {
 								let limbs = limbs
 									.iter()
-									.filter_map(|l| if let Some(l) = l { Some(l.clone()) } else { None })
+									.filter_map(|l| {
+										if let Some(l) = l {
+											Some(l.clone())
+										} else {
+											None
+										}
+									})
 									.collect::<Vec<_>>();
 								log_limbs(id_node_db, &limbs);
 								db.write()
@@ -371,7 +487,9 @@ pub async fn radio_service(
 							_ => {}
 						}
 						// Call back anything that needed this command
-						if let Some(callback) = id_command.and_then(|id| db.write().unwrap().get_response_callback(id)) {
+						if let Some(callback) =
+							id_command.and_then(|id| db.write().unwrap().get_response_callback(id))
+						{
 							callback.send(response).ok();
 						}
 						// Update ui commands

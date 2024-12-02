@@ -42,6 +42,7 @@ def docker_args [name] {
 		-e DB_PATH_LOG=samn_db
 		-e RADIO=on
 		-e RUST_BACKTRACE=1
+		-v /etc/localtime:/etc/localtime:ro
 	])}
 
 	if $name == "lasna" {

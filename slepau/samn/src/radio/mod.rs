@@ -295,11 +295,15 @@ pub async fn radio_service(
 				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
 			},
 		]);
+		
 
+		
 		tokio::spawn(async move {
+			// Allow calls to now_local
+			unsafe {time::util::local_offset::set_soundness(time::util::local_offset::Soundness::Unsound)};
 			let mut interval = tokio::time::interval(Duration::from_secs(60));
 			interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-			interval.tick().await; // Let first instant tick happen
+			// interval.tick().await; // Let first instant tick happen
 			loop {
 				tokio::select! {
 					_ = interval.tick() => {}
@@ -307,10 +311,7 @@ pub async fn radio_service(
 						break;
 					}
 				}
-				let now = time::OffsetDateTime::now_utc().replace_offset(
-					time::UtcOffset::current_local_offset()
-						.unwrap_or_else(|_| time::UtcOffset::from_hms(-5, 0, 0).unwrap()),
-				);
+				let now = time::OffsetDateTime::now_local().unwrap();
 				
 				// Every minute check the scheduler
 				let mut db = db.write().unwrap();

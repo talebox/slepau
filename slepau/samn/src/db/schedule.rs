@@ -111,3 +111,77 @@ pub struct Schedule {
 //     self.
 //   }
 // }
+
+#[cfg(test)]
+mod tests {
+	use common::proquint::Proquint;
+	use samn_common::node::{Actuator, Limb, LimbType};
+	use time::{macros::{datetime, offset}, util::local_offset::Soundness};
+
+	use super::*;
+
+	#[test]
+	fn test_schedule() {
+		let schedule = make_test_schedule();
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 0:00 UTC)));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 9:00 UTC)));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 20:00 UTC)));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 22:00 UTC)));
+
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 5:00 UTC).to_offset(offset!(-5))));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 14:00 UTC).to_offset(offset!(-5))));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 1:00 UTC).to_offset(offset!(-5))));
+		assert!(event_matches(&schedule, &datetime!(2020-01-01 3:00 UTC).to_offset(offset!(-5))));
+
+		assert!(!event_matches(&schedule, &datetime!(2020-01-01 0:01 UTC)));
+		assert!(!event_matches(&schedule, &datetime!(2020-01-01 11:01 UTC)));
+		assert!(!event_matches(&schedule, &datetime!(2020-01-01 23:00 UTC)));
+	}
+	#[test]
+	fn get_local_time() {
+		unsafe {time::util::local_offset::set_soundness(Soundness::Unsound)};
+		time::OffsetDateTime::now_local().unwrap();
+		// assert!();
+	}
+	fn event_matches(schedule: &Schedule, now: &OffsetDateTime) -> bool {
+		schedule.events.iter().any(|event|event.time.matches(now))
+	}
+	fn make_test_schedule() -> Schedule {
+		Schedule {
+			events: vec![
+				// Kitchen at 9am
+				Event {
+					id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
+						.unwrap()
+						.inner(),
+					time: EventTime::new(Some(0), Some(9), None, None, None),
+					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
+				},
+				// Kitchen at 12am
+				Event {
+					id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
+						.unwrap()
+						.inner(),
+					time: EventTime::new(Some(0), Some(0), None, None, None),
+					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
+				},
+				// Living Room at 8pm
+				Event {
+					id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
+						.unwrap()
+						.inner(),
+					time: EventTime::new(Some(0), Some(20), None, None, None),
+					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
+				},
+				// Living Room at 10pm
+				Event {
+					id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
+						.unwrap()
+						.inner(),
+					time: EventTime::new(Some(0), Some(22), None, None, None),
+					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
+				},
+			],
+		}
+	}
+}

@@ -5,6 +5,7 @@ run pacman -Sy --noconfirm archlinux-keyring
 run pacman -Syu --noconfirm
 
 run pacman -Sy --noconfirm --needed openssl ffmpeg
+run pacman -S --noconfirm --needed tzdata
 
 workdir /server
 cmd ["./BIN_NAME"]

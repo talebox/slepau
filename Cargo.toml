@@ -39,6 +39,7 @@ diff = "0.1.13"
 axum-client-ip = "0.4"
 sonnerie = { git = "https://github.com/rubend056/sonnerie.git", branch = "master"}
 nb = "1.1.0"
+time = {version = "0.3.36", features = ["local-offset", "macros", "formatting"]}
 
 [profile.release]
 lto = true

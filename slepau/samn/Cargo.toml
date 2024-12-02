@@ -12,7 +12,7 @@ tower = { workspace = true, features = [] }
 tower-http.workspace = true
 lazy_static.workspace = true
 tower_governor.workspace = true
-time = {version = "0.3.17", features = ["local-offset"]}
+time.workspace = true
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

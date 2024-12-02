@@ -17,6 +17,7 @@ def docker_args [name] {
 		"media": 4503,
 		"vreji": 4504,
 		"samn": 4505,
+		"lasna": 4506,
 	}
 	if $name not-in $ports {
 		error make {msg: $"'($name)' doesn't exist in deploy_docker."}
@@ -42,6 +43,28 @@ def docker_args [name] {
 		-e RADIO=on
 		-e RUST_BACKTRACE=1
 	])}
+
+	if $name == "lasna" {
+		if $context == "anty" {
+			# Server config
+			$args = ($args | append [
+			
+			-p "7000:7000"
+			-p "127.0.0.1:7001:7001"
+			-e LASNA_MODE=server
+			-e LOG_LEVEL=trace
+		])} else {
+			# Device config
+			$args = ($args | append [
+				--add-host=host.docker.internal:host-gateway
+				-e DEVICE_ID=lasob
+			# -p "7000:7000"
+			# -p "127.0.0.1:7001:7001"
+			-e LASNA_MODE=talebox.dev 
+			-e LOCAL_ADDR=host.docker.internal:80
+		])}
+	}
+	
 
     return $args
 }
@@ -70,10 +93,10 @@ export def deploy_docker [name, build_opts = [], run_opts = []] {
 	docker volume create -d local $"($name)_backup"
 	do -i {docker stop $"($name)_s"}
 	do -i {docker rm $"($name)_s"}
-    $args = ($args 
-        | append [-d]  # Deamonize
-        | append [--restart unless-stopped]
-    );
+    $args = ($args | append [
+			-d # Deamonize
+			--restart unless-stopped
+		]);
 
 	docker run ...$args ...$run_opts --name $"($name)_s" $name
 

@@ -8,7 +8,7 @@ use axum::{
 use common::{
 	http::static_routes,
 	init::backup::backup_service,
-	utils::{log_env, SOCKET, URL},
+	utils::{log_env, wait_terminate, SOCKET, URL},
 	Cache,
 };
 use env_logger::Env;
@@ -193,26 +193,6 @@ async fn main() {
 		});
 
 	let server = tokio::spawn(server);
-
-	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
-
-	#[cfg(target_family = "windows")]
-	async fn wait_terminate() {
-		tokio::signal::ctrl_c().await.ok();
-	}
-	#[cfg(not(target_family = "windows"))]
-	async fn wait_terminate() {
-		let mut s0 = signal(SignalKind::interrupt()).unwrap();
-		let mut s1 = signal(SignalKind::terminate()).unwrap();
-		tokio::select! {
-			_ = s0.recv() => {
-				info!("Received Interrupt, exiting.");
-			}
-			_ = s1.recv() => {
-				info!("Received Terminate, exiting.");
-			}
-		}
-	}
 
 	wait_terminate().await;
 

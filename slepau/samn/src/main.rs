@@ -78,7 +78,7 @@ async fn main() {
 		.route("/command", post(ends::command))
 		.route("/command/wait", post(ends::command_response))
 		.route("/stream", get(socket::websocket_handler))
-		// .layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
+		.layer(axum::middleware::from_fn(auth::validate::flow::only_supers))
 		.layer(axum::middleware::from_fn(auth::validate::authenticate))
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(

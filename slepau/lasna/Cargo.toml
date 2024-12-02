@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-# hyper.workspace = true
+# Basic libs
 tokio.workspace = true
 lazy_static.workspace = true
 
@@ -13,3 +13,14 @@ common.workspace = true
 log.workspace = true
 env_logger.workspace = true
 socket2 = "0.5.8"
+
+# For server
+auth = { path = "../auth" }
+axum.workspace = true
+tower.workspace = true
+hyper.workspace = true
+tower-http.workspace = true
+tower_governor.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum-client-ip.workspace = true

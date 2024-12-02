@@ -101,7 +101,7 @@ async fn main() {
 					config: Box::leak(governor_conf),
 				}),
 		)
-		.fallback_service(static_routes())
+		// .fallback_service(static_routes())
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()

@@ -1642,12 +1642,21 @@ dependencies = [
 name = "lasna"
 version = "0.7.0"
 dependencies = [
+ "auth",
+ "axum",
+ "axum-client-ip",
  "common",
  "env_logger",
+ "hyper",
  "lazy_static",
  "log",
+ "serde",
+ "serde_json",
  "socket2",
  "tokio",
+ "tower",
+ "tower-http",
+ "tower_governor",
 ]
 
 [[package]]

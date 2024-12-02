@@ -20,7 +20,7 @@ export def organize_out [bin_dir = "bin"] {
 	enter out
 		rm -rf slepau
 		
-		['auth','vreji', 'chunk', 'samn', 'media', 'gen_key', 'talebox'] | each {|a|
+		[auth vreji chunk samn lasna media gen_key] | each {|a|
 			echo $"Doing ($a)."
 			# Make slepau dir
 			mkdir $"slepau/($a)"
@@ -51,13 +51,25 @@ export def organize_out [bin_dir = "bin"] {
 		
 		cp -r ../config/nginx ./
 		enter nginx
-		
+
+			# Remove SN_DEVELOPMENT
+			/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/^.*#SN_DEVELOPMENT.*$//gm'
 			# Don't enable https, or change logs for arm build
 			if $bin_dir != bin_armv7hf {
+				# SERVER BUILD
 				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
-				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
-
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev-0001/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev-0001/privkey.pem; # managed by Certbot$g'
 				/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
+				
+				# Enable SN_SERVER
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/#SN_SERVER//g'
+			} else {
+				# DEVICE BUILD
+
+				# Remove the lasna server rerouting so packets get to the right location
+				rm ./sites/0_lasna_server.conf 
+				# Enable SN_DEVICE
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/#SN_DEVICE//g'
 			}
 			
 			/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/400([0-9])/450\1/g'
@@ -86,7 +98,7 @@ export def build_server [bin_dir:string = "bin", options = [], binary = "all"] {
 		
 		print $"Building binaries to out/($bin_dir)."
 		# Build server
-		['auth','vreji', 'chunk', 'media', 'samn', 'gen_key'] | each {|a|
+		[auth vreji chunk samn lasna media gen_key] | each {|a|
 			cargo build -Zunstable-options --artifact-dir $"out/($bin_dir)" ...$options --release --bin $a
 		};
 		print $"All binaries built to 'out/($bin_dir)'."
@@ -161,7 +173,7 @@ export def make_standalone [dir = "linux_x86_64"] {
 			mkdir keys
 			cp $"../bin_($dir)/gen_key" ./
 			
-			["auth",'vreji',"chunk","media"] | each {|a|
+			[auth vreji chunk media] | each {|a|
 				cp -r $"../slepau/($a)" ./
 				enter $a
 					ln -s ../keys keys

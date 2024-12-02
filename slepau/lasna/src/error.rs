@@ -13,9 +13,10 @@ pub enum Error {
 	InvalidHostFormat,
 	Join(tokio::task::JoinError),
 	DeviceStreamRequestFailed,
-	// InvalidResponse,
+	ConnectionClosed,
 	Proquint(QuintError),
 	Utf8(std::str::Utf8Error),
+	Other(String),
 	// HeaderToStr(hyper::header::ToStrError),
 	// Add more variants as needed
 }
@@ -29,12 +30,15 @@ impl fmt::Display for Error {
 			// Error::Hyper(err) => write!(f, "Hyper error: {}", err),
 			Error::MissingHostHeader => write!(f, "Missing Host header"),
 			Error::InvalidHostFormat => write!(f, "Invalid host format"),
+			Error::ConnectionClosed => write!(f, "Connection closed"),
       Error::DeviceStreamRequestFailed => write!(f, "Device stream request failed"),
 			// Error::InvalidResponse => write!(f, "Invalid response"),
 			Error::Join(err) => write!(f, "Join error: {}", err),
 			// Error::DeviceNotConnected => write!(f, "Device not connected"),
 			Error::Proquint(err) => write!(f, "Proquint error: {}", err),
 			Error::Utf8(err) => write!(f, "UTF-8 error: {}", err),
+
+			Error::Other(v) => write!(f, "{v}"),
 			// Error::HeaderToStr(err) => write!(f, "Header to string error: {}", err),
 		}
 	}

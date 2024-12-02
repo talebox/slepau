@@ -1,8 +1,11 @@
 use common::proquint::Proquint;
 
 use log::{error, info, trace};
+use tokio::select;
+use tokio::time::timeout;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -21,15 +24,26 @@ type Result<T> = std::result::Result<T, Error>;
  */
 
 // Accept client connections as raw TCP streams
-pub async fn accept_client_connections(addr: &str) -> Result<()> {
+pub async fn accept_client_connections(
+	addr: &str,
+	mut shutdown: tokio::sync::watch::Receiver<()>,
+) -> Result<()> {
 	let listener = TcpListener::bind(addr).await?;
 	loop {
-		let (socket, _) = listener.accept().await?;
-		tokio::spawn(async move {
-			if let Err(e) = handle_client_connection(socket).await {
-				error!("Error handling client connection: {}", e);
+		select! {
+			r = listener.accept() => {
+				let (socket,_) = r?;
+				// let shutdown = shutdown.clone();
+				tokio::spawn(async move {
+					if let Err(e) = handle_client_connection(socket).await {
+						error!("Error handling client connection: {}", e);
+					}
+				});
 			}
-		});
+			_ = shutdown.changed() => {
+				break Ok(());
+			}
+		}
 	}
 }
 // Handle client connections and forward data
@@ -58,45 +72,50 @@ async fn handle_client_connection(mut client_conn: tokio::net::TcpStream) -> Res
 	};
 
 	if let Some(device_conn) = device_connection {
-    // Generate a unique session ID
-    let session_id = SessionId::default();
+		// Generate a unique session ID
+		let session_id = SessionId::default();
 
-    // Create a oneshot channel to receive the new device connection
-    let (tx, rx) = oneshot::channel();
+		// Create a oneshot channel to receive the new device connection
+		let (tx, rx) = oneshot::channel();
 
-    // Insert the sender into PENDING_CONNECTIONS with the session ID
-    {
-        let mut pending = PENDING_CONNECTIONS.write().await;
-        pending.insert(session_id.clone(), tx);
-    }
+		// Insert the sender into PENDING_CONNECTIONS with the session ID
+		{
+			let mut pending = PENDING_CONNECTIONS.write().await;
+			pending.insert(session_id.clone(), tx);
+		}
 
-    // Send a request over device_conn to the device, including the session ID
-    {
-        let mut device_conn = device_conn.write().await;
-        // Send a message to the device to open a new connection
-        // Protocol: "NEW_CONNECTION <session_id>\n"
-        let message = format!("NEW_CONNECTION {}\n", session_id);
-        device_conn.write_all(message.as_bytes()).await?;
-        device_conn.flush().await?;
-    }
+		// Send a request over device_conn to the device, including the session ID
+		{
+			let mut device_conn = device_conn.write().await;
+			// Send a message to the device to open a new connection
+			// Protocol: "NEW_CONNECTION <session_id>\n"
+			let message = format!("NEW_CONNECTION {}\n", session_id);
+			device_conn.write_all(message.as_bytes()).await?;
+			device_conn.flush().await?;
+		}
 
-    // Wait for the device to connect back with the new TCP stream
-    let mut device_stream = rx.await.map_err(|_| Error::DeviceStreamRequestFailed)?;
+		// Wait for the device to connect back with the new TCP stream
+		let mut device_stream = timeout(Duration::from_secs(30), rx)
+			.await
+			.map_err(|_| Error::DeviceStreamRequestFailed)?
+			.map_err(|_| Error::DeviceStreamRequestFailed)?;
 
-    // Forward data between client and device using the new connection
-    match tokio::io::copy_bidirectional(&mut client_conn, &mut device_stream).await {
-      Ok((from_a, from_b)) => {
-        trace!("Session {session_id} success: Sent {from_a} bytes; Received {from_b} bytes.")
-      }
-      Err(err) => {
-        error!("Session {session_id} I/O error: {err}")
-      }
-    }
-} else {
-    // Device not connected; send HTTP 503 response
-    let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 20\r\n\r\nDevice not connected";
-    client_conn.write_all(response.as_bytes()).await?;
-}
+		// Forward data between client and device using the new connection
+		match tokio::io::copy_bidirectional(&mut client_conn, &mut device_stream).await {
+			Ok((from_a, from_b)) => {
+				trace!(
+					"Session {session_id} success: Sent {from_a} bytes; Received {from_b} bytes."
+				)
+			}
+			Err(err) => {
+				error!("Session {session_id} I/O error: {err}")
+			}
+		}
+	} else {
+		// Device not connected; send HTTP 503 response
+		let response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 20\r\n\r\nDevice not connected";
+		client_conn.write_all(response.as_bytes()).await?;
+	}
 
 	Ok(())
 }

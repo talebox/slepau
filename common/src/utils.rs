@@ -41,12 +41,16 @@ pub fn gen_64() -> u64 {
 
 lazy_static! {
 	pub static ref REGEX_TITLE: Regex = Regex::new(env!("REGEX_TITLE")).unwrap();
-	pub static ref REGEX_ACCESS: Regex = Regex::new(format!("(?im){}", env!("REGEX_ACCESS")).as_str()).unwrap();
-	pub static ref REGEX_PROPERTY: Regex = Regex::new(format!("(?m){}", env!("REGEX_PROPERTY")).as_str()).unwrap();
+	pub static ref REGEX_ACCESS: Regex =
+		Regex::new(format!("(?im){}", env!("REGEX_ACCESS")).as_str()).unwrap();
+	pub static ref REGEX_PROPERTY: Regex =
+		Regex::new(format!("(?m){}", env!("REGEX_PROPERTY")).as_str()).unwrap();
 	pub static ref REGEX_USERNAME: Regex = Regex::new(env!("REGEX_USERNAME")).unwrap();
-	pub static ref REGEX_USERNAME_HUMAN: Regex = Regex::new(env!("REGEX_USERNAME_HUMAN")).unwrap();
+	pub static ref REGEX_USERNAME_HUMAN: Regex =
+		Regex::new(env!("REGEX_USERNAME_HUMAN")).unwrap();
 	pub static ref REGEX_PASSWORD: Regex = Regex::new(env!("REGEX_PASSWORD")).unwrap();
-	pub static ref REGEX_PASSWORD_HUMAN: Regex = Regex::new(env!("REGEX_PASSWORD_HUMAN")).unwrap();
+	pub static ref REGEX_PASSWORD_HUMAN: Regex =
+		Regex::new(env!("REGEX_PASSWORD_HUMAN")).unwrap();
 }
 
 lazy_static! {
@@ -111,9 +115,10 @@ impl IntoResponse for DbError {
 				_ => StatusCode::FORBIDDEN,
 			},
 			(match self {
-					DbError::Custom(v) => v,
-					v => serde_json::to_string(&v).unwrap(),
-				}).to_string(),
+				DbError::Custom(v) => v,
+				v => serde_json::to_string(&v).unwrap(),
+			})
+			.to_string(),
 		)
 			.into_response()
 	}
@@ -139,7 +144,10 @@ pub fn diff_calc(left: &str, right: &str) -> Vec<String> {
 			Left(_l) => {
 				if acc.last().map(|v| v.starts_with('D')) == Some(true) {
 					// Add 1
-					*acc.last_mut().unwrap() = format!("D{}", (&acc.last().unwrap()[1..].parse::<u32>().unwrap() + 1));
+					*acc.last_mut().unwrap() = format!(
+						"D{}",
+						(&acc.last().unwrap()[1..].parse::<u32>().unwrap() + 1)
+					);
 				} else {
 					acc.push("D1".to_string());
 				}
@@ -147,7 +155,10 @@ pub fn diff_calc(left: &str, right: &str) -> Vec<String> {
 			Both(_, _) => {
 				if acc.last().map(|v| v.starts_with('K')) == Some(true) {
 					// Add 1
-					*acc.last_mut().unwrap() = format!("K{}", (&acc.last().unwrap()[1..].parse::<u32>().unwrap() + 1));
+					*acc.last_mut().unwrap() = format!(
+						"K{}",
+						(&acc.last().unwrap()[1..].parse::<u32>().unwrap() + 1)
+					);
 				} else {
 					acc.push("K1".to_string());
 				}
@@ -177,7 +188,10 @@ pub struct DataSlice<T> {
 
 
 pub fn hostname_normalize(host: &str) -> &str {
-	if ["127.", "10.", "192.168."].iter().any(|v| host.starts_with(v)) {
+	if ["127.", "10.", "192.168."]
+		.iter()
+		.any(|v| host.starts_with(v))
+	{
 		host
 	} else {
 		psl::domain_str(host).unwrap_or(host)
@@ -188,4 +202,26 @@ pub fn get_hash<T: Hash>(v: &T) -> u64 {
 	let mut hasher = DefaultHasher::new();
 	v.hash(&mut hasher);
 	hasher.finish()
+}
+
+
+#[cfg(target_family = "windows")]
+pub async fn wait_terminate() {
+	tokio::signal::ctrl_c().await.ok();
+	log::info!("Received ctrl_c");
+}
+#[cfg(not(target_family = "windows"))]
+pub async fn wait_terminate() {
+	let mut s0 =
+		tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()).unwrap();
+	let mut s1 =
+		tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
+	tokio::select! {
+		_ = s0.recv() => {
+			log::info!("Received interrupt");
+		}
+		_ = s1.recv() => {
+			log::info!("Received terminate");
+		}
+	}
 }

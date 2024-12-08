@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+
 use serde_json::{json, Value};
 
 use crate::db::{
@@ -31,7 +32,10 @@ fn sharing() {
 	assert!(db.set_chunk(c_notes, "john").is_ok());
 
 	assert_eq!(
-		db.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(), "poca"),
+		db.set_chunk(
+			(id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(),
+			"poca"
+		),
 		Ok(HashSet::default())
 	);
 	assert!(db
@@ -40,16 +44,28 @@ fn sharing() {
 	// let c_notes: DBChunk = "# Notes\nHello :)\nshare: poca w, nina a".into();
 	// println!("{:?}", c_notes.props());
 	assert!(db
-		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(), "nina")
+		.set_chunk(
+			(id_notes, "# Notes\nHello :)\nshare: poca w, nina a").into(),
+			"nina"
+		)
 		.is_ok());
 	assert!(db
-		.set_chunk((id_notes, "# Notes\nHello :)\nshare: nina a").into(), "nina")
+		.set_chunk(
+			(id_notes, "# Notes\nHello :)\nshare: nina a").into(),
+			"nina"
+		)
 		.is_ok());
 	assert!(db
-		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca rnina a").into(), "nina")
+		.set_chunk(
+			(id_notes, "# Notes\nHello :)\nshare: poca rnina a").into(),
+			"nina"
+		)
 		.is_err()); // Errors out because nina would be deleting her own admin access
 	assert!(db
-		.set_chunk((id_notes, "# Notes\nHello :)\nshare: poca r,nina a").into(), "nina")
+		.set_chunk(
+			(id_notes, "# Notes\nHello :)\nshare: poca r,nina a").into(),
+			"nina"
+		)
 		.is_ok());
 	assert!(db.del_chunk(HashSet::from([id_notes]), "nina").is_ok()); // Nina can delete as well
 }
@@ -70,15 +86,33 @@ fn visibility() {
 		assert_eq!(db.get_chunks("public").len(), 0); // Public can't see anything
 
 		assert_eq!(
-			db.subtree(None, &"nina".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"nina".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, Some(vec![]))
 		); // Nina can't see anything
 		assert_eq!(
-			db.subtree(None, &"john".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"john".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, Some(vec![GraphView(json!(id_notes), None)]))
 		); // John can see his own
 		assert_eq!(
-			db.subtree(None, &"public".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"public".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, None)
 		); // Public can't see anything
 	}
@@ -99,18 +133,36 @@ fn visibility() {
 		assert_eq!(db.get_chunks("public").len(), 0); // Public can't see anything
 
 		assert_eq!(
-			db.subtree(None, &"nina".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"nina".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, Some(vec![GraphView(json!(id_notes2), None)]))
 		);
 		assert_eq!(
-			db.subtree(None, &"john".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1)
-				.1
-				.unwrap()
-				.len(),
+			db.subtree(
+				None,
+				&"john".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			)
+			.1
+			.unwrap()
+			.len(),
 			2
 		);
 		assert_eq!(
-			db.subtree(None, &"public".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"public".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, None)
 		); // Public can't see anything
 	}
@@ -131,11 +183,23 @@ fn visibility() {
 		assert_eq!(db.get_chunks("public").len(), 0); // Public can't see anything
 
 		assert_eq!(
-			db.subtree(None, &"nina".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"nina".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, Some(vec![GraphView(json!(id_notes2), None)]))
 		);
 		assert_eq!(
-			db.subtree(None, &"nina".into(), &|v| v, &|v| json!(ChunkId::from(v)), 2),
+			db.subtree(
+				None,
+				&"nina".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				2
+			),
 			GraphView(
 				Value::Null,
 				Some(vec![GraphView(
@@ -145,14 +209,26 @@ fn visibility() {
 			)
 		);
 		assert_eq!(
-			db.subtree(None, &"john".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1)
-				.1
-				.unwrap()
-				.len(),
+			db.subtree(
+				None,
+				&"john".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			)
+			.1
+			.unwrap()
+			.len(),
 			2
 		);
 		assert_eq!(
-			db.subtree(None, &"public".into(), &|v| v, &|v| json!(ChunkId::from(v)), 1),
+			db.subtree(
+				None,
+				&"public".into(),
+				&|v| v,
+				&|v| json!(ChunkId::from(v)),
+				1
+			),
 			GraphView(Value::Null, None)
 		); // Public can't see anything
 	}
@@ -240,7 +316,13 @@ fn well() {
 		.map(|v| ChunkView::from((v, "john")))
 		.collect();
 
-	let subtree = db.subtree(None, &"john".into(), &|v| v, &|v| json!(ChunkId::from(v)), 2);
+	let subtree = db.subtree(
+		None,
+		&"john".into(),
+		&|v| v,
+		&|v| json!(ChunkId::from(v)),
+		2,
+	);
 	// println!("{subtree:?}");
 	assert_eq!(
 		subtree.1.unwrap().len(),
@@ -276,13 +358,19 @@ fn circular() {
 	assert!(db.set_chunk(c_note1, "john").is_ok());
 
 	assert!(
-		db.set_chunk((id_notes, &*format!("# Notes -> {}\n", &id_notes)).into(), "john")
-			.is_err(),
+		db.set_chunk(
+			(id_notes, &*format!("# Notes -> {}\n", &id_notes)).into(),
+			"john"
+		)
+		.is_err(),
 		"Chunk links to itself, A -> A, it should fail."
 	);
 	assert!(
-		db.set_chunk((id_notes, &*format!("# Notes -> {}\n", &id_note1)).into(), "john")
-			.is_err(),
+		db.set_chunk(
+			(id_notes, &*format!("# Notes -> {}\n", &id_note1)).into(),
+			"john"
+		)
+		.is_err(),
 		"Chunk links circurlarly, A -> B -> A, it should fail."
 	);
 
@@ -291,8 +379,11 @@ fn circular() {
 	assert!(db.set_chunk(c_note2, "john").is_ok());
 
 	assert!(
-		db.set_chunk((id_notes, format!("# Notes -> {id_note2}\n").as_str()).into(), "sara")
-			.is_err(),
+		db.set_chunk(
+			(id_notes, format!("# Notes -> {id_note2}\n").as_str()).into(),
+			"sara"
+		)
+		.is_err(),
 		"Chunk links circurlarly, A -> C -> B -> A, it should fail."
 	);
 }
@@ -310,12 +401,32 @@ fn linking() {
 	let mut db = init();
 
 	{
-		let _all = db.chunks.values().map(|v| v.read().unwrap()).collect::<Vec<_>>();
+		let _all = db
+			.chunks
+			.values()
+			.map(|v| v.read().unwrap())
+			.collect::<Vec<_>>();
 		// println!("{all:?}");
 	}
 	db.link_all().unwrap();
 	{
-		let _all = db.chunks.values().map(|v| v.read().unwrap()).collect::<Vec<_>>();
+		let _all = db
+			.chunks
+			.values()
+			.map(|v| v.read().unwrap())
+			.collect::<Vec<_>>();
 		// println!("{all:?}");
 	}
 }
+
+// extern crate test;
+// use test::Bencher;
+// #[bench]
+// fn size(b: &mut Bencher) {
+// 	b.iter(|| {
+// 		let mut db = init();
+// 		for _ in 0..1_000 {
+// 			db.set_chunk(("# Testing \nOh no daniel this is 1_000_000 chunks, there's no way this thing will crash").into(), "john").unwrap();
+// 		}
+// 	});
+// }

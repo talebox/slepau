@@ -69,188 +69,13 @@ pub async fn radio_service(
 	let mut last_calibration = Instant::now();
 	println!("Receiving...");
 
-	async fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
-		nrf24: &mut R0,
-		cc1101: &mut R1,
-		nrf24_pin: &mut CdevPin,
-		cc1101_pin: &mut CdevPin,
-	) -> nb::Result<(Payload, bool), E1> {
-		match timeout(Duration::from_millis(50), async {
-			nrf24
-				.receive(nrf24_pin, None)
-				.map(|v| (v, true))
-				.or_else(|_| cc1101.receive(cc1101_pin, None).map(|v| (v, false)))
-		})
-		.await
-		{
-			Ok(v) => match v {
-				Ok((payload, is_nrf)) => {
-					if !payload.len_is_valid() {
-						log::error!(
-							"{} packet length {} isn't valid, discarding & flushing rx fifo",
-							if is_nrf { "nrf24" } else { "cc1101" },
-							payload.len()
-						);
-						if is_nrf {
-							nrf24.flush_rx().unwrap();
-						} else {
-							cc1101.flush_rx().unwrap();
-						}
-						nb::Result::Err(nb::Error::WouldBlock)
-					} else {
-						Ok((payload, is_nrf))
-					}
-				}
-				Err(e) => Err(e),
-			},
-			Err(delay) => {
-				log::error!("Receiving took too long {:?}", delay);
-				nb::Result::Err(nb::Error::WouldBlock)
-			}
-		}
-	}
 
-	async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
-		// let spin_sleeper = spin_sleep::SpinSleeper::new(100_000)
-		// .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint);
-
-
-		radio
-			.transmit_start(payload, &mut linux_embedded_hal::Delay)
-			.unwrap(); // This enables ce
-							// This is to wait for cc1101 to switch to TX mode
-							// Because the polling only asks wether it's in Iddle
-							// If this wasn't here transmit_start would send command probe and radio
-							// could still be in Idle when we poll it.
-							// tokio::time::sleep(Duration::from_micros(30)).await;
-							// spin_sleeper.sleep_ns(30_000);
-
-		let mut interval = tokio::time::interval(Duration::from_micros(100));
-		interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-		interval.tick().await; // Let first instant tick happen
-		loop {
-			interval.tick().await; // This first await should be >= 100us long
-			match radio.transmit_poll() {
-				nb::Result::Ok(v) => {
-					return v;
-				}
-				nb::Result::Err(e) => {
-					match e {
-						nb::Error::Other(e) => {
-							log::error!("{:?}", e);
-							return false;
-						}
-						nb::Error::WouldBlock => {
-							// Keep polling
-						}
-					}
-				}
-			}
-		}
-	}
-	async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
-		nrf24: &mut R0,
-		cc1101: &mut R1,
-		message: &Message,
-		address: u16,
-		is_nrf: bool,
-		new_wire_format: bool,
-	) {
-		let payload = {
-			let mut packet = [0u8; 32];
-			let packet_l;
-			if new_wire_format {
-				packet_l = message.serialize_to_bytes(&mut packet).unwrap();
-			} else {
-				packet_l = postcard::to_slice(&message, &mut packet).unwrap().len();
-			}
-			Payload::new_with_addr_from_array(
-				packet,
-				packet_l,
-				address,
-				addr_to_rx_pipe(address),
-			)
-		};
-
-		match timeout(Duration::from_millis(100), async {
-			if is_nrf {
-				transmit(nrf24, &payload).await
-			} else {
-				transmit(cc1101, &payload).await
-			}
-		})
-		.await
-		{
-			Ok(success) => {
-				if is_nrf {
-					nrf24.to_rx().unwrap();
-				} else {
-					cc1101.to_rx().unwrap();
-				}
-
-				println!(
-					"{} {} bytes{}, {:?}",
-					if success { "Sent" } else { "Failed sending" },
-					payload.len(),
-					if new_wire_format {
-						" with new wire format"
-					} else {
-						""
-					},
-					message
-				);
-			}
-			Err(delay) => {
-				if is_nrf {
-					nrf24.to_idle().unwrap();
-					nrf24.flush_tx().unwrap();
-					nrf24.flush_rx().unwrap();
-					nrf24.to_rx().unwrap();
-				} else {
-					cc1101.to_idle().unwrap();
-					cc1101.flush_tx().unwrap();
-					cc1101.flush_rx().unwrap();
-					cc1101.to_rx().unwrap();
-				}
-
-				log::error!(
-					"Sending with {} took too long {:?}, flushed fifos & switched to rx just in case",
-					if is_nrf { "nrf24" } else { "cc1101" },
-					delay
-				);
-			}
-		};
-	}
 	let send_commands_changed = |db: &db::DB| {
 		tx_resource
 			.send(SocketMessage::from(("commands", &db.commands())).into())
 			.ok();
 	};
 
-	async fn poll_pin(pin: &mut CdevPin, state: bool) {
-		loop {
-			if if state {
-				pin.is_high().unwrap()
-			} else {
-				pin.is_low().unwrap()
-			} {
-				break;
-			}
-			tokio::time::sleep(Duration::from_micros(400)).await;
-		}
-	}
-
-	/// Checks radio state, flushes buffers and performs calibration
-	async fn cc1101_checkpoint(cc1101: &mut Cc1101<SpidevDevice>) {
-		let marc_state = cc1101.get_marc_state().unwrap();
-		if marc_state != MachineState::RX.value() {
-			log::error!("cc1101 not in rx state, instead it's in: {marc_state}");
-			cc1101.flush_rx().unwrap();
-			cc1101.flush_tx().unwrap();
-		}
-		cc1101.to_idle().unwrap();
-		cc1101.to_rx().unwrap();
-	}
 	// Amount of times checkpoint info log will be printed
 	let mut cc1101_checkpoint_n = 30;
 
@@ -258,49 +83,16 @@ pub async fn radio_service(
 	// Spawn the scheduler
 	{
 		let mut shutdown_rx = shutdown_rx.clone();
-
-		// Test schedule
 		let db = db.clone();
-		db.write().unwrap().schedule.events.extend([
-			// Kitchen at 9am
-			Event {
-				id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
-					.unwrap()
-					.inner(),
-				time: EventTime::new(Some(0), Some(9), None, None, None),
-				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
-			},
-			// Kitchen at 12am
-			Event {
-				id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
-					.unwrap()
-					.inner(),
-				time: EventTime::new(Some(0), Some(0), None, None, None),
-				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
-			},
-			// Living Room at 8pm
-			Event {
-				id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
-					.unwrap()
-					.inner(),
-				time: EventTime::new(Some(0), Some(20), None, None, None),
-				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
-			},
-			// Living Room at 10pm
-			Event {
-				id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
-					.unwrap()
-					.inner(),
-				time: EventTime::new(Some(0), Some(22), None, None, None),
-				command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
-			},
-		]);
-		
 
-		
+
 		tokio::spawn(async move {
 			// Allow calls to now_local
-			unsafe {time::util::local_offset::set_soundness(time::util::local_offset::Soundness::Unsound)};
+			unsafe {
+				time::util::local_offset::set_soundness(
+					time::util::local_offset::Soundness::Unsound,
+				)
+			};
 			let mut interval = tokio::time::interval(Duration::from_secs(60));
 			interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 			// interval.tick().await; // Let first instant tick happen
@@ -312,7 +104,7 @@ pub async fn radio_service(
 					}
 				}
 				let now = time::OffsetDateTime::now_local().unwrap();
-				
+
 				// Every minute check the scheduler
 				let mut db = db.write().unwrap();
 				for event in db.schedule.events.clone() {
@@ -362,11 +154,11 @@ pub async fn radio_service(
 			}
 		}
 
-		let rx_start = Instant::now();
+		// let rx_start = Instant::now();
 		while let Ok((payload, is_nrf)) =
 			receive_any(&mut nrf24, &mut cc1101, &mut irq_pin, &mut g2).await
 		{
-			let rx_end = Instant::now();
+			// let rx_end = Instant::now();
 			if let Ok((message, new_wire_format)) =
 				Message::deserialize_from_bytes(&payload.data())
 					.map(|v| (v.0, true))
@@ -422,7 +214,7 @@ pub async fn radio_service(
 								command: command_message.command,
 							});
 
-							let tx_start = Instant::now();
+							// let tx_start = Instant::now();
 							transmit_any(
 								&mut nrf24,
 								&mut cc1101,
@@ -580,4 +372,183 @@ pub async fn radio_service(
 	nrf24.to_idle().unwrap();
 	cc1101.to_idle().unwrap();
 	println!("radios shut down.");
+}
+
+
+async fn receive_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
+	nrf24: &mut R0,
+	cc1101: &mut R1,
+	nrf24_pin: &mut CdevPin,
+	cc1101_pin: &mut CdevPin,
+) -> nb::Result<(Payload, bool), E1> {
+	match timeout(Duration::from_millis(50), async {
+		nrf24
+			.receive(nrf24_pin, None)
+			.map(|v| (v, true))
+			.or_else(|_| cc1101.receive(cc1101_pin, None).map(|v| (v, false)))
+	})
+	.await
+	{
+		Ok(v) => match v {
+			Ok((payload, is_nrf)) => {
+				if !payload.len_is_valid() {
+					log::error!(
+						"{} packet length {} isn't valid, discarding & flushing rx fifo",
+						if is_nrf { "nrf24" } else { "cc1101" },
+						payload.len()
+					);
+					if is_nrf {
+						nrf24.flush_rx().unwrap();
+					} else {
+						cc1101.flush_rx().unwrap();
+					}
+					nb::Result::Err(nb::Error::WouldBlock)
+				} else {
+					Ok((payload, is_nrf))
+				}
+			}
+			Err(e) => Err(e),
+		},
+		Err(delay) => {
+			log::error!("Receiving took too long {:?}", delay);
+			nb::Result::Err(nb::Error::WouldBlock)
+		}
+	}
+}
+
+async fn transmit<E: Debug, R: Radio<E>>(radio: &mut R, payload: &Payload) -> bool {
+	// let spin_sleeper = spin_sleep::SpinSleeper::new(100_000)
+	// .with_spin_strategy(spin_sleep::SpinStrategy::SpinLoopHint);
+
+
+	radio
+		.transmit_start(payload, &mut linux_embedded_hal::Delay)
+		.unwrap(); // This enables ce
+						 // This is to wait for cc1101 to switch to TX mode
+						 // Because the polling only asks wether it's in Iddle
+						 // If this wasn't here transmit_start would send command probe and radio
+						 // could still be in Idle when we poll it.
+						 // tokio::time::sleep(Duration::from_micros(30)).await;
+						 // spin_sleeper.sleep_ns(30_000);
+
+	let mut interval = tokio::time::interval(Duration::from_micros(100));
+	interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+	interval.tick().await; // Let first instant tick happen
+	loop {
+		interval.tick().await; // This first await should be >= 100us long
+		match radio.transmit_poll() {
+			nb::Result::Ok(v) => {
+				return v;
+			}
+			nb::Result::Err(e) => {
+				match e {
+					nb::Error::Other(e) => {
+						log::error!("{:?}", e);
+						return false;
+					}
+					nb::Error::WouldBlock => {
+						// Keep polling
+					}
+				}
+			}
+		}
+	}
+}
+async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
+	nrf24: &mut R0,
+	cc1101: &mut R1,
+	message: &Message,
+	address: u16,
+	is_nrf: bool,
+	new_wire_format: bool,
+) {
+	let payload = {
+		let mut packet = [0u8; 32];
+		let packet_l;
+		if new_wire_format {
+			packet_l = message.serialize_to_bytes(&mut packet).unwrap();
+		} else {
+			packet_l = postcard::to_slice(&message, &mut packet).unwrap().len();
+		}
+		Payload::new_with_addr_from_array(packet, packet_l, address, addr_to_rx_pipe(address))
+	};
+	let timeout_duration = Duration::from_millis(30);
+
+	for _ in 0..3 {
+		match timeout(timeout_duration, async {
+			if is_nrf {
+				transmit(nrf24, &payload).await
+			} else {
+				transmit(cc1101, &payload).await
+			}
+		})
+		.await
+		{
+			Ok(success) => {
+				if is_nrf {
+					nrf24.to_rx().unwrap();
+				} else {
+					cc1101.to_rx().unwrap();
+				}
+
+				println!(
+					"{} {} bytes{}, {:?}",
+					if success { "Sent" } else { "Failed sending" },
+					payload.len(),
+					if new_wire_format {
+						" with new wire format"
+					} else {
+						""
+					},
+					message
+				);
+				break; // Don't keep retransmitting, we didn't timeout
+			}
+			Err(delay) => {
+				if is_nrf {
+					nrf24.to_idle().unwrap();
+					nrf24.flush_tx().unwrap();
+					nrf24.flush_rx().unwrap();
+					nrf24.to_rx().unwrap();
+				} else {
+					cc1101.to_idle().unwrap();
+					cc1101.flush_tx().unwrap();
+					cc1101.flush_rx().unwrap();
+					cc1101.to_rx().unwrap();
+				}
+
+				log::error!(
+					"Sending with {} took too long {:?}, flushed fifos & switched to rx just in case",
+					if is_nrf { "nrf24" } else { "cc1101" },
+					timeout_duration
+				);
+			}
+		};
+	}
+}
+
+
+async fn poll_pin(pin: &mut CdevPin, state: bool) {
+	loop {
+		if if state {
+			pin.is_high().unwrap()
+		} else {
+			pin.is_low().unwrap()
+		} {
+			break;
+		}
+		tokio::time::sleep(Duration::from_micros(400)).await;
+	}
+}
+
+/// Checks radio state, flushes buffers and performs calibration
+async fn cc1101_checkpoint(cc1101: &mut Cc1101<SpidevDevice>) {
+	let marc_state = cc1101.get_marc_state().unwrap();
+	if marc_state != MachineState::RX.value() {
+		log::error!("cc1101 not in rx state, instead it's in: {marc_state}");
+		cc1101.flush_rx().unwrap();
+		cc1101.flush_tx().unwrap();
+	}
+	cc1101.to_idle().unwrap();
+	cc1101.to_rx().unwrap();
 }

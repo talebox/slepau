@@ -7,3 +7,6 @@ PASSWORD = '^.{6,64}$'
 PASSWORD_HUMAN = "Minimum 6, max 64"
 PROPERTY = '^([a-z0-9_]+): (.*)$'
 GRAPHVIZ = '^``` {0,2}(?:dot|gv) {0,2}\n([\s\S]*?)```$'
+
+ALIAS = 'alias ((?:_?[aioubdfghjklmnprstvz]{5}){2}) (\w{3,})'
+EVENT = 'at +(?<time>(?:[0-9:]+ ?(?:am|pm)?|midnight|noon)) +for +(?<id>\w+) +set +(?<lid>[\d]+)? *(?<c>light[ _](?:on|off))'

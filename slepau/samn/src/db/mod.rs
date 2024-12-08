@@ -71,7 +71,6 @@ pub struct DB {
 	#[serde(skip)]
 	pub response_callbacks: LinkedList<(u8, oneshot::Sender<Response>)>,
 
-	#[serde(skip)]
 	pub schedule: Schedule
 }
 

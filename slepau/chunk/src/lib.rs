@@ -1,3 +1,4 @@
+#![feature(test)]
 pub mod db;
 pub mod ends;
 mod format;

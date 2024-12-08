@@ -51,6 +51,8 @@ lazy_static! {
 	pub static ref REGEX_PASSWORD: Regex = Regex::new(env!("REGEX_PASSWORD")).unwrap();
 	pub static ref REGEX_PASSWORD_HUMAN: Regex =
 		Regex::new(env!("REGEX_PASSWORD_HUMAN")).unwrap();
+		pub static ref REGEX_ALIAS: Regex = Regex::new(env!("REGEX_ALIAS")).unwrap();
+		pub static ref REGEX_EVENT: Regex = Regex::new(env!("REGEX_EVENT")).unwrap();
 }
 
 lazy_static! {

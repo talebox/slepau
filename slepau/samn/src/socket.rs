@@ -17,6 +17,7 @@ use common::{
 use futures::{sink::SinkExt, stream::StreamExt};
 use log::{error, info};
 use samn_common::node::{LimbId, NodeId};
+use serde_json::json;
 use tokio::{sync::watch, time};
 
 use auth::UserClaims;
@@ -35,7 +36,9 @@ pub async fn websocket_handler(
 	ConnectInfo(address): ConnectInfo<SocketAddr>,
 ) -> Response {
 	info!("Opening Websocket with {} on {}.", &_user.user, address);
-	ws.on_upgrade(move |socket| handle_socket(db, socket, _user, tx_resource, rx_shutdown, address))
+	ws.on_upgrade(move |socket| {
+		handle_socket(db, socket, _user, tx_resource, rx_shutdown, address)
+	})
 }
 
 async fn handle_socket(
@@ -115,15 +118,28 @@ async fn handle_socket(
 						return None;
 					}
 				}
+			} else if piece == Some("schedule") {
+				if let Some(schedule_raw) = m.value.clone() {
+					db.write().unwrap().set_schedule(schedule_raw);
+				}
+				let raw;
+				let parsed;
+				{
+					let db = db.read().unwrap();
+					raw = db.schedule_raw.clone();
+					parsed = db.schedule.clone();
+				}
+				return reply((&json!({"raw": raw, "parsed": parsed})).into())
 			} else if piece == Some("views") {
-				let piece = res.pop_front();
-				if let Some(piece) = piece {
+				if let Some(piece) = res.pop_front() {
 					if piece == "nodes" {
 						if let Some(node_id) = res
 							.pop_front()
 							.and_then(|piece| Proquint::<NodeId>::from_quint(piece).ok())
 						{
-							if let Some(limb_id) = res.pop_front().and_then(|v| v.parse::<LimbId>().ok()) {
+							if let Some(limb_id) =
+								res.pop_front().and_then(|v| v.parse::<LimbId>().ok())
+							{
 								let mut query = LimbQuery {
 									node_id,
 									limb_id,
@@ -142,13 +158,20 @@ async fn handle_socket(
 								// Node Detail
 								// views/nodes/<node_id>
 								return reply(
-									(&views::node_previews_with_cache(&mut db.write().unwrap(), Some(node_id)).get(&node_id)).into(),
+									(&views::node_previews_with_cache(
+										&mut db.write().unwrap(),
+										Some(node_id),
+									)
+									.get(&node_id))
+										.into(),
 								);
 							}
 						} else {
 							// All nodes preview
 							// views/nodes
-							return reply((&views::node_previews_with_cache(&mut db.write().unwrap(), None)).into());
+							return reply(
+								(&views::node_previews_with_cache(&mut db.write().unwrap(), None)).into(),
+							);
 						}
 					}
 				}

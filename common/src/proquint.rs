@@ -37,6 +37,12 @@ impl<T: Quintable> From<T> for Proquint<T> {
 		Self(value)
 	}
 }
+impl<T: Quintable> FromStr for Proquint<T> {
+	type Err = QuintError;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+			Self::from_quint(s)
+	}
+}
 impl<T> Default for Proquint<T>
 where
 	Standard: Distribution<T>,
@@ -46,7 +52,7 @@ where
 	}
 }
 
-use std::{fmt::Display, marker::PhantomData, ops::Deref};
+use std::{fmt::Display, marker::PhantomData, ops::Deref, str::FromStr};
 #[derive(Default)]
 struct ProquintVistor<T> {
 	phantom: PhantomData<T>,

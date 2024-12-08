@@ -87,6 +87,11 @@ export def test [package] {
 	
 	cargo test --package $package -- --nocapture
 }
+export def bench [package] {
+	load_env_dev
+	
+	cargo bench --package $package -- --nocapture
+}
 
 export def check [] {
 	load_env_dev

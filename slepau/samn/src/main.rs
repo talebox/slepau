@@ -8,7 +8,7 @@ use axum::{
 };
 
 use common::{
-	init::init, socket::ResourceMessage, sonnerie::compact_service, utils::{log_env, SOCKET, URL}
+	init::{backup::backup_service, init}, socket::ResourceMessage, sonnerie::compact_service, utils::{log_env, SOCKET, URL}, Cache
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -41,6 +41,7 @@ async fn main() {
 	let env = Env::default()
 		.filter_or("LOG_LEVEL", "info")
 		.write_style_or("LOG_STYLE", "auto");
+	
 
 	env_logger::init_from_env(env);
 	log_env();
@@ -63,6 +64,8 @@ async fn main() {
 		lazy_static::initialize(&KPR);
 	}
 
+	// Read cache
+	let cache = Arc::new(RwLock::new(Cache::init()));
 	// DB Init
 	let db = init::<db::DB>().await;
 	// info!("{db:?}");
@@ -93,6 +96,9 @@ async fn main() {
 
 	info!("Listening on '{}'.", SOCKET.to_string());
 	info!("Public url is on '{}'.", URL.as_str());
+
+	// Backup service
+	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));
 
 	// Create server
 	let mut _shutdown_rx = shutdown_rx.clone();
@@ -142,17 +148,17 @@ async fn main() {
 	shutdown_tx.send(()).unwrap();
 
 	info!("Waiting for everyone to shutdown.");
-	let _server_r = join!(server, radio, compact);
+	let _server_r = join!(server, radio, compact, backup);
 
 	info!("Everyone's shut down!");
 
 	if db.is_poisoned() {
 		error!(
-			"DB was poisoned, can't clear it because we're in (stable) channel; so saving won't work.\n\
+			"DB was poisoned.\n\
 			This probaly happened because of an error.\n\
 			Logging service will soon be implemented to notify of these."
 		);
-		// db.clear_poison();
+		db.clear_poison();
 	}
 
 	match Arc::try_unwrap(db) {

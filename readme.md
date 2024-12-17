@@ -44,6 +44,12 @@ For more information, just read the scripts on `scripts` folder.
 - (Optional, the script will add it automatically) Add this line to /etc/hosts `127.0.0.1 auth.local chunk.local media.local`
 - Run `curl --proto '=https' --tlsv1.2 -sSf https://talebox.dev/standalone.sh | sh` which will download, extract, and run the standalone project for the first time. That's it!
 
+## For arm
+- On arch, install aur cross-compile toolchain `https://aur.archlinux.org/arm-none-linux-gnueabihf-toolchain-bin.git`
+- Set docker to aur target context, then:
+    - `build_server bin_armv7hf ["--target", "armv7-unknown-linux-gnueabihf", "-Zbuild-std"]`
+	- `organize_out bin_armv7hf`
+    - for each binrary name to deploy do: `deploy_docker <binary_name>`
 ---
 # Folder overview
 

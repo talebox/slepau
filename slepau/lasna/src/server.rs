@@ -2,17 +2,12 @@ use std::{net::SocketAddr, time::Duration};
 
 use auth::validate::KPR;
 use axum::{
-	error_handling::HandleErrorLayer, extract::Path, response::IntoResponse, BoxError,
+	error_handling::HandleErrorLayer, response::IntoResponse, BoxError,
 	Extension, Json, Router,
 };
 use common::utils::{SOCKET, URL};
-use hyper::{Method, StatusCode};
+use hyper::StatusCode;
 use log::{error, info};
-use tokio::{
-	join,
-	signal::unix::{signal, SignalKind},
-	sync::watch,
-};
 use tower::ServiceBuilder;
 use tower_governor::{
 	errors::display_error, governor::GovernorConfigBuilder,
@@ -20,7 +15,7 @@ use tower_governor::{
 };
 use tower_http::timeout::TimeoutLayer;
 
-use crate::{DeviceId, DEVICE_CONNECTIONS};
+use crate::DEVICE_CONNECTIONS;
 
 async fn get_devices() -> impl IntoResponse {
 	Json(

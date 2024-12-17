@@ -25,8 +25,6 @@ use std::{
 	time::Duration,
 };
 
-#[cfg(not(target_family = "windows"))]
-use tokio::signal::unix::{signal, SignalKind};
 
 use tokio::{join, sync::watch};
 use tower_http::timeout::TimeoutLayer;

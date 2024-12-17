@@ -8,8 +8,8 @@ use tokio::time::sleep;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 
@@ -152,7 +152,7 @@ pub async fn run_device_client(
 	mut shutdown: tokio::sync::watch::Receiver<()>,
 ) -> Result<()> {
 	use log::{error, info};
-	use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
+	use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 	use tokio::net::TcpStream;
 
 	// Connect to the server (control channel)

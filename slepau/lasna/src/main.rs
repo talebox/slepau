@@ -1,7 +1,7 @@
 // main.rs
 
 use client::accept_client_connections;
-use common::proquint::{Proquint, QuintError};
+use common::proquint::Proquint;
 use common::utils::{log_env, wait_terminate};
 use device::{accept_device_connections, run_device_client};
 use env_logger::Env;

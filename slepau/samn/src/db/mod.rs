@@ -5,7 +5,7 @@ use std::{
 
 use bimap::BiMap;
 use samn_common::{
-	node::{Board, Command, Limb, LimbId, LimbType, NodeAddress, NodeId, NodeInfo, Response},
+	node::{Board, Command, Limb, NodeAddress, NodeId, NodeInfo, Response},
 	radio::DEFAULT_PIPE,
 };
 use schedule::Schedule;

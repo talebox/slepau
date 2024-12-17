@@ -10,7 +10,7 @@ use embedded_hal::digital::InputPin;
 use linux_embedded_hal::{CdevPin, SpidevDevice};
 use samn_common::{
 	cc1101::{Cc1101, MachineState},
-	node::{Actuator, Command, Limb, LimbType, Message, MessageData, Response},
+	node::{Command, Message, MessageData, Response},
 	radio::*,
 };
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,6 @@ use tokio::{
 
 use crate::db::{
 	self,
-	schedule::{Event, EventTime},
 };
 mod cc1101;
 mod nrf24;

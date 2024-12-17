@@ -2,7 +2,6 @@ use auth::validate::KPR;
 use axum::{error_handling::HandleErrorLayer, middleware::from_fn, routing::{get, put, post}, BoxError, Extension, Router};
 
 use common::{
-	http::{static_routes},
 	init::backup::backup_service,
 	socket::ResourceMessage,
 	utils::{log_env, SOCKET, URL},

@@ -48,7 +48,7 @@ async fn main() {
 
 	// DB Init
 
-	let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+	let (shutdown_tx, shutdown_rx) = watch::channel(());
 
 	// Build router
 	let app = Router::new()

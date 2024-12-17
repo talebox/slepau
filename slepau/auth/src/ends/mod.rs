@@ -8,7 +8,7 @@ use axum::{
 	Json, TypedHeader,
 };
 use common::{
-	utils::{get_secs, hostname_normalize, DbError, LockedAtomic, SECURE},
+	utils::{get_secs, hostname_normalize, DbError, LockedAtomic},
 	vreji::log_ip_user,
 };
 use hyper::StatusCode;

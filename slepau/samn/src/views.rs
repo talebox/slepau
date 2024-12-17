@@ -1,11 +1,11 @@
 use std::{
 	collections::{BTreeMap, HashMap},
-	time::{Instant, SystemTime},
+	time::SystemTime,
 };
 
 use common::{proquint::Proquint, samn::decode_binary_base64};
 use log::info;
-use rand::{random, thread_rng, Rng};
+use rand::{thread_rng, Rng};
 use samn_common::node::{Limb, LimbId, LimbType, NodeId, NodeInfo};
 use serde::{Deserialize, Serialize};
 use sonnerie::Wildcard;

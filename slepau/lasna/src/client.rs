@@ -1,6 +1,6 @@
 use common::proquint::Proquint;
 
-use log::{error, info, trace};
+use log::{error, trace};
 use tokio::select;
 use tokio::time::timeout;
 

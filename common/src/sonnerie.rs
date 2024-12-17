@@ -20,7 +20,7 @@ pub fn init() {
 	let mut main = DB_PATH_LOG.clone();
 	main.push("main");
 	if !main.exists() {
-		match std::fs::OpenOptions::new().create(true).write(true).open(main.clone()) {
+		match std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(main.clone()) {
 			Ok(_) => {println!("Created new db at {:?}", main);}
 			Err(err) => {println!("Coudn't create db at {:?} because {:?}", main, err);}
 		}

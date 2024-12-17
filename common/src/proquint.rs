@@ -58,7 +58,7 @@ struct ProquintVistor<T> {
 	phantom: PhantomData<T>,
 }
 
-impl<'de, T: Quintable> Visitor<'de> for ProquintVistor<T> {
+impl<T: Quintable> Visitor<'_> for ProquintVistor<T> {
 	type Value = Proquint<T>;
 
 	fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

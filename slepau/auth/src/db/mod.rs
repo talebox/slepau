@@ -69,10 +69,8 @@ impl DBAuth {
 			admin.write().unwrap().user.reset_pass(old_pass, pass)
 		}
 	}
-	/**
-	 * Try finding user photo in users from provided site
-	 * if none are found, search admin users instead
-	 */
+	/// Try finding user photo in users from provided site
+	/// if none are found, search admin users instead
 	pub fn user_photo(&self, user: &str, site: Option<SiteId>) -> Result<String, DbError> {
 		site
 			.and_then(|s| self.sites.get(&s))

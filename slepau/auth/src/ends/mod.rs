@@ -131,10 +131,9 @@ pub async fn login(
 			)]
 			// )
 		})
-		.map_err(|err| {
+		.inspect_err(|err| {
 			error!("Failed login for '{}' with pass '{}': {:?}.", &user, &pass, &err);
 			log_ip_user("auth_login_error", ip.0, &user);
-			err
 		})
 }
 
@@ -174,10 +173,9 @@ pub async fn register(
 			log_ip_user("auth_register", ip.0, &user);
 			"User created."
 		})
-		.map_err(|err| {
+		.inspect_err(|err| {
 			error!("Failed register for '{}' with pass '{}': {:?}.", &user, &pass, &err);
 			log_ip_user("auth_register_error", ip.0, &user);
-			err
 		})
 }
 

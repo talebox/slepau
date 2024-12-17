@@ -6,7 +6,7 @@ use common::{
 };
 use samn_common::node::{Actuator, Command, Limb, LimbType, NodeId};
 use serde::{Deserialize, Serialize};
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 
 use super::DB;
 
@@ -51,7 +51,7 @@ impl FromStr for EventTime {
 		} else if v == "midnight" {
 			hour = 0; // Basically do nothing
 		} else if v.contains(":") {
-			for (i, v) in v.split(":").filter(|v| v.len() > 0).enumerate() {
+			for (i, v) in v.split(":").filter(|v| !v.is_empty()).enumerate() {
 				match i {
 					0 => {
 						hour = v.parse()?;
@@ -92,13 +92,7 @@ impl EventTime {
 		}
 	}
 	pub fn new_hr_min(hour: u8, minute: u8) -> Self {
-		Self {
-			minute: Some(minute),
-			hour: Some(hour),
-			month_day: None,
-			month: None,
-			week_day: None,
-		}
+		Self::new(Some(minute), Some(hour), None, None, None)
 	}
 
 	// Checks if the given time matches the EventTime schedule
@@ -133,24 +127,24 @@ impl EventTime {
 		true
 	}
 
-	/// Gives seconds since last event
-	/// Only checks last 30 minutes
-	pub fn since(&self, time: &OffsetDateTime) -> Option<u32> {
-		let mut t = *time;
+	// /// Gives seconds since last event
+	// /// Only checks last 30 minutes
+	// pub fn since(&self, time: &OffsetDateTime) -> Option<u32> {
+	// 	let mut t = *time;
 
-		for _ in 0..30 {
-			if self.matches(&t) {
-				let duration = *time - t;
-				return Some(duration.whole_seconds() as u32);
-			}
-			// Decrement time by one minute
-			t = match t.checked_sub(Duration::minutes(1)) {
-				Some(new_time) => new_time,
-				None => break, // If time underflows, break the loop
-			};
-		}
-		None
-	}
+	// 	for _ in 0..30 {
+	// 		if self.matches(&t) {
+	// 			let duration = *time - t;
+	// 			return Some(duration.whole_seconds() as u32);
+	// 		}
+	// 		// Decrement time by one minute
+	// 		t = match t.checked_sub(Duration::minutes(1)) {
+	// 			Some(new_time) => new_time,
+	// 			None => break, // If time underflows, break the loop
+	// 		};
+	// 	}
+	// 	None
+	// }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -331,7 +325,8 @@ mod tests {
 			tschedule
 		);
 
-		tschedule.events[0].command = Command::SetLimb(Limb(2, LimbType::Actuator(Actuator::Light(true)) ));
+		tschedule.events[0].command =
+			Command::SetLimb(Limb(2, LimbType::Actuator(Actuator::Light(true))));
 		tschedule.events[0].time.minute = Some(40);
 		tschedule.events[0].time.hour = Some(21);
 		assert_eq!(
@@ -361,7 +356,7 @@ mod tests {
 					id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
 						.unwrap()
 						.inner(),
-					time: EventTime::new(Some(0), Some(9), None, None, None),
+					time: EventTime::new_hr_min(9, 0),
 					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
 				},
 				// Kitchen at 12am
@@ -369,7 +364,7 @@ mod tests {
 					id: Proquint::<samn_common::node::NodeId>::from_quint("hizig_dujig")
 						.unwrap()
 						.inner(),
-					time: EventTime::new(Some(0), Some(0), None, None, None),
+					time: EventTime::new_hr_min(0, 0),
 					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
 				},
 				// Living Room at 8pm
@@ -377,7 +372,7 @@ mod tests {
 					id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
 						.unwrap()
 						.inner(),
-					time: EventTime::new(Some(0), Some(20), None, None, None),
+					time: EventTime::new_hr_min(20, 0),
 					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(true)))),
 				},
 				// Living Room at 10pm
@@ -385,7 +380,7 @@ mod tests {
 					id: Proquint::<samn_common::node::NodeId>::from_quint("sonoh_giguk")
 						.unwrap()
 						.inner(),
-					time: EventTime::new(Some(0), Some(22), None, None, None),
+					time: EventTime::new_hr_min(22, 0),
 					command: Command::SetLimb(Limb(1, LimbType::Actuator(Actuator::Light(false)))),
 				},
 			],

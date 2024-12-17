@@ -23,9 +23,7 @@ use tokio::{
 	time::timeout,
 };
 
-use crate::db::{
-	self,
-};
+use crate::db::{self};
 mod cc1101;
 mod nrf24;
 
@@ -159,10 +157,10 @@ pub async fn radio_service(
 		{
 			// let rx_end = Instant::now();
 			if let Ok((message, new_wire_format)) =
-				Message::deserialize_from_bytes(&payload.data())
+				Message::deserialize_from_bytes(payload.data())
 					.map(|v| (v.0, true))
 					.or_else(|_| {
-						postcard::from_bytes::<Message>(&payload.data()).map(|v| (v, false))
+						postcard::from_bytes::<Message>(payload.data()).map(|v| (v, false))
 					}) {
 				let id_node_db = payload.address().and_then(|address| {
 					db.read().unwrap().addresses.get_by_right(&address).copied()
@@ -249,16 +247,7 @@ pub async fn radio_service(
 								// 	.and_modify(|(_info, _)| *_info = Some(info.clone()));
 							}
 							Response::Limbs(limbs) => {
-								let limbs = limbs
-									.iter()
-									.filter_map(|l| {
-										if let Some(l) = l {
-											Some(l.clone())
-										} else {
-											None
-										}
-									})
-									.collect::<Vec<_>>();
+								let limbs = limbs.iter().flatten().cloned().collect::<Vec<_>>();
 								log_limbs(id_node_db, &limbs);
 								db.write()
 									.unwrap()
@@ -463,12 +452,11 @@ async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 ) {
 	let payload = {
 		let mut packet = [0u8; 32];
-		let packet_l;
-		if new_wire_format {
-			packet_l = message.serialize_to_bytes(&mut packet).unwrap();
+		let packet_l = if new_wire_format {
+			message.serialize_to_bytes(&mut packet).unwrap()
 		} else {
-			packet_l = postcard::to_slice(&message, &mut packet).unwrap().len();
-		}
+			postcard::to_slice(&message, &mut packet).unwrap().len()
+		};
 		Payload::new_with_addr_from_array(packet, packet_l, address, addr_to_rx_pipe(address))
 	};
 	let timeout_duration = Duration::from_millis(30);
@@ -503,7 +491,7 @@ async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 				);
 				break; // Don't keep retransmitting, we didn't timeout
 			}
-			Err(delay) => {
+			Err(_) => {
 				if is_nrf {
 					nrf24.to_idle().unwrap();
 					nrf24.flush_tx().unwrap();

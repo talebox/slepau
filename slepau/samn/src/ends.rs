@@ -33,6 +33,5 @@ pub async fn command_response(
 	Ok(Json (rx.await.unwrap()))
 }
 
-pub async fn get_schedule() -> impl IntoResponse {
-	
-}
+// pub async fn get_schedule() -> impl IntoResponse {
+// }

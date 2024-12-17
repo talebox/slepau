@@ -1,13 +1,14 @@
+/// ChunkView is meant for specific Chunk Data
+/// It turns an Rc<Media> to an a specific View of it.
+/// This will be customizable based on what the UI needs.
+
+
 use common::utils::LockedAtomic;
 use serde::{Serialize, Deserialize};
 
 use super::Media;
 
-/**
- * ChunkView is meant for specific Chunk Data
- * It turns an Rc<Media> to an a specific View of it.
- * This will be customizable based on what the UI needs.
- */
+
 // #[derive(Serialize, Debug, Default)]
 // pub struct MediaView {
 // 	pub id: MediaId,

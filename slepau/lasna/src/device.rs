@@ -8,13 +8,12 @@ use tokio::time::sleep;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncBufReadExt};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 
 type DeviceId = Proquint<u16>;
-type DeviceConnection = Arc<RwLock<tokio::net::TcpStream>>;
 
 use crate::error::Error;
 use crate::{SessionId, DEVICE_CONNECTIONS, LOCAL_ADDR, PENDING_CONNECTIONS};
@@ -55,7 +54,7 @@ async fn handle_device_connection(
 
 	if first_line.starts_with("DEVICE ") {
 		// Initial device connection
-		let device_id_str = first_line["DEVICE ".len()..].trim();
+		let device_id_str = first_line.strip_prefix("DEVICE ").unwrap().trim();
 		let device_id = DeviceId::from_quint(device_id_str)?;
 
 		// Lower socket keepalive timings, just in case of network down
@@ -77,7 +76,7 @@ async fn handle_device_connection(
 		// Store the device connection
 		{
 			let mut devices = DEVICE_CONNECTIONS.write().await;
-			devices.insert(device_id.clone(), device_conn.clone());
+			devices.insert(device_id, device_conn.clone());
 			info!("Device connected: {}", device_id.to_quint());
 		}
 
@@ -120,7 +119,7 @@ async fn handle_device_connection(
 		Ok(())
 	} else if first_line.starts_with("SESSION ") {
 		// New connection from device for a pending session
-		let session_id = SessionId::from_quint(first_line["SESSION ".len()..].trim())?;
+		let session_id = SessionId::from_quint(first_line.strip_prefix("SESSION ").unwrap().trim())?;
 
 		// Remove the session from PENDING_CONNECTIONS and send the socket
 		if let Some(tx) = PENDING_CONNECTIONS.write().await.remove(&session_id) {
@@ -185,7 +184,7 @@ pub async fn run_device_client(
 						let message = message.trim_end();
 						if message.starts_with("NEW_CONNECTION ") {
 							// Extract the session ID
-							let session_id = message["NEW_CONNECTION ".len()..].trim().to_string();
+							let session_id = message.strip_prefix("NEW_CONNECTION ").unwrap().trim().to_string();
 
 							// Open a new connection to the server for this session
 							let mut session_stream = TcpStream::connect(server_addr)

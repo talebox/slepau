@@ -96,7 +96,11 @@ pub async fn media_get(
 
 	let mut file = match tokio::fs::File::open(&path).await {
 		Ok(file) => file,
-		Err(err) => return Err((StatusCode::NOT_FOUND, format!("File not found: {}", err)).into_response()),
+		Err(err) => {
+			return Err(
+				(StatusCode::NOT_FOUND, format!("File not found: {}", err)).into_response(),
+			)
+		}
 	};
 
 	let mut buf = [0u8; 64];
@@ -149,8 +153,10 @@ pub async fn media_get(
 				})
 				.collect::<Vec<_>>();
 			// If bounds is same as whole file, return whole file
-			if byte_bounds.is_empty() || (byte_bounds[0].0 == 0 && byte_bounds[0].1 == file_size - 1) {
-				return full_response(file)
+			if byte_bounds.is_empty()
+				|| (byte_bounds[0].0 == 0 && byte_bounds[0].1 == file_size - 1)
+			{
+				return full_response(file);
 			}
 			for (i, (x1, x2)) in byte_bounds.iter().enumerate() {
 				if i == byte_bounds.len() - 1 {
@@ -166,20 +172,16 @@ pub async fn media_get(
 			let mut buffer = vec![0; file_size as usize];
 			file.read_exact(&mut buffer).await.expect("buffer overflow");
 			let mut body = Vec::<u8>::with_capacity(file_size as usize);
-			let mut i: u64 = 0;
-			for byte in buffer {
-				if byte_bounds.iter().any(|(a, b)| a <= &i && &i <= b) {
-					body.push(byte)
+			for (i, byte) in buffer.iter().enumerate() {
+				if byte_bounds.iter().any(|(a, b)| *a <= i as u64 && i as u64 <= *b) {
+					body.push(*byte)
 				}
-				i += 1;
 			}
 
 			Ok((StatusCode::PARTIAL_CONTENT, headers, Bytes::from(body)).into_response())
 		} else {
 			full_response(file)
 		}
-
-		
 	} else {
 		Err((StatusCode::NO_CONTENT, "Error reading file?".to_string()).into_response())
 	}
@@ -198,7 +200,9 @@ pub async fn media_delete(
 		.versions
 		.iter()
 		.map(|version| {
-			tokio::fs::remove_file(cache.join(VersionReference::from((media.id, version.0.clone())).filename_out()))
+			tokio::fs::remove_file(
+				cache.join(VersionReference::from((media.id, version.0.clone())).filename_out()),
+			)
 		})
 		.collect::<Vec<_>>();
 
@@ -259,7 +263,10 @@ pub async fn media_post(
 ) -> Result<impl IntoResponse, impl IntoResponse> {
 	if user_claims.user == "public" && !db.read().unwrap().allow_public_post {
 		// body.count().await;
-		return Err((StatusCode::FORBIDDEN, format!("Public isn't allowed to upload.")));
+		return Err((
+			StatusCode::FORBIDDEN,
+			"Public isn't allowed to upload.".to_string(),
+		));
 	}
 
 	let path = std::path::Path::new(MEDIA_FOLDER.as_str());
@@ -318,7 +325,10 @@ pub async fn media_post(
 		file.sync_all().await.unwrap();
 	}
 
-	let media = db.write().unwrap().add((id, &path).into(), user_claims.user.clone());
+	let media = db
+		.write()
+		.unwrap()
+		.add((id, &path).into(), user_claims.user.clone());
 	let media = media.read().unwrap().clone();
 
 	// Notify

@@ -23,7 +23,7 @@ impl DBAuth {
 		Ok(id)
 	}
 	pub fn new_admin(&mut self, user: &str, pass: &str) -> Result<(), DbError> {
-		if self.admins.get(user).is_some() {
+		if self.admins.contains_key(user) {
 			return Err(DbError::UserTaken);
 		}
 		let admin = Admin {
@@ -36,7 +36,7 @@ impl DBAuth {
 	}
 	pub fn new_user(&mut self, user: &str, pass: &str, site: SiteId) -> Result<(), DbError> {
 		let site = self.sites.get(&site).ok_or(DbError::NotFound)?;
-		if site.read().unwrap().users.get(user).is_some() {
+		if site.read().unwrap().users.contains_key(user) {
 			return Err(DbError::UserTaken);
 		}
 		let user_instance = User::new(user, pass)?;

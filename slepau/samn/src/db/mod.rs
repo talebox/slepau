@@ -183,11 +183,7 @@ impl DB {
 	/// Returns wether a non-instant command was queued.
 	pub fn queue_command(&mut self, command: RadioSyncType) -> bool {
 		if let Some((_, _, _, Some(info))) = self.radio_info.get(&command.0.for_id.inner()) {
-			if match info.board {
-				Board::SamnDC => true,
-				Board::SamnSwitch => true,
-				_ => false,
-			} {
+			if matches!(info.board, Board::SamnDC | Board::SamnSwitch) {
 				self.command_messages_instant.push_back(command);
 				return false;
 			}
@@ -202,7 +198,7 @@ impl DB {
 			.addresses
 			.iter()
 			.filter(|(_, addr)| **addr > HQADDRESS)
-			.map(|(_, addr)| addr.clone())
+			.map(|(_, addr)| *addr)
 			.collect()
 	}
 
@@ -212,7 +208,7 @@ impl DB {
 			.addresses
 			.iter()
 			.filter(|(_, addr)| **addr < HQADDRESS)
-			.map(|(_, addr)| addr.clone())
+			.map(|(_, addr)| *addr)
 			.collect()
 	}
 

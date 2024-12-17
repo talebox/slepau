@@ -16,7 +16,7 @@ use super::user_access::{Access, UserAccess};
 struct DynamicProperty {
 	key: String,
 	function: fn(v: &mut DBChunk, others: Vec<LockedAtomic<DBChunk>>, &UserAccess) -> Value,
-	depends_on: Option<Vec<String>>,
+	// depends_on: Option<Vec<String>>,
 	/// Is the value derived from the parents?
 	///
 	/// - If **true**, `others` is **parents**
@@ -89,7 +89,7 @@ lazy_static! {
 			key: "modified".to_string(),
 			function: modified_f,
 			function_up: false,
-			depends_on: None,
+			// depends_on: None,
 		},
 	];
 }
@@ -103,7 +103,6 @@ impl DBChunk {
 	}
 
 	/// Fills props with extracted static values
-
 	fn extract(&mut self) {
 		// Clear previous
 		self.props.clear();
@@ -278,7 +277,6 @@ impl DBChunk {
 
 	/// Recursive invalidator of passed `keys`
 	/// up: true (recurse parents) / false (children)
-
 	pub fn invalidate(&mut self, _keys: &Vec<&str>, up: bool) {
 		// self.props_per_user.retain(|(_, k), _| !keys.contains(&k.as_str()));
 		self.props_per_user.clear(); // FOR NOW CLEAR IT ALL
@@ -299,7 +297,6 @@ impl DBChunk {
 	// }
 
 	/// Checks if user has X access. Always returns true if user is the owner.
-
 	pub fn has_access(&self, ua: &UserAccess) -> bool {
 		if self.chunk.owner == ua.user {
 			return true;
@@ -435,14 +432,12 @@ impl DBChunk {
 	}
 
 	/// Links child and removes any dangling pointers for a self healing vector
-
 	pub fn link_child(&mut self, child: &LockedAtomic<DBChunk>) {
 		self.children.push(Arc::downgrade(child));
 		self.children.retain(|v| v.upgrade().is_some());
 	}
 
 	/// Links child and removes any dangling pointers for a self healing vector
-
 	pub fn link_parent(&mut self, parent: &LockedAtomic<DBChunk>) {
 		self.parents.push(Arc::downgrade(parent));
 		self.parents.retain(|v| v.upgrade().is_some());

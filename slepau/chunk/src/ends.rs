@@ -66,8 +66,8 @@ pub async fn chunks_get_id(
 }
 fn make_page(title: &str, body: &str, edit: Option<&str>) -> String {
 	let page = include_str!(env!("CHUNK_PAGE_PATH"));
-	let mut page = page.replace("PAGE_TITLE", &title);
-	page = page.replace("PAGE_BODY", &body);
+	let mut page = page.replace("PAGE_TITLE", title);
+	page = page.replace("PAGE_BODY", body);
 	if let Some(edit) = edit {
 		page = page.replace(
 			"class=\"edit-button\"",

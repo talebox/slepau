@@ -51,6 +51,8 @@ pub struct DBData {
 // 	}
 // }
 
+type ChunkUpdate = (HashSet<String>, Vec<String>, LockedAtomic<DBChunk>);
+
 impl DB {
 	/// Goes through tree and creates a GraphView
 	///
@@ -164,7 +166,6 @@ impl DB {
 	}
 
 	/// Deletes a chunk by id, returns list of users for which access changed
-
 	pub fn del_chunk(&mut self, ids: HashSet<ChunkId>, user: &str) -> Result<HashSet<String>, DbError> {
 		// public assertion
 		if user == "public" {
@@ -267,12 +268,13 @@ impl DB {
 
 		Ok(diff_users)
 	}
+	
 	/// Chunk update called by socket, adds `diff` information to returned Result
 	pub fn update_chunk(
 		&mut self,
 		chunk: DBChunk,
 		user: &str,
-	) -> Result<(HashSet<String>, Vec<String>, LockedAtomic<DBChunk>), DbError> {
+	) -> Result<ChunkUpdate, DbError> {
 		if let Some(last_value) = self
 			.get_chunk(chunk.chunk().id, user)
 			.map(|v| v.read().unwrap().chunk().value.to_owned())
@@ -394,7 +396,7 @@ impl From<DBData> for DB {
 			})
 			.collect();
 
-		let mut db = Self { chunks, by_owner };
+		let mut db = Self { chunks };
 		db.link_all().unwrap();
 		db
 	}

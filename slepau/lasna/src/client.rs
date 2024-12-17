@@ -1,27 +1,25 @@
+/// 
+/// Handles client connections from server <-> device.
+///
+
 use common::proquint::Proquint;
 
 use log::{error, trace};
 use tokio::select;
 use tokio::time::timeout;
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
-use tokio::sync::{oneshot, RwLock};
-
+use tokio::sync::oneshot;
 
 type DeviceId = Proquint<u16>;
-type DeviceConnection = Arc<RwLock<tokio::net::TcpStream>>;
 
 use crate::error::Error;
 use crate::{SessionId, DEVICE_CONNECTIONS, PENDING_CONNECTIONS};
 type Result<T> = std::result::Result<T, Error>;
 
-/**
- * Handles client connections from server <-> device.
- */
 
 // Accept client connections as raw TCP streams
 pub async fn accept_client_connections(
@@ -81,7 +79,7 @@ async fn handle_client_connection(mut client_conn: tokio::net::TcpStream) -> Res
 		// Insert the sender into PENDING_CONNECTIONS with the session ID
 		{
 			let mut pending = PENDING_CONNECTIONS.write().await;
-			pending.insert(session_id.clone(), tx);
+			pending.insert(session_id, tx);
 		}
 
 		// Send a request over device_conn to the device, including the session ID
@@ -126,7 +124,7 @@ fn extract_host_header(request_text: &str) -> Result<String> {
 		if line.to_lowercase().starts_with("host:") {
 			return Ok(line[5..].trim().to_string());
 		}
-		if line == "\r" || line == "" {
+		if line == "\r" || line.is_empty() {
 			// End of headers
 			break;
 		}

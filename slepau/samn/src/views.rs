@@ -45,7 +45,7 @@ pub fn node_previews_with_cache(
 		.map(|(node_id, limbs)| {
 			let (last, uptime, info) = db
 				.radio_info
-				.get(&node_id)
+				.get(node_id)
 				.map(|(_, last, uptime, info)| (*last, *uptime, info.clone()))
 				.unwrap_or((0, 0, None));
 			(
@@ -193,7 +193,7 @@ pub fn node_previews(db: &DB, key: String) -> HashMap<Proquint<NodeId>, NodePrev
 					});
 			}
 
-			return acc;
+			acc
 		});
 	info!(
 		"Skipped {skipped} out of {total}, about {:.0}%",

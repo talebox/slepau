@@ -44,7 +44,7 @@ fn get_device_id() -> DeviceId {
 	env::var("DEVICE_ID")
 		.ok()
 		.and_then(|v| DeviceId::from_quint(&v).ok())
-		.unwrap_or_else(|| DeviceId::default())
+		.unwrap_or_default()
 }
 
 
@@ -104,18 +104,15 @@ async fn main() -> Result<()> {
 		let device_id = get_device_id(); // Implement this function to retrieve the device's ID
 		info!("Device id: {device_id}");
 		tokio::spawn(async move {
-			loop {
-				if let Err(err) =
-					run_device_client(&server_addr, device_id, shutdown_rx.clone()).await
-				{
-					error!("{err}");
-					println!("Error connecting; waiting 10s to retry...");
-					sleep(Duration::from_secs(10)).await;
-				} else {
-					// OK means shutdown was called on client
-					break;
-				}
+			while let Err(err) =
+				run_device_client(&server_addr, device_id, shutdown_rx.clone()).await
+			{
+				error!("{err}");
+				println!("Error connecting; waiting 10s to retry...");
+				sleep(Duration::from_secs(10)).await;
 			}
+			// OK means shutdown was called on client
+			// break;
 		});
 	}
 

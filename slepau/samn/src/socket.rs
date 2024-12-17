@@ -71,7 +71,7 @@ async fn handle_socket(
 				return None;
 			}
 			let m = m.unwrap();
-			let query_start_time = ::time::Instant::now();
+			let query_start_time = std::time::Instant::now();
 			// let page_query = m.value.as_ref().and_then(|v| serde_json::from_str::<PageQuery>(v.as_str()).ok()).unwrap_or_default();
 			let reply = |mut v: SocketMessage| {
 				v.resource = m.resource.to_owned();
@@ -91,10 +91,10 @@ async fn handle_socket(
 				}
 				let result = Some(Message::Text(serde_json::to_string(&v).unwrap()));
 
-				let query_end_time = ::time::Instant::now();
+				let query_end_time = std::time::Instant::now();
 				info!(
 					"{}ms for {}",
-					(query_end_time - query_start_time).whole_milliseconds(),
+					(query_end_time - query_start_time).as_millis(),
 					v.resource
 				);
 				result

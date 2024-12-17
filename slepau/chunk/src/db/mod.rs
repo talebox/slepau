@@ -1,4 +1,4 @@
-use common::utils::{LockedAtomic, LockedWeak};
+use common::utils::LockedAtomic;
 use serde::Serialize;
 use serde_json::Value;
 /** Designing a new Data Structure that would allow for all queries/insertions/serializations to efficiently happen */
@@ -28,7 +28,7 @@ pub struct GraphView(
 #[derive(Default)]
 pub struct DB {
 	chunks: DBMap<ChunkId, LockedAtomic<dbchunk::DBChunk>>,
-	by_owner: DBMap<String, Vec<LockedWeak<dbchunk::DBChunk>>>,
+	// by_owner: DBMap<String, Vec<LockedWeak<dbchunk::DBChunk>>>,
 }
 
 pub mod chunk;

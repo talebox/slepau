@@ -171,4 +171,6 @@ async fn main() {
 			common::init::save(&*db.read().unwrap());
 		}
 	}
+
+	cache.read().unwrap().save();
 }

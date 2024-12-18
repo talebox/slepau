@@ -464,20 +464,18 @@ async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 	for _ in 0..3 {
 		match timeout(timeout_duration, async {
 			if is_nrf {
-				transmit(nrf24, &payload).await
+				let v = transmit(nrf24, &payload).await;
+				nrf24.to_rx_async().await.unwrap();
+				v
 			} else {
-				transmit(cc1101, &payload).await
+				let v = transmit(cc1101, &payload).await;
+				cc1101.to_rx_async().await.unwrap();
+				v
 			}
 		})
 		.await
 		{
 			Ok(success) => {
-				if is_nrf {
-					nrf24.to_rx().unwrap();
-				} else {
-					cc1101.to_rx().unwrap();
-				}
-
 				println!(
 					"{} {} bytes{}, {:?}",
 					if success { "Sent" } else { "Failed sending" },
@@ -492,23 +490,36 @@ async fn transmit_any<E0: Debug, R0: Radio<E0>, E1: Debug, R1: Radio<E1>>(
 				break; // Don't keep retransmitting, we didn't timeout
 			}
 			Err(_) => {
-				if is_nrf {
-					nrf24.to_idle().unwrap();
-					nrf24.flush_tx().unwrap();
-					nrf24.flush_rx().unwrap();
-					nrf24.to_rx().unwrap();
-				} else {
-					cc1101.to_idle().unwrap();
-					cc1101.flush_tx().unwrap();
-					cc1101.flush_rx().unwrap();
-					cc1101.to_rx().unwrap();
+				// We've now failed to transmit...
+				// Let's try to go to idle, flush fifos and go back to rx.
+				match timeout(timeout_duration, async {
+					if is_nrf {
+						nrf24.to_idle_async().await.unwrap();
+						nrf24.flush_tx().unwrap();
+						nrf24.flush_rx().unwrap();
+						nrf24.to_rx_async().await.unwrap();
+					} else {
+						cc1101.to_idle_async().await.unwrap();
+						cc1101.flush_tx().unwrap();
+						cc1101.flush_rx().unwrap();
+						cc1101.to_rx_async().await.unwrap();
+					}
+				}).await {
+					Ok(_) => {
+						log::error!(
+							"Sending with {} took too long {:?}, flushed fifos & switched to rx just in case",
+							if is_nrf { "nrf24" } else { "cc1101" },
+							timeout_duration
+						);
+					}
+					Err(_) => {
+						log::error!(
+							"CRITICAL, sending with {} took too long {:?}, and resetting back to a normal state also took too long :\\, don't know what else to do.",
+							if is_nrf { "nrf24" } else { "cc1101" },
+							timeout_duration
+						);
+					}
 				}
-
-				log::error!(
-					"Sending with {} took too long {:?}, flushed fifos & switched to rx just in case",
-					if is_nrf { "nrf24" } else { "cc1101" },
-					timeout_duration
-				);
 			}
 		};
 	}

@@ -1,6 +1,6 @@
 def get_context [] {
 	let context = (docker context show)
-	if $context not-in ['rpi', 'anty', 'pi_local'] {
+	if $context not-in ['anty', 'rpi', 'pi_local', 'nerd', 'geek'] {
 		error make {msg: $"Context '($context)' isn't rpi or anty, make sure it's right"}
 	} else  {
         print $"Using '($context)' context."    
@@ -29,7 +29,7 @@ def docker_args [name] {
 		"-v", $"($name)_data:/server/data", # Data
 		"-v", $"($name)_backup:/server/backup", # Backup
 		# Maybe we should remove URL env altogether since it's only being used for user info purposes...
-		"-e", $"URL=(if $context in ['rpi','pi_local'] {'http'} else {'https'})://($name).anty.dev", # URL variable
+		"-e", $"URL=(if $context in ['rpi','pi_local', 'nerd', 'geek'] {'http'} else {'https'})://($name).anty.dev", # URL variable
 		"--env-file=container/env.config", # Env config
 	];
 

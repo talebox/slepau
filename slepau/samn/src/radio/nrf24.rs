@@ -14,14 +14,19 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<SpidevDevice, CdevPin>, CdevPin) {
 		.0
 		.configure(&SpidevOptions {
 			max_speed_hz: Some(8_000_000),
-			spi_mode: Some(SpiModeFlags::SPI_MODE_0), 
+			spi_mode: Some(SpiModeFlags::SPI_MODE_0),
 			..Default::default()
 		})
 		.unwrap();
 
 	let ce_pin = linux_embedded_hal::CdevPin::new(
 		chip
-			.get_line(25)
+			.get_line(
+				std::env::var("NRF24_CE_LINE")
+					.unwrap_or_default() // If var is not set, use an empty string
+					.parse::<u32>() // Attempt to parse
+					.unwrap_or(25),
+			)
 			.unwrap()
 			.request(LineRequestFlags::OUTPUT, 0, "nrf24_ce")
 			.unwrap(),
@@ -29,7 +34,12 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<SpidevDevice, CdevPin>, CdevPin) {
 	.unwrap();
 	let irq_pin = linux_embedded_hal::CdevPin::new(
 		chip
-			.get_line(24)
+			.get_line(
+				std::env::var("NRF24_IRQ_LINE")
+					.unwrap_or_default() // If var is not set, use an empty string
+					.parse::<u32>() // Attempt to parse
+					.unwrap_or(24),
+			)
 			.unwrap()
 			.request(LineRequestFlags::INPUT, 0, "nrf24_irq")
 			.unwrap(),
@@ -45,7 +55,7 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<SpidevDevice, CdevPin>, CdevPin) {
 	// nrf24.set_dynamic_payload_pipes(&PIPES).unwrap();
 
 	nrf24.set_rx_filter(&HQ_PIPES).unwrap();
-	
+
 	// Not working with more than first pipe open :(
 	// let pipes = [true,true, false,false,false,false];
 	// nrf24.set_pipes_rx_enable(&pipes).unwrap();
@@ -61,13 +71,7 @@ pub fn init(chip: &mut Chip) -> (NRF24L01<SpidevDevice, CdevPin>, CdevPin) {
 
 			println!(
 				"{:02x} -> {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
-				w[0],
-				r[0],
-				r[1],
-				r[2],
-				r[3],
-				r[4],
-				r[5]
+				w[0], r[0], r[1], r[2], r[3], r[4], r[5]
 			);
 		};
 

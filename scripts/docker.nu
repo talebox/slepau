@@ -34,16 +34,27 @@ def docker_args [name] {
 	];
 
     # If it's samn, make sure it has access to these devices and set a few env variables
-	if $name == "samn" {$args = ($args | append [
-		-v "samn_db:/server/samn_db" # Samn (Node Logging)
-		--device=/dev/spidev0.0
-		--device=/dev/spidev0.1
-		--device=/dev/gpiochip0
-		-e DB_PATH_LOG=samn_db
-		-e RADIO=on
-		-e RUST_BACKTRACE=1
-		-v /etc/localtime:/etc/localtime:ro
-	])}
+	if $name == "samn" and $context in ['rpi', 'pi_local', 'nerd', 'geek'] {
+		$args = ($args | append [
+			-v "samn_db:/server/samn_db" # Samn (Node Logging)
+			--device=/dev/spidev0.0
+			--device=/dev/spidev0.1
+			--device=/dev/gpiochip0
+			-e DB_PATH_LOG=samn_db
+			-e RADIO=on
+			-e RUST_BACKTRACE=1
+			-e TZ=America/New_York
+			# -v /etc/localtime:/etc/localtime:ro
+		])
+		if $context == 'nerd' {
+			$args = ($args | append [
+				# Modify radio io lines bc it's not connected the same way as rpi
+				-e CC1101_G2_LINE=23
+				# -e NRF24_CE_LINE=23
+				# -e NRF24_IRQ_LINE=23 
+			])
+		}
+	}
 
 	if $name == "lasna" {
 		if $context == "anty" {

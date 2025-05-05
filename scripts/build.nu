@@ -58,7 +58,7 @@ export def organize_out [bin_dir = "bin"] {
 			if $bin_dir != bin_armv7hf {
 				# SERVER BUILD
 				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's/ 80/ 443 ssl/g'
-				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev-0001/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev-0001/privkey.pem; # managed by Certbot$g'
+				/bin/find ./sites -type f -print0 | xargs -0 sed -i -e 's$#KEYS$ssl_certificate /etc/letsencrypt/live/talebox.dev/fullchain.pem; # managed by Certbot\n\tssl_certificate_key /etc/letsencrypt/live/talebox.dev/privkey.pem; # managed by Certbot$g'
 				/bin/find ./sites -type f -print0 | xargs -0 sed -i -E 's/#(\w+)\.access/access_log logs\/\1\-access\.log compression;/g'
 				
 				# Enable SN_SERVER

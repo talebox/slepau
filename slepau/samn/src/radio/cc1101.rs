@@ -19,12 +19,18 @@ pub fn init(chip: &mut Chip) -> (Cc1101<SpidevDevice>, CdevPin) {
 
 	let g2 = linux_embedded_hal::CdevPin::new(
 		chip
-			.get_line(6)
+			.get_line(
+				std::env::var("CC1101_G2_LINE")
+					.unwrap_or_default() // If var is not set, use an empty string
+					.parse::<u32>() // Attempt to parse
+					.unwrap_or(6),
+			)
 			.unwrap()
 			.request(LineRequestFlags::INPUT, 0, "cc1101_g2")
 			.unwrap(),
-	).unwrap();
-    // let g0 = linux_embedded_hal::CdevPin::new(
+	)
+	.unwrap();
+	// let g0 = linux_embedded_hal::CdevPin::new(
 	// 	chip
 	// 		.get_line(12)
 	// 		.unwrap()

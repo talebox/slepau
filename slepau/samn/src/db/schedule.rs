@@ -161,6 +161,16 @@ pub struct Schedule {
 
 impl From<&str> for Schedule {
 	fn from(value: &str) -> Self {
+		// Before beggining to parse, first let's remove all the comments in the string.
+		let cleaned = value
+			.lines()
+			// get first element after splitting by '#', basically discarding everything after the character (on that line)
+			.map(|line| line.split('#').next().unwrap_or("").trim())
+			// then collect and join back together
+			.collect::<Vec<_>>()
+			.join("\n");
+		let value = &cleaned;
+
 		let aliases = REGEX_ALIAS
 			.captures_iter(value)
 			.filter_map(|c| {

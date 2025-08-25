@@ -8,8 +8,7 @@ use axum::{
 };
 
 use common::{
-	socket::ResourceMessage,
-	utils::{log_env, SOCKET, URL},
+	init::save_db, socket::ResourceMessage, utils::{log_env, SOCKET, URL}
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -140,7 +139,7 @@ pub async fn main() {
 	let _server_r = join!(server, conversion_service, load_existing_handle);
 	info!("Everyone's shut down!");
 
-	common::init::save(&*db.read().unwrap());
+	save_db(&db, true);
 
 	info!("Goodbye!");
 }

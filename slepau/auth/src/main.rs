@@ -7,7 +7,7 @@ use axum::{
 
 use common::{
 	http::static_routes,
-	init::backup::backup_service,
+	init::{backup::backup_service, save_db},
 	utils::{log_env, wait_terminate, SOCKET, URL},
 	Cache,
 };
@@ -202,25 +202,7 @@ async fn main() {
 
 	info!("Everyone's shut down!");
 
-	if db.is_poisoned() {
-		error!(
-			"DB was poisoned, can't clear it because we're in (stable) channel; so saving won't work.\n\
-			This probaly happened because of an error.\n\
-			Logging service will soon be implemented to notify of these."
-		);
-		// db.clear_poison();
-	}
-
-	match Arc::try_unwrap(db) {
-		Ok(db) => {
-			let db = db.into_inner().unwrap();
-			common::init::save(&db);
-		}
-		Err(db) => {
-			error!("Couldn't unwrap DB, will save anyways, but beware of this");
-			common::init::save(&*db.read().unwrap());
-		}
-	}
+	save_db(&db, true);
 
 	cache.read().unwrap().save();
 }

@@ -60,7 +60,7 @@ lazy_static! {
 	pub static ref K_PUBLIC: String = env::var("K_PUBLIC").unwrap_or_else(|_| "keys/public.k".into());
 	pub static ref K_SECRET: String = env::var("K_SECRET").unwrap_or_else(|_| "keys/secret.k".into());
 	/// Use this file as your db storage
-	pub static ref DB_PATH: Option<String> = Some(env::var("DB_PATH").unwrap_or_else(|_| "db.json".into()));
+	pub static ref DB_PATH: String = env::var("DB_PATH").unwrap_or_else(|_| "db.json".into());
 	/// Fetches magic bean if set
 	pub static ref DB_INIT: Option<String> = env::var("DB_INIT").ok();
 	pub static ref DB_BACKUP_FOLDER: String = env::var("DB_BACKUP_FOLDER").unwrap_or_else(|_| "backups".into());

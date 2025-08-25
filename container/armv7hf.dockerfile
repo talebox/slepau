@@ -5,7 +5,7 @@ run pacman-key --populate archlinuxarm
 run pacman -Syu --noconfirm --ignore filesystem
 
 run pacman -Sy --noconfirm --needed openssl ffmpeg
-run pacman -S --noconfirm --needed tzdata
+run pacman -S --noconfirm --needed tzdata gdb
 
 workdir /server
 cmd ["./BIN_NAME"]

@@ -1,3 +1,4 @@
+#![feature(stmt_expr_attributes)]
 use serde::{Deserialize, Serialize};
 
 pub mod cache;

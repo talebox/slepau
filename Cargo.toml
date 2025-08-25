@@ -42,4 +42,8 @@ nb = "1.1.0"
 time = {version = "0.3.36", features = ["local-offset", "macros", "formatting"]}
 
 [profile.release]
+# Link time optimizations
 lto = true
+# Add full debug info (to debug why samn is going into infinite loop)
+# Generally doesn't impact runtime, just binary size.
+debug = true

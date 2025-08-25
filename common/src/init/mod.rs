@@ -3,7 +3,8 @@ use log::{error, info, trace};
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
 
-use crate::utils::{DB_INIT, DB_PATH};
+
+use crate::utils::{LockedAtomic, DB_INIT, DB_PATH};
 
 pub mod backup;
 pub mod magic_bean;
@@ -29,8 +30,9 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 			// 	_ => failover(db_init),
 			// }
 		}
-		None => match DB_PATH.clone() {
-			Some(db_path) => match fs::read_to_string(&db_path) {
+		None => {
+			let db_path = DB_PATH.clone();
+			match fs::read_to_string(&db_path) {
 				Ok(db_json) => {
 					let db_in = serde_json::from_str::<T>(db_json.as_str()).unwrap();
 
@@ -39,29 +41,51 @@ pub async fn init<T: DeserializeOwned + Default>() -> T {
 					db_in
 				}
 				_ => failover(&db_path),
-			},
-			None => failover("None"),
-		},
+			}
+		}
 	}
 }
-pub fn save<T: Serialize>(db: &T) {
-	if let Some(db_path) = DB_PATH.clone() {
-		#[cfg(debug_assertions)]
-		let data = serde_json::to_string_pretty(db).unwrap();
 
-		#[cfg(not(debug_assertions))]
-		let data = serde_json::to_string(db).unwrap();
 
-		match fs::write(&db_path, &data) {
-			Ok(()) => info!("Saved on {}", db_path),
-			Err(e) => {
-				error!("Error saving to path {}: {e}", &db_path);
-				let backup_path = "db.backup.json".to_string();
-				match fs::write(&backup_path, &data) {
-					Ok(()) => info!("Saved db on backup {backup_path}"),
-					Err(e) => error!("Error saving to backup path {backup_path}: {e}"),
-				}
-			}
-		};
+/**
+ * Instead of taking a &T, we take the locked atomic and handle errors accordingly right here.
+ *
+ * Only allow clearing poison if we're shutting down, otherwise leave it false.
+ **/
+pub fn save_db<T: Serialize>(db: &LockedAtomic<T>, clear_poison: bool) {
+	if db.is_poisoned() {
+		const IS_STABLE: bool = false;
+		if IS_STABLE {
+			error!(
+				"DB was poisoned, can't clear it because we're in (stable) channel; so saving won't work.\n\
+				This probaly happened because of an error.\n\
+				Logging service will soon be implemented to notify of these."
+			);
+		} else if clear_poison {
+			error!(
+				"DB was poisoned, we'll clear it for now.\n\
+				This probaly happened because of an error.\n\
+				Logging service will soon be implemented to notify of these."
+			);
+			db.clear_poison();
+		} else {
+			error!("DB was poisoned, so we can't save.");
+		}
 	}
+
+
+	#[cfg(debug_assertions)]
+	let data = serde_json::to_string_pretty(&*db.read().unwrap()).unwrap();
+
+	#[cfg(not(debug_assertions))]
+	let data = serde_json::to_string(&*db.read().unwrap()).unwrap();
+	
+
+	let db_path = DB_PATH.clone();
+	match fs::write(&db_path, &data) {
+		Ok(()) => info!("DB saved on {db_path}"),
+		Err(e) => {
+			error!("Saving DB to path {db_path}: {e}");
+		}
+	};
 }

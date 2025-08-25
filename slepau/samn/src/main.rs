@@ -8,7 +8,11 @@ use axum::{
 };
 
 use common::{
-	init::{backup::backup_service, init}, socket::ResourceMessage, sonnerie::compact_service, utils::{log_env, SOCKET, URL}, Cache
+	init::{backup::backup_service, init, save_db},
+	socket::ResourceMessage,
+	sonnerie::compact_service,
+	utils::{log_env, SOCKET, URL},
+	Cache,
 };
 use env_logger::Env;
 use hyper::StatusCode;
@@ -41,7 +45,7 @@ async fn main() {
 	let env = Env::default()
 		.filter_or("LOG_LEVEL", "info")
 		.write_style_or("LOG_STYLE", "auto");
-	
+
 
 	env_logger::init_from_env(env);
 	log_env();
@@ -86,7 +90,9 @@ async fn main() {
 		.layer(TimeoutLayer::new(Duration::from_secs(30)))
 		.layer(
 			tower::ServiceBuilder::new()
-				.layer(HandleErrorLayer::new(|_| async { StatusCode::SERVICE_UNAVAILABLE }))
+				.layer(HandleErrorLayer::new(|_| async {
+					StatusCode::SERVICE_UNAVAILABLE
+				}))
 				.concurrency_limit(100)
 				.layer(Extension(shutdown_rx.clone()))
 				.layer(Extension(resource_tx.clone()))
@@ -98,7 +104,11 @@ async fn main() {
 	info!("Public url is on '{}'.", URL.as_str());
 
 	// Backup service
-	let backup = tokio::spawn(backup_service(cache.clone(), db.clone(), shutdown_rx.clone()));
+	let backup = tokio::spawn(backup_service(
+		cache.clone(),
+		db.clone(),
+		shutdown_rx.clone(),
+	));
 
 	// Create server
 	let mut _shutdown_rx = shutdown_rx.clone();
@@ -120,7 +130,7 @@ async fn main() {
 		radio_rx,
 		resource_tx.clone(),
 	));
-	
+
 
 	// Listen to iterrupt or terminate signal to order a shutdown if either is triggered
 
@@ -152,25 +162,7 @@ async fn main() {
 
 	info!("Everyone's shut down!");
 
-	if db.is_poisoned() {
-		error!(
-			"DB was poisoned.\n\
-			This probaly happened because of an error.\n\
-			Logging service will soon be implemented to notify of these."
-		);
-		db.clear_poison();
-	}
-
-	match Arc::try_unwrap(db) {
-		Ok(db) => {
-			let db = db.into_inner().unwrap();
-			common::init::save(&db);
-		}
-		Err(db) => {
-			error!("Couldn't unwrap DB, will save anyways, but beware of this");
-			common::init::save(&*db.read().unwrap());
-		}
-	}
+	save_db(&db, true);
 
 	cache.read().unwrap().save();
 }

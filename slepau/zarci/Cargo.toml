@@ -1,5 +1,5 @@
 [package]
-name = "vreji"
+name = "zarci"
 license = "MIT"
 version.workspace = true
 edition.workspace = true
@@ -23,4 +23,4 @@ pasetors = "0.6.3"
 rand.workspace = true
 futures-util = "0.3.26"
 sonnerie.workspace = true
-chrono = "0.4.28"
+nonmax = "0.5.5"

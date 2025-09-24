@@ -19,10 +19,13 @@ use std::{
 	time::{SystemTime, UNIX_EPOCH},
 };
 
+/// The number of non-leap seconds since the start of 1970 UTC. 
+/// This is a POSIX `time_t` (as a u64), and is the same time 
+/// representation as used in many Internet protocols.
 pub fn get_secs() -> u64 {
 	SystemTime::now()
 		.duration_since(UNIX_EPOCH)
-		.expect("Before UNIX_EPOCH")
+		.expect("Before UNIX_EPOCH?")
 		.as_secs()
 }
 pub const SECS_IN_HOUR: u64 = 60 * 60;

@@ -1,0 +1,6 @@
+
+mod store;
+
+fn main() {
+	
+}

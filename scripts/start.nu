@@ -14,6 +14,18 @@ export def run [] {
 	
 	cargo run
 }
+
+# Sets up the development environment
+# For new clones of the repo
+export def dev_setup [] {
+	load_env_dev
+	
+	mkdir config/nginx/logs
+	mkdir keys
+	mkdir .tmp/vreji_db
+	cargo run --bin gen_key
+}
+
 export def run_web [script] {
 	load_env_dev
 	
@@ -70,11 +82,6 @@ export def build_media [] {
 	
 	cargo build --bin media
 }
-export def run_setup [] {
-	load_env_dev
-	
-	cargo run --bin setup
-}
 export def run_nginx [] {
 	$env.WEB_DIR = $"(pwd)/web/dist"
 
@@ -85,7 +92,8 @@ export def run_nginx [] {
 export def test [package] {
 	load_env_dev
 	
-	cargo test --package $package -- --nocapture
+	# cargo test --package $package -- --nocapture
+	cargo test --package $package
 }
 export def bench [package] {
 	load_env_dev
